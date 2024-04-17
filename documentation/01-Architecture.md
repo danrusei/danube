@@ -8,7 +8,7 @@ High Level:
 
 ## Diagram
 
-![Danube Stream Architecture](Danube_architecture.png "Danube Stream Architecture")
+![Danube Stream Architecture](pictures/Danube_architecture.png "Danube Stream Architecture")
 
 ## Brokers Cluster
 
