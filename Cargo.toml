@@ -1,11 +1,14 @@
-[package]
-name = "danube"
-version = "0.1.0"
-edition = "2021"
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused = "allow" # for experimental dev
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+resolver = "2"
+members = [
+    # -- Danube stream core services
+    "danube-broker",
+    "danube-controller",
 
-[dependencies]
-dashmap = { version = "5.5.3", features = ["serde"] }
-serde = "1.0.198"
-tokio = { version = "1.37.0", features = ["full"] }
+    # -- Danube lib client
+    "danube-client",
+]
