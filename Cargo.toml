@@ -7,7 +7,6 @@ resolver = "2"
 members = [
     # -- Danube stream core services
     "danube-broker",
-    "danube-controller",
 
     # -- Danube lib client
     "danube-client",
