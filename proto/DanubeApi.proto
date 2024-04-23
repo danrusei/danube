@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package danube;
+
+message Schema {
+    enum Type {
+        None = 0;
+        String = 1;
+        Int64 = 2;
+    }
+
+    string name = 1;
+    bytes schema_data = 3;
+    Type type = 4;
+    repeated KeyValue properties = 5;
+}
+
+message KeyValue {
+    string key = 1;
+    string value = 2;
+}
+
+service Danube {
+    // Creates a new Producer on a topic
+    rpc CreateProducer(ProducerRequest) returns (ProducerResponse);
+    // Creates a new Subscriber
+    rpc Subscribe(ConsumerRequest) returns (ConsumerResponse);
+}
+
+message ProducerRequest { 
+    uint64 request_id = 1;
+    uint64 producer_id = 2;
+    string producer_name = 3;
+    string topic = 4;
+    Schema schema = 5;
+}
+message ProducerResponse {
+    uint64 request_id =1;
+} 
+
+message ConsumerRequest {
+    uint64 consumer_id = 1;
+    uint64 request_id = 2;
+    string subscription_name = 3;
+    string topic = 4;
+    Schema schema = 5;
+}
+
+message ConsumerResponse {
+    uint64 request_id =1;
+}
+
+service Discovery {
+    // Query the Pulsar cluster for information about a specific topic.
+    // returns metadata about the topic, including the broker(s) responsible for it.
+    rpc TopicLookup(TopicLookupRequest) returns (TopicLookupResponse);
+    // Get the schema associated with the topic
+    rpc GetSchema(SchemaRequest) returns (SchemaResponse);
+}
+
+message TopicLookupRequest {
+    uint64 request_id = 1;
+    string topic = 2;
+}
+
+message TopicLookupResponse {
+    enum LookupType {
+        Redirect = 0;
+        Connect  = 1;
+        Failed   = 2;
+    }
+    uint64 request_id = 3;
+    LookupType response = 4;
+    string brokerServiceUrl = 5;
+}
+
+message SchemaRequest {
+    uint64 request_id = 1;
+    string topic = 2;
+}
+
+message SchemaResponse {
+    uint64 request_id = 1;
+    Schema schema = 2;
+}
