@@ -3,7 +3,7 @@ syntax = "proto3";
 package danube;
 
 message Schema {
-    enum Type {
+    enum TypeSchema {
         None = 0;
         String = 1;
         Int64 = 2;
@@ -11,13 +11,7 @@ message Schema {
 
     string name = 1;
     bytes schema_data = 3;
-    Type type = 4;
-    repeated KeyValue properties = 5;
-}
-
-message KeyValue {
-    string key = 1;
-    string value = 2;
+    TypeSchema type_schema = 4;
 }
 
 service Danube {
