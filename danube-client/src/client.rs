@@ -6,15 +6,20 @@ pub mod proto {
 }
 
 #[derive(Debug, Default)]
-pub struct DanubeClient {}
+pub struct DanubeClient {
+    url: String,
+}
 
 impl DanubeClient {
     pub fn new() -> Self {
         DanubeClient::default()
     }
+    pub fn builder() -> DanubeClientBuilder {
+        DanubeClientBuilder::default()
+    }
+
     pub async fn connect(&self) -> Result<()> {
-        let url = "http://[::1]:6650";
-        let mut client = danube_client::DanubeClient::connect(url).await?;
+        let mut client = danube_client::DanubeClient::connect(String::from(&self.url)).await?;
 
         let req = proto::ProducerRequest {
             request_id: 1,
@@ -34,5 +39,21 @@ impl DanubeClient {
         println!("Response: {:?}", response.get_ref().request_id);
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DanubeClientBuilder {
+    url: String,
+}
+
+impl DanubeClientBuilder {
+    pub fn service_url(mut self, url: impl Into<String>) -> Self {
+        self.url = url.into();
+
+        self
+    }
+    pub fn build(self) -> DanubeClient {
+        DanubeClient { url: self.url }
     }
 }
