@@ -3,7 +3,7 @@ use tonic::transport::Server;
 use tonic::{Request, Response};
 
 mod proto {
-    tonic::include_proto!("danube");
+    include!("../../proto/danube.rs");
 }
 
 #[derive(Debug, Default)]

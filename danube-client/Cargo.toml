@@ -9,10 +9,18 @@ edition = "2021"
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = "1.0.59"
 tokio = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[[example]]
+name = "producer"
+path = "examples/producer.rs"
+
 [lints]
 workspace = true
+
+[dev-dependencies]
+anyhow = "1.0.82"
