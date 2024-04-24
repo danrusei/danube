@@ -1,4 +1,4 @@
-use crate::rpc_connection::RpcConnection;
+use crate::{errors::Result, rpc_connection::RpcConnection};
 
 use std::{
     collections::HashMap,
@@ -18,16 +18,24 @@ pub struct BrokerAddress {
     pub proxy: bool,
 }
 
+#[derive(Debug, Clone)]
 enum ConnectionStatus {
     Connected(Arc<RpcConnection>),
     Disconnected,
 }
 
+#[derive(Debug, Clone)]
 pub struct ConnectionManager {
     pub url: Url,
     connections: Arc<Mutex<HashMap<BrokerAddress, ConnectionStatus>>>,
     connection_retry_options: ConnectionRetryOptions,
     pub(crate) operation_retry_options: OperationRetryOptions,
+}
+
+impl ConnectionManager {
+    pub async fn new() -> Result<Self> {
+        todo!()
+    }
 }
 
 /// configuration for reconnection exponential back off

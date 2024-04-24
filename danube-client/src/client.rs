@@ -1,25 +1,37 @@
-use crate::errors::Result;
-use crate::lookup_service::{LookupResult, LookupService};
+use crate::lookup_service;
 use crate::producer::ProducerBuilder;
+use crate::{
+    connection_manager::ConnectionManager,
+    errors::Result,
+    lookup_service::{LookupResult, LookupService},
+};
 use proto::danube_client;
+
+use std::sync::Arc;
 
 pub mod proto {
     include!("../../proto/danube.rs");
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DanubeClient {
     url: String,
-    cnx_manager: ConnectionManager,
-    lookup_service: LookupSerice,
+    cnx_manager: Arc<ConnectionManager>,
+    lookup_service: LookupService,
 }
 
 impl DanubeClient {
-    pub fn new() -> Self {
-        DanubeClient {
+    pub(crate) async fn new(url: impl Into<String>) -> Result<Self> {
+        let cnx_manager = ConnectionManager::new().await?;
+        let cnx_manager = Arc::new(cnx_manager);
+
+        let lookup_service = LookupService::new(cnx_manager.clone());
+
+        Ok(DanubeClient {
             url: Default::default(),
-            lookup_service: LookupService::new(),
-        }
+            cnx_manager,
+            lookup_service,
+        })
     }
 
     //creates a Client Builder
@@ -33,11 +45,8 @@ impl DanubeClient {
     }
 
     /// gets the address of a broker handling the topic
-    pub async fn lookup_topic<S: Into<String>>(&self, topic: S) -> Result<LookupResult> {
-        self.lookup_service
-            .lookup_topic(topic)
-            .await
-            .map_err(|e| e.into())
+    pub async fn lookup_topic(&self, topic: impl Into<String>) -> Result<LookupResult> {
+        self.lookup_service.lookup_topic(topic).await
     }
 
     pub async fn connect(&self) -> Result<()> {
@@ -75,7 +84,7 @@ impl DanubeClientBuilder {
 
         self
     }
-    pub fn build(self) -> DanubeClient {
-        DanubeClient { url: self.url }
+    pub async fn build(self) -> Result<DanubeClient> {
+        Ok(DanubeClient::new(self.url).await?)
     }
 }
