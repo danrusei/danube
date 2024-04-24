@@ -1,13 +1,14 @@
 use crate::lookup_service;
 use crate::producer::ProducerBuilder;
 use crate::{
-    connection_manager::ConnectionManager,
+    connection_manager::{ConnectionManager, ConnectionOptions},
     errors::Result,
     lookup_service::{LookupResult, LookupService},
 };
 use proto::danube_client;
 
 use std::sync::Arc;
+use tonic::transport::channel::Endpoint;
 
 pub mod proto {
     include!("../../proto/danube.rs");
@@ -21,19 +22,6 @@ pub struct DanubeClient {
 }
 
 impl DanubeClient {
-    pub(crate) async fn new(url: impl Into<String>) -> Result<Self> {
-        let cnx_manager = ConnectionManager::new().await?;
-        let cnx_manager = Arc::new(cnx_manager);
-
-        let lookup_service = LookupService::new(cnx_manager.clone());
-
-        Ok(DanubeClient {
-            url: Default::default(),
-            cnx_manager,
-            lookup_service,
-        })
-    }
-
     //creates a Client Builder
     pub fn builder() -> DanubeClientBuilder {
         DanubeClientBuilder::default()
@@ -50,7 +38,9 @@ impl DanubeClient {
     }
 
     pub async fn connect(&self) -> Result<()> {
-        let mut client = danube_client::DanubeClient::connect(String::from(&self.url)).await?;
+        // move to rpc_connection !
+        let endpoint = Endpoint::from_shared(String::from(&self.url))?;
+        let mut client = danube_client::DanubeClient::connect(endpoint).await?;
 
         let req = proto::ProducerRequest {
             request_id: 1,
@@ -76,6 +66,7 @@ impl DanubeClient {
 #[derive(Debug, Default)]
 pub struct DanubeClientBuilder {
     url: String,
+    connection_options: ConnectionOptions,
 }
 
 impl DanubeClientBuilder {
@@ -84,7 +75,21 @@ impl DanubeClientBuilder {
 
         self
     }
-    pub async fn build(self) -> Result<DanubeClient> {
-        Ok(DanubeClient::new(self.url).await?)
+    pub fn with_connection_options(mut self, connection_options: ConnectionOptions) -> Self {
+        self.connection_options = connection_options;
+
+        self
+    }
+    pub fn build(self) -> DanubeClient {
+        let cnx_manager = ConnectionManager::new(self.connection_options);
+        let cnx_manager = Arc::new(cnx_manager);
+
+        let lookup_service = LookupService::new(cnx_manager.clone());
+
+        DanubeClient {
+            url: Default::default(),
+            cnx_manager,
+            lookup_service,
+        }
     }
 }
