@@ -1,4 +1,5 @@
 use crate::errors::Result;
+use crate::producer::ProducerBuilder;
 use proto::danube_client;
 
 pub mod proto {
@@ -14,9 +15,17 @@ impl DanubeClient {
     pub fn new() -> Self {
         DanubeClient::default()
     }
+
+    //creates a Client Builder
     pub fn builder() -> DanubeClientBuilder {
         DanubeClientBuilder::default()
     }
+
+    /// creates a Producer Builder
+    pub fn new_producer(&self) -> ProducerBuilder {
+        ProducerBuilder::new()
+    }
+    #[cfg_attr(feature = "telemetry", tracing::instrument(skip_all))]
 
     pub async fn connect(&self) -> Result<()> {
         let mut client = danube_client::DanubeClient::connect(String::from(&self.url)).await?;

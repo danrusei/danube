@@ -6,3 +6,6 @@ mod client;
 pub use client::DanubeClient;
 
 pub mod errors;
+
+mod producer;
+pub use producer::{Producer, ProducerBuilder};
