@@ -1,4 +1,5 @@
 use crate::errors::Result;
+use crate::lookup_service::{LookupResult, LookupService};
 use crate::producer::ProducerBuilder;
 use proto::danube_client;
 
@@ -9,11 +10,16 @@ pub mod proto {
 #[derive(Debug, Default)]
 pub struct DanubeClient {
     url: String,
+    cnx_manager: ConnectionManager,
+    lookup_service: LookupSerice,
 }
 
 impl DanubeClient {
     pub fn new() -> Self {
-        DanubeClient::default()
+        DanubeClient {
+            url: Default::default(),
+            lookup_service: LookupService::new(),
+        }
     }
 
     //creates a Client Builder
@@ -25,7 +31,14 @@ impl DanubeClient {
     pub fn new_producer(&self) -> ProducerBuilder {
         ProducerBuilder::new()
     }
-    #[cfg_attr(feature = "telemetry", tracing::instrument(skip_all))]
+
+    /// gets the address of a broker handling the topic
+    pub async fn lookup_topic<S: Into<String>>(&self, topic: S) -> Result<LookupResult> {
+        self.lookup_service
+            .lookup_topic(topic)
+            .await
+            .map_err(|e| e.into())
+    }
 
     pub async fn connect(&self) -> Result<()> {
         let mut client = danube_client::DanubeClient::connect(String::from(&self.url)).await?;

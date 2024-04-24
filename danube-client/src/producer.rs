@@ -12,7 +12,7 @@ impl ProducerBuilder {
     }
 
     /// sets the producer's topic
-    pub fn with_topic<S: Into<String>>(mut self, topic: S) -> Self {
+    pub fn with_topic(mut self, topic: impl Into<String>) -> Self {
         self.topic = topic.into();
         self
     }
