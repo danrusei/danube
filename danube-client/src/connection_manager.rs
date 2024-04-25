@@ -8,29 +8,29 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use url::Url;
+use tonic::transport::Uri;
 
 /// holds connection information for a broker
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct BrokerAddress {
     /// URL we're using for connection (can be the proxy's URL)
-    pub connect_url: Url,
+    pub connect_url: Uri,
     /// Danube URL for the broker we're actually contacting
-    pub broker_url: Url,
+    pub broker_url: Uri,
     /// true if the connection is through a proxy
     pub proxy: bool,
 }
 
 #[derive(Debug, Clone)]
 enum ConnectionStatus {
-    Connected(RpcConnection),
+    Connected(Arc<RpcConnection>),
     Disconnected,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionOptions {
-    keep_alive_interval: Duration,
-    connection_timeout: Duration,
+    pub(crate) keep_alive_interval: Option<Duration>,
+    pub(crate) connection_timeout: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,8 +49,8 @@ impl ConnectionManager {
 
     pub async fn get_connection(
         &self,
-        broker_url: &Url,
-        connect_url: &Url,
+        broker_url: &Uri,
+        connect_url: &Uri,
     ) -> Result<RpcConnection> {
         let mut proxy = false;
         if broker_url == connect_url {
@@ -71,15 +71,13 @@ impl ConnectionManager {
                 ConnectionStatus::Connected(rpc_cnx) => Ok(rpc_cnx.to_owned()),
                 ConnectionStatus::Disconnected => {
                     let new_rpc_cnx =
-                        new_rpc_connection(&self.connection_options, connect_url.to_string())
-                            .await?;
+                        new_rpc_connection(&self.connection_options, connect_url).await?;
                     *occupied_entry.get_mut() = ConnectionStatus::Connected(new_rpc_cnx.clone());
                     Ok(new_rpc_cnx)
                 }
             },
             Entry::Vacant(vacant_entry) => {
-                let new_rpc_cnx =
-                    new_rpc_connection(&self.connection_options, connect_url.to_string()).await?;
+                let new_rpc_cnx = new_rpc_connection(&self.connection_options, connect_url).await?;
                 vacant_entry.insert(ConnectionStatus::Connected(new_rpc_cnx.clone()));
                 Ok(new_rpc_cnx)
             }

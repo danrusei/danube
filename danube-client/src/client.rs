@@ -67,7 +67,7 @@ impl DanubeClient {
     // }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct DanubeClientBuilder {
     url: String,
     connection_options: ConnectionOptions,
