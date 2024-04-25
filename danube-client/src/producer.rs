@@ -1,3 +1,5 @@
+use crate::DanubeClient;
+
 pub struct Producer {}
 
 #[derive(Debug, Default)]
@@ -7,7 +9,7 @@ pub struct ProducerBuilder {
 }
 
 impl ProducerBuilder {
-    pub fn new() -> Self {
+    pub fn new(client: &DanubeClient) -> Self {
         ProducerBuilder::default()
     }
 

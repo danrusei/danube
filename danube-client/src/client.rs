@@ -5,14 +5,8 @@ use crate::{
     errors::Result,
     lookup_service::{LookupResult, LookupService},
 };
-use proto::danube_client;
 
 use std::sync::Arc;
-use tonic::transport::channel::Endpoint;
-
-pub mod proto {
-    include!("../../proto/danube.rs");
-}
 
 #[derive(Debug)]
 pub struct DanubeClient {
@@ -22,6 +16,18 @@ pub struct DanubeClient {
 }
 
 impl DanubeClient {
+    fn new_client(builder: DanubeClientBuilder) -> Self {
+        let cnx_manager = ConnectionManager::new(builder.connection_options);
+        let cnx_manager = Arc::new(cnx_manager);
+
+        let lookup_service = LookupService::new(cnx_manager.clone());
+
+        DanubeClient {
+            url: Default::default(),
+            cnx_manager,
+            lookup_service,
+        }
+    }
     //creates a Client Builder
     pub fn builder() -> DanubeClientBuilder {
         DanubeClientBuilder::default()
@@ -29,7 +35,7 @@ impl DanubeClient {
 
     /// creates a Producer Builder
     pub fn new_producer(&self) -> ProducerBuilder {
-        ProducerBuilder::new()
+        ProducerBuilder::new(self)
     }
 
     /// gets the address of a broker handling the topic
@@ -37,30 +43,28 @@ impl DanubeClient {
         self.lookup_service.lookup_topic(topic).await
     }
 
-    pub async fn connect(&self) -> Result<()> {
-        // move to rpc_connection !
-        let endpoint = Endpoint::from_shared(String::from(&self.url))?;
-        let mut client = danube_client::DanubeClient::connect(endpoint).await?;
+    // pub async fn connect(&self) -> Result<()> {
+    //     // move this to Producer file
 
-        let req = proto::ProducerRequest {
-            request_id: 1,
-            producer_id: 2,
-            producer_name: "hello_producer".to_string(),
-            topic: "hello_topic".to_string(),
-            schema: Some(proto::Schema {
-                name: "schema_name".to_string(),
-                schema_data: "1".as_bytes().to_vec(),
-                type_schema: 0,
-            }),
-        };
+    //     let req = proto::ProducerRequest {
+    //         request_id: 1,
+    //         producer_id: 2,
+    //         producer_name: "hello_producer".to_string(),
+    //         topic: "hello_topic".to_string(),
+    //         schema: Some(proto::Schema {
+    //             name: "schema_name".to_string(),
+    //             schema_data: "1".as_bytes().to_vec(),
+    //             type_schema: 0,
+    //         }),
+    //     };
 
-        let request = tonic::Request::new(req);
-        let response = client.create_producer(request).await?;
+    //     let request = tonic::Request::new(req);
+    //     let response = client.create_producer(request).await?;
 
-        println!("Response: {:?}", response.get_ref().request_id);
+    //     println!("Response: {:?}", response.get_ref().request_id);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
 #[derive(Debug, Default)]
@@ -81,15 +85,6 @@ impl DanubeClientBuilder {
         self
     }
     pub fn build(self) -> DanubeClient {
-        let cnx_manager = ConnectionManager::new(self.connection_options);
-        let cnx_manager = Arc::new(cnx_manager);
-
-        let lookup_service = LookupService::new(cnx_manager.clone());
-
-        DanubeClient {
-            url: Default::default(),
-            cnx_manager,
-            lookup_service,
-        }
+        DanubeClient::new_client(self)
     }
 }
