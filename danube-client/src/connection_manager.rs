@@ -51,7 +51,7 @@ impl ConnectionManager {
         &self,
         broker_url: &Uri,
         connect_url: &Uri,
-    ) -> Result<RpcConnection> {
+    ) -> Result<Arc<RpcConnection>> {
         let mut proxy = false;
         if broker_url == connect_url {
             proxy = true;
@@ -68,18 +68,20 @@ impl ConnectionManager {
 
         match entry {
             Entry::Occupied(mut occupied_entry) => match occupied_entry.get() {
-                ConnectionStatus::Connected(rpc_cnx) => Ok(rpc_cnx.to_owned()),
+                ConnectionStatus::Connected(rpc_cnx) => Ok(rpc_cnx.clone()),
                 ConnectionStatus::Disconnected => {
                     let new_rpc_cnx =
                         new_rpc_connection(&self.connection_options, connect_url).await?;
-                    *occupied_entry.get_mut() = ConnectionStatus::Connected(new_rpc_cnx.clone());
-                    Ok(new_rpc_cnx)
+                    let rpc_cnx = Arc::new(new_rpc_cnx);
+                    *occupied_entry.get_mut() = ConnectionStatus::Connected(rpc_cnx.clone());
+                    Ok(rpc_cnx)
                 }
             },
             Entry::Vacant(vacant_entry) => {
                 let new_rpc_cnx = new_rpc_connection(&self.connection_options, connect_url).await?;
-                vacant_entry.insert(ConnectionStatus::Connected(new_rpc_cnx.clone()));
-                Ok(new_rpc_cnx)
+                let rpc_cnx = Arc::new(new_rpc_cnx);
+                vacant_entry.insert(ConnectionStatus::Connected(rpc_cnx.clone()));
+                Ok(rpc_cnx)
             }
         }
     }

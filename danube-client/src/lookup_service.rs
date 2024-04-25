@@ -8,7 +8,7 @@ pub struct LookupResult {
     physical_addr: url::Url,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct LookupService {
     cnx_manager: Arc<ConnectionManager>,
 }

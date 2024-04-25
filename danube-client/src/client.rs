@@ -1,3 +1,5 @@
+use tonic::transport::Uri;
+
 use crate::lookup_service;
 use crate::producer::ProducerBuilder;
 use crate::{
@@ -8,22 +10,22 @@ use crate::{
 
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DanubeClient {
-    url: String,
-    cnx_manager: Arc<ConnectionManager>,
-    lookup_service: LookupService,
+    pub(crate) uri: Uri,
+    pub(crate) cnx_manager: Arc<ConnectionManager>,
+    pub(crate) lookup_service: LookupService,
 }
 
 impl DanubeClient {
-    fn new_client(builder: DanubeClientBuilder) -> Self {
+    fn new_client(builder: DanubeClientBuilder, uri: Uri) -> Self {
         let cnx_manager = ConnectionManager::new(builder.connection_options);
         let cnx_manager = Arc::new(cnx_manager);
 
         let lookup_service = LookupService::new(cnx_manager.clone());
 
         DanubeClient {
-            url: Default::default(),
+            uri: uri,
             cnx_manager,
             lookup_service,
         }
@@ -42,40 +44,17 @@ impl DanubeClient {
     pub async fn lookup_topic(&self, topic: impl Into<String>) -> Result<LookupResult> {
         self.lookup_service.lookup_topic(topic).await
     }
-
-    // pub async fn connect(&self) -> Result<()> {
-    //     // move this to Producer file
-
-    //     let req = proto::ProducerRequest {
-    //         request_id: 1,
-    //         producer_id: 2,
-    //         producer_name: "hello_producer".to_string(),
-    //         topic: "hello_topic".to_string(),
-    //         schema: Some(proto::Schema {
-    //             name: "schema_name".to_string(),
-    //             schema_data: "1".as_bytes().to_vec(),
-    //             type_schema: 0,
-    //         }),
-    //     };
-
-    //     let request = tonic::Request::new(req);
-    //     let response = client.create_producer(request).await?;
-
-    //     println!("Response: {:?}", response.get_ref().request_id);
-
-    //     Ok(())
-    // }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct DanubeClientBuilder {
-    url: String,
+    uri: String,
     connection_options: ConnectionOptions,
 }
 
 impl DanubeClientBuilder {
     pub fn service_url(mut self, url: impl Into<String>) -> Self {
-        self.url = url.into();
+        self.uri = url.into();
 
         self
     }
@@ -84,7 +63,8 @@ impl DanubeClientBuilder {
 
         self
     }
-    pub fn build(self) -> DanubeClient {
-        DanubeClient::new_client(self)
+    pub fn build(self) -> Result<DanubeClient> {
+        let uri = self.uri.parse::<Uri>()?;
+        Ok(DanubeClient::new_client(self, uri))
     }
 }

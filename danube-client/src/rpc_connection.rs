@@ -6,7 +6,7 @@ use crate::{connection_manager::ConnectionOptions, errors::Result};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RpcConnection {
-    grpc_cnx: Channel,
+    pub(crate) grpc_cnx: Channel,
 }
 
 pub(crate) async fn new_rpc_connection(

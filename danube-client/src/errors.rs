@@ -1,4 +1,5 @@
 use thiserror::Error;
+use tonic::codegen::http::uri;
 
 pub type Result<T> = std::result::Result<T, DanubeError>;
 
@@ -11,7 +12,7 @@ pub enum DanubeError {
     FromStatus(#[from] tonic::Status),
 
     #[error("unable to parse the address: {0}")]
-    UrlParseError(#[from] url::ParseError),
+    UrlParseError(#[from] uri::InvalidUri),
 
     #[error("unable to parse the address")]
     ParseError,
