@@ -18,7 +18,8 @@ async fn main() -> Result<()> {
         .new_producer()
         .with_topic(topic)
         .with_name("test producer")
-        .create();
+        .create()
+        .await?;
 
     Ok(())
 }
