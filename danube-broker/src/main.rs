@@ -1,12 +1,13 @@
 mod danube_service;
+mod metadata_store;
 mod service_configuration;
 
 use crate::danube_service::DanubeService;
 use crate::service_configuration::ServiceConfiguration;
 
 use clap::Parser;
-use tonic::transport::Server;
-use tonic::{Request, Response};
+use tracing::info;
+use tracing_subscriber;
 
 pub(crate) mod proto {
     include!("../../proto/danube.rs");
@@ -30,6 +31,9 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // install global collector configured based on RUST_LOG env var.
+    tracing_subscriber::fmt::init();
+
     let args = Args::parse();
 
     let broker_addr: std::net::SocketAddr = args.advertised_address.parse()?;
@@ -40,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let danube = DanubeService::new(broker_config);
 
+    info!("Start the Danube Broker Service");
     danube.start().await;
 
     Ok(())
