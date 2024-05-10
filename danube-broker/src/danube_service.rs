@@ -49,7 +49,7 @@ impl Danube for DanubeService {
     }
     async fn subscribe(
         &self,
-        request: Request<ConsumerRequest>,
+        _request: Request<ConsumerRequest>,
     ) -> Result<Response<ConsumerResponse>, tonic::Status> {
         todo!()
     }

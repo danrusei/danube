@@ -1,7 +1,5 @@
 use tonic::transport::{Channel, Uri};
-use url::Url;
 
-use crate::proto::{danube_client, discovery_client};
 use crate::{connection_manager::ConnectionOptions, errors::Result};
 
 #[derive(Debug, Clone)]

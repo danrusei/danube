@@ -1,5 +1,3 @@
-use serde_json::error;
-
 use crate::proto::{danube_client, ProducerRequest, Schema};
 use crate::{errors::Result, DanubeClient};
 

@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let danube = DanubeService::new(broker_config);
 
     info!("Start the Danube Broker Service");
-    danube.start().await;
+    danube.start().await.expect("the broker unable to start");
 
     Ok(())
 }

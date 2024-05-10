@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
+dashmap = "5.5.3"
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
