@@ -47,7 +47,7 @@ impl LocalMemoryMetadataStore {
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
-        if key == "" {
+        if key.is_empty() {
             return Err(From::from("wrong path"));
         }
 
@@ -55,10 +55,93 @@ impl LocalMemoryMetadataStore {
 
         Ok(())
     }
+
+    fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>> {
+        let mut bmap = self.get_map(path)?;
+
+        let parts: Vec<&str> = path.split('/').skip(3).collect();
+        let key = parts.join("/");
+
+        if key.is_empty() {
+            return Err(From::from("wrong path"));
+        }
+
+        let value = bmap.remove(&key);
+        Ok(value)
+    }
+
+    // Recursively delete all records under the provided path
+    fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
+        let mut bmap = self.get_map(path)?;
+        let mut keys_to_remove = Vec::new();
+
+        let parts: Vec<&str> = path.split('/').skip(3).collect();
+        let path_to_remove = parts.join("/");
+
+        for key in bmap.keys() {
+            if key.starts_with(&path_to_remove)
+                && key.len() > path_to_remove.len()
+                && key.chars().nth(path_to_remove.len()).unwrap() == '/'
+            {
+                keys_to_remove.push(key.clone());
+            }
+        }
+
+        for key in keys_to_remove {
+            let _ = bmap.remove(&key).ok_or("unable to remove key".to_owned())?;
+        }
+
+        Ok(())
+    }
+
+    // Recursively find all the child of the provided path
+    fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        let bmap = self.get_map(path)?;
+        let mut child_paths = Vec::new();
+
+        let parts: Vec<&str> = path.split('/').skip(3).collect();
+        let minimum_path = parts.join("/");
+
+        for key in bmap.keys() {
+            if key.starts_with(&minimum_path)
+                && key.len() > minimum_path.len()
+                && key.chars().nth(minimum_path.len()).unwrap() == '/'
+            {
+                child_paths.push(key.clone());
+            }
+        }
+
+        Ok(child_paths)
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_put_get_delete() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = LocalMemoryMetadataStore::new();
+
+        let topic_id = "another-topic";
+        let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
+
+        let path = format!("/danube/topics/{}/conf", topic_id);
+
+        // Put a new value
+        store.put(&path, value.clone()).unwrap();
+
+        // Get the value
+        let retrieved_value = store.get(&path).unwrap();
+        assert_eq!(retrieved_value, value);
+
+        // Delete the key
+        store.delete(&path)?;
+
+        // Try to get the value again and assert it's an error (key not found)
+        assert!(store.get(&path).is_err());
+
+        Ok(())
+    }
 
     #[test]
     fn test_get_nonexistent_key() {
@@ -72,27 +155,6 @@ mod tests {
     }
 
     #[test]
-    fn test_put_and_get() {
-        let mut store = LocalMemoryMetadataStore::new();
-        let topic_id = "another-topic";
-        let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
-
-        // Put a new value
-        store
-            .put(
-                format!("/danube/topics/{}/conf", topic_id).as_str(),
-                value.clone(),
-            )
-            .unwrap();
-
-        // Get the value
-        let retrieved_value = store
-            .get(format!("/danube/topics/{}/conf", topic_id).as_str())
-            .unwrap();
-        assert_eq!(retrieved_value, value);
-    }
-
-    #[test]
     fn test_put_invalid_path() {
         let mut store = LocalMemoryMetadataStore::new();
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
@@ -100,5 +162,71 @@ mod tests {
         // Try to put with invalid path (missing segment)
         let result = store.put("/danube/topics", value.clone());
         assert!(result.is_err());
+    }
+    #[test]
+    fn test_delete_recursive() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = LocalMemoryMetadataStore::new();
+
+        // Create a sample data structure
+        store.put(
+            "/danube/topics/topic_1/key1",
+            Value::String("value1".to_string()),
+        )?;
+        store.put(
+            "/danube/topics/topic_1/key2",
+            Value::String("value2".to_string()),
+        )?;
+        store.put(
+            "/danube/topics/topic_2/key3",
+            Value::String("value3".to_string()),
+        )?;
+
+        // Test deleting a path with its contents
+        store.delete_recursive("/danube/topics/topic_1")?;
+
+        // Assert that keys under the deleted path are gone
+        assert!(store.get("/danube/topics/topic_1/key1").is_err());
+        assert!(store.get("/danube/topics/topic_1/key2").is_err());
+
+        // Assert that other directory and its key remain
+        assert!(store.get("/danube/topics/topic_2/key3").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_childrens() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = LocalMemoryMetadataStore::new();
+
+        // Create a sample data structure
+        store.put(
+            "/danube/topics/topic_1/key1",
+            Value::String("value1".to_string()),
+        )?;
+        store.put(
+            "/danube/topics/topic_2/key2",
+            Value::String("value2".to_string()),
+        )?;
+        store.put(
+            "/danube/topics/topic_1/subtopic/key3",
+            Value::String("value3".to_string()),
+        )?;
+        store.put("/data/other/path", Value::String("value4".to_string()))?;
+
+        // Test finding paths containing "/danube/topics/topic_1"
+        let paths = store.get_childrens("/danube/topics/topic_1")?;
+
+        // Assert that all matching paths are found
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains(&"topic_1/key1".to_string()));
+        assert!(paths.contains(&"topic_1/subtopic/key3".to_string()));
+
+        // Test finding a non-existent path
+        let paths = store.get_childrens("/non/existent/path")?;
+
+        // Assert that no paths are found
+        assert!(paths.is_empty());
+
+        Ok(())
     }
 }
