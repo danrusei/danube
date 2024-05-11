@@ -4,6 +4,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
 
+use crate::metadata_store::MetadataStore;
+
 #[derive(Debug)]
 pub(crate) struct LocalMemoryMetadataStore {
     inner: DashMap<String, BTreeMap<String, Value>>,
@@ -27,7 +29,9 @@ impl LocalMemoryMetadataStore {
 
         Ok(bmap)
     }
+}
 
+impl MetadataStore for LocalMemoryMetadataStore {
     // Read the value of one key, identified by the path
     fn get(&self, path: &str) -> Result<Value, Box<dyn Error>> {
         let bmap = self.get_map(path)?;
@@ -41,6 +45,27 @@ impl LocalMemoryMetadataStore {
         }
     }
 
+    // Return all the paths that are children to the specific path.
+    fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        let bmap = self.get_map(path)?;
+        let mut child_paths = Vec::new();
+
+        let parts: Vec<&str> = path.split('/').skip(3).collect();
+        let minimum_path = parts.join("/");
+
+        for key in bmap.keys() {
+            if key.starts_with(&minimum_path)
+                && key.len() > minimum_path.len()
+                && key.chars().nth(minimum_path.len()).unwrap() == '/'
+            {
+                child_paths.push(key.clone());
+            }
+        }
+
+        Ok(child_paths)
+    }
+
+    // Put a new value for a given key
     fn put(&mut self, path: &str, value: Value) -> Result<(), Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
 
@@ -56,6 +81,7 @@ impl LocalMemoryMetadataStore {
         Ok(())
     }
 
+    // Delete the key / value from the store
     fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
 
@@ -70,7 +96,7 @@ impl LocalMemoryMetadataStore {
         Ok(value)
     }
 
-    // Recursively delete all records under the provided path
+    // Delete a key-value pair and all the children nodes
     fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
         let mut keys_to_remove = Vec::new();
@@ -93,27 +119,8 @@ impl LocalMemoryMetadataStore {
 
         Ok(())
     }
-
-    // Recursively find all the child of the provided path
-    fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
-        let bmap = self.get_map(path)?;
-        let mut child_paths = Vec::new();
-
-        let parts: Vec<&str> = path.split('/').skip(3).collect();
-        let minimum_path = parts.join("/");
-
-        for key in bmap.keys() {
-            if key.starts_with(&minimum_path)
-                && key.len() > minimum_path.len()
-                && key.chars().nth(minimum_path.len()).unwrap() == '/'
-            {
-                child_paths.push(key.clone());
-            }
-        }
-
-        Ok(child_paths)
-    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
