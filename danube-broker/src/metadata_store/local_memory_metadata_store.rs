@@ -33,7 +33,7 @@ impl LocalMemoryMetadataStore {
 
 impl MetadataStore for LocalMemoryMetadataStore {
     // Read the value of one key, identified by the path
-    fn get(&self, path: &str) -> Result<Value, Box<dyn Error>> {
+    async fn get(&mut self, path: &str) -> Result<Value, Box<dyn Error>> {
         let bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
@@ -46,7 +46,7 @@ impl MetadataStore for LocalMemoryMetadataStore {
     }
 
     // Return all the paths that are children to the specific path.
-    fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
         let bmap = self.get_map(path)?;
         let mut child_paths = Vec::new();
 
@@ -66,7 +66,7 @@ impl MetadataStore for LocalMemoryMetadataStore {
     }
 
     // Put a new value for a given key
-    fn put(&mut self, path: &str, value: Value) -> Result<(), Box<dyn Error>> {
+    async fn put(&mut self, path: &str, value: Value) -> Result<(), Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
@@ -82,7 +82,7 @@ impl MetadataStore for LocalMemoryMetadataStore {
     }
 
     // Delete the key / value from the store
-    fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>> {
+    async fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
@@ -97,7 +97,7 @@ impl MetadataStore for LocalMemoryMetadataStore {
     }
 
     // Delete a key-value pair and all the children nodes
-    fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
+    async fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
         let mut bmap = self.get_map(path)?;
         let mut keys_to_remove = Vec::new();
 
@@ -125,8 +125,8 @@ impl MetadataStore for LocalMemoryMetadataStore {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_put_get_delete() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::test]
+    async fn test_put_get_delete() -> Result<(), Box<dyn std::error::Error>> {
         let mut store = LocalMemoryMetadataStore::new();
 
         let topic_id = "another-topic";
@@ -135,93 +135,109 @@ mod tests {
         let path = format!("/danube/topics/{}/conf", topic_id);
 
         // Put a new value
-        store.put(&path, value.clone()).unwrap();
+        store.put(&path, value.clone()).await?;
 
         // Get the value
-        let retrieved_value = store.get(&path).unwrap();
+        let retrieved_value = store.get(&path).await?;
         assert_eq!(retrieved_value, value);
 
         // Delete the key
-        store.delete(&path)?;
+        store.delete(&path).await?;
 
         // Try to get the value again and assert it's an error (key not found)
-        assert!(store.get(&path).is_err());
+        assert!(store.get(&path).await.is_err());
 
         Ok(())
     }
 
-    #[test]
-    fn test_get_nonexistent_key() {
-        let store = LocalMemoryMetadataStore::new();
+    #[tokio::test]
+    async fn test_get_nonexistent_key() {
+        let mut store = LocalMemoryMetadataStore::new();
         let topic_id = "unknown-topic";
 
         // Try to get a non-existent key
-        let result = store.get(format!("/danube/topics/{}/metrics", topic_id).as_str());
+        let result = store
+            .get(format!("/danube/topics/{}/metrics", topic_id).as_str())
+            .await;
         assert!(result.is_err());
         assert_eq!(result.err().unwrap().to_string(), "Key not found");
     }
 
-    #[test]
-    fn test_put_invalid_path() {
+    #[tokio::test]
+    async fn test_put_invalid_path() {
         let mut store = LocalMemoryMetadataStore::new();
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
 
         // Try to put with invalid path (missing segment)
-        let result = store.put("/danube/topics", value.clone());
+        let result = store.put("/danube/topics", value.clone()).await;
         assert!(result.is_err());
     }
-    #[test]
-    fn test_delete_recursive() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::test]
+    async fn test_delete_recursive() -> Result<(), Box<dyn std::error::Error>> {
         let mut store = LocalMemoryMetadataStore::new();
 
         // Create a sample data structure
-        store.put(
-            "/danube/topics/topic_1/key1",
-            Value::String("value1".to_string()),
-        )?;
-        store.put(
-            "/danube/topics/topic_1/key2",
-            Value::String("value2".to_string()),
-        )?;
-        store.put(
-            "/danube/topics/topic_2/key3",
-            Value::String("value3".to_string()),
-        )?;
+        store
+            .put(
+                "/danube/topics/topic_1/key1",
+                Value::String("value1".to_string()),
+            )
+            .await?;
+        store
+            .put(
+                "/danube/topics/topic_1/key2",
+                Value::String("value2".to_string()),
+            )
+            .await?;
+        store
+            .put(
+                "/danube/topics/topic_2/key3",
+                Value::String("value3".to_string()),
+            )
+            .await?;
 
         // Test deleting a path with its contents
-        store.delete_recursive("/danube/topics/topic_1")?;
+        store.delete_recursive("/danube/topics/topic_1").await?;
 
         // Assert that keys under the deleted path are gone
-        assert!(store.get("/danube/topics/topic_1/key1").is_err());
-        assert!(store.get("/danube/topics/topic_1/key2").is_err());
+        assert!(store.get("/danube/topics/topic_1/key1").await.is_err());
+        assert!(store.get("/danube/topics/topic_1/key2").await.is_err());
 
         // Assert that other directory and its key remain
-        assert!(store.get("/danube/topics/topic_2/key3").is_ok());
+        assert!(store.get("/danube/topics/topic_2/key3").await.is_ok());
 
         Ok(())
     }
 
-    #[test]
-    fn test_get_childrens() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::test]
+    async fn test_get_childrens() -> Result<(), Box<dyn std::error::Error>> {
         let mut store = LocalMemoryMetadataStore::new();
 
         // Create a sample data structure
-        store.put(
-            "/danube/topics/topic_1/key1",
-            Value::String("value1".to_string()),
-        )?;
-        store.put(
-            "/danube/topics/topic_2/key2",
-            Value::String("value2".to_string()),
-        )?;
-        store.put(
-            "/danube/topics/topic_1/subtopic/key3",
-            Value::String("value3".to_string()),
-        )?;
-        store.put("/data/other/path", Value::String("value4".to_string()))?;
+        store
+            .put(
+                "/danube/topics/topic_1/key1",
+                Value::String("value1".to_string()),
+            )
+            .await?;
+        store
+            .put(
+                "/danube/topics/topic_2/key2",
+                Value::String("value2".to_string()),
+            )
+            .await?;
+        store
+            .put(
+                "/danube/topics/topic_1/subtopic/key3",
+                Value::String("value3".to_string()),
+            )
+            .await?;
+        store
+            .put("/data/other/path", Value::String("value4".to_string()))
+            .await?;
 
         // Test finding paths containing "/danube/topics/topic_1"
-        let paths = store.get_childrens("/danube/topics/topic_1")?;
+        let paths = store.get_childrens("/danube/topics/topic_1").await?;
 
         // Assert that all matching paths are found
         assert_eq!(paths.len(), 2);
@@ -229,7 +245,7 @@ mod tests {
         assert!(paths.contains(&"topic_1/subtopic/key3".to_string()));
 
         // Test finding a non-existent path
-        let paths = store.get_childrens("/non/existent/path")?;
+        let paths = store.get_childrens("/non/existent/path").await?;
 
         // Assert that no paths are found
         assert!(paths.is_empty());
