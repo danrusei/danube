@@ -7,15 +7,15 @@ use std::error::Error;
 use crate::metadata_store::MetadataStore;
 
 #[derive(Debug)]
-pub(crate) struct LocalMemoryMetadataStore {
+pub(crate) struct MemoryMetadataStore {
     inner: DashMap<String, BTreeMap<String, Value>>,
 }
 
-impl LocalMemoryMetadataStore {
-    fn new() -> Self {
-        LocalMemoryMetadataStore {
+impl MemoryMetadataStore {
+    pub(crate) async fn new() -> Result<Self, Box<dyn Error>> {
+        Ok(MemoryMetadataStore {
             inner: DashMap::new(),
-        }
+        })
     }
 
     fn get_map(
@@ -31,7 +31,7 @@ impl LocalMemoryMetadataStore {
     }
 }
 
-impl MetadataStore for LocalMemoryMetadataStore {
+impl MetadataStore for MemoryMetadataStore {
     // Read the value of one key, identified by the path
     async fn get(&mut self, path: &str) -> Result<Value, Box<dyn Error>> {
         let bmap = self.get_map(path)?;
@@ -127,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_get_delete() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = LocalMemoryMetadataStore::new();
+        let mut store = MemoryMetadataStore::new().await?;
 
         let topic_id = "another-topic";
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
@@ -151,8 +151,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_nonexistent_key() {
-        let mut store = LocalMemoryMetadataStore::new();
+    async fn test_get_nonexistent_key() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = MemoryMetadataStore::new().await?;
         let topic_id = "unknown-topic";
 
         // Try to get a non-existent key
@@ -161,20 +161,23 @@ mod tests {
             .await;
         assert!(result.is_err());
         assert_eq!(result.err().unwrap().to_string(), "Key not found");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_put_invalid_path() {
-        let mut store = LocalMemoryMetadataStore::new();
+    async fn test_put_invalid_path() -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = MemoryMetadataStore::new().await?;
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
 
         // Try to put with invalid path (missing segment)
         let result = store.put("/danube/topics", value.clone()).await;
         assert!(result.is_err());
+
+        Ok(())
     }
     #[tokio::test]
     async fn test_delete_recursive() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = LocalMemoryMetadataStore::new();
+        let mut store = MemoryMetadataStore::new().await?;
 
         // Create a sample data structure
         store
@@ -211,7 +214,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_childrens() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = LocalMemoryMetadataStore::new();
+        let mut store = MemoryMetadataStore::new().await?;
 
         // Create a sample data structure
         store

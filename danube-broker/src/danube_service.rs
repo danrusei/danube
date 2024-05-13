@@ -1,3 +1,4 @@
+use crate::metadata_store::{EtcdMetadataStore, MemoryMetadataStore, MetadataStorage};
 use crate::proto::danube_server::{Danube, DanubeServer};
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
 use crate::service_configuration::ServiceConfiguration;
@@ -18,6 +19,15 @@ impl DanubeService {
     }
     pub(crate) async fn start(self) -> Result<(), Box<dyn std::error::Error>> {
         let socket_addr = self.config.broker_addr.clone();
+
+        let metadata_store: MetadataStorage = if let Some(etcd_addr) = self.config.etcd_addr.clone()
+        {
+            MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr).await?)
+        } else {
+            MetadataStorage::MemoryStore(MemoryMetadataStore::new().await?)
+        };
+
+        //TODO! here we may want to start the MetadataEventSynchronizer & CoordinationService
 
         Server::builder()
             .add_service(DanubeServer::new(self))

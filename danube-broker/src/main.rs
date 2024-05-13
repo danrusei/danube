@@ -2,6 +2,8 @@ mod danube_service;
 mod metadata_store;
 mod service_configuration;
 
+use std::ptr::null;
+
 use crate::danube_service::DanubeService;
 use crate::service_configuration::ServiceConfiguration;
 
@@ -40,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let broker_config = ServiceConfiguration {
         broker_addr: broker_addr,
+        etcd_addr: args.etcd_addr,
     };
 
     let danube = DanubeService::new(broker_config);

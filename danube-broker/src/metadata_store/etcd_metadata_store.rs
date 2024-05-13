@@ -9,8 +9,8 @@ pub(crate) struct EtcdMetadataStore {
 }
 
 impl EtcdMetadataStore {
-    async fn new() -> Result<Self, Box<dyn Error>> {
-        let client = Client::connect(["http://etcd-server:2379"], None).await?;
+    pub async fn new(etcd_addr: String) -> Result<Self, Box<dyn Error>> {
+        let client = Client::connect([etcd_addr], None).await?;
         Ok(EtcdMetadataStore { client })
     }
 }
