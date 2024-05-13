@@ -8,6 +8,16 @@ pub(crate) struct EtcdMetadataStore {
     client: Client,
 }
 
+impl std::fmt::Debug for EtcdMetadataStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("EtcdMetadataStore")
+            .field("Results", &"etcd client".to_owned())
+            .finish()?;
+
+        Ok(())
+    }
+}
+
 impl EtcdMetadataStore {
     pub async fn new(etcd_addr: String) -> Result<Self, Box<dyn Error>> {
         let client = Client::connect([etcd_addr], None).await?;

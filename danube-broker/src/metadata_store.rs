@@ -19,6 +19,7 @@ pub(crate) trait MetadataStore {
     async fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>>;
 }
 
+#[derive(Debug)]
 pub(crate) enum MetadataStorage {
     MemoryStore(MemoryMetadataStore),
     EtcdStore(EtcdMetadataStore),
