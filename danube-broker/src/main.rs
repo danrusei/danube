@@ -1,7 +1,9 @@
+mod broker_service;
 mod danube_service;
 mod metadata_store;
 mod resources;
 mod service_configuration;
+mod services;
 mod storage;
 
 use crate::danube_service::DanubeService;
