@@ -17,6 +17,8 @@ pub(crate) trait MetadataStore {
     async fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>>;
     // Delete a key-value pair and all the children nodes.
     async fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>>;
+    // Register a listener that will be called on changes in the underlying store.
+    //fn register_listener(listener: String) //this should be migrated to Consumer<Notification>
 }
 
 #[derive(Debug)]

@@ -1,10 +1,14 @@
 mod broker_service;
+mod consumer;
 mod danube_service;
 mod metadata_store;
+mod namespace;
+mod producer;
 mod resources;
 mod service_configuration;
-mod services;
 mod storage;
+mod subscription;
+mod topic;
 
 use crate::danube_service::DanubeService;
 use crate::service_configuration::ServiceConfiguration;

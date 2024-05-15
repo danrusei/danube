@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 use crate::proto::danube_server::{Danube, DanubeServer};
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
-use crate::services::topic::Topic;
+use crate::topic::Topic;
 use tonic::transport::Server;
 use tonic::{Request, Response};
 
