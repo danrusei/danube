@@ -19,6 +19,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 danube-util = { path = "../danube-util" }
+anyhow = "1.0.83"
 
 [build-dependencies]
 tonic-build = "0.11"
