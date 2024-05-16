@@ -72,7 +72,9 @@ impl SegmentStore {
         let topic = &metadata.1.topic;
         self.segments_per_topic
             .get_mut(topic)
-            .and_then(|mut segment_ids| Some(segment_ids.remove(segment_id.try_into().ok()?)));
+            .and_then(|mut segment_ids| {
+                Some(segment_ids.remove((segment_id - 1).try_into().ok()?))
+            });
 
         Some(metadata.1)
     }
@@ -150,13 +152,19 @@ mod tests {
             topic: "test_topic".to_string(),
             messages_metadata: DashMap::new(),
         };
-        let data = vec![1, 2, 3, 4];
+        let message_data = vec![1, 2, 3, 4];
+        let message_metadata = MessageMetadata {
+            sequence_id: 1,
+            segment_id: 1,
+            offset: 0,
+            length: message_data.len(),
+        };
 
-        store.store_segment(metadata.clone(), data.clone());
+        store.store_segment(metadata.clone(), message_data.clone());
 
         let removed_metadata = store.remove_segment(1).unwrap();
 
-        assert_eq!(removed_metadata.topic, metadata.topic);
+        assert!(removed_metadata.messages_metadata.is_empty());
         assert!(store.get_segment(1).is_none());
     }
 
@@ -178,8 +186,8 @@ mod tests {
         let message_metadata = MessageMetadata {
             sequence_id: 1,
             segment_id: 1,
-            offset: 1,
-            length: 3,
+            offset: 5,
+            length: message_data.len(),
         };
         segment_metadata
             .messages_metadata
@@ -198,71 +206,4 @@ mod tests {
         let store = SegmentStore::new();
         assert_eq!(store.get_message(1, 1), None);
     }
-
-    // #[test]
-    // fn test_concurrent_access() {
-    //     //let store = Arc::new(SegmentStore::new());
-    //     let store = SegmentStore::new();
-    //     let mut threads = vec![];
-
-    //     const SEGMENTS_PER_THREAD: usize = 2;
-    //     const MESSAGES_PER_SEGMENT: usize = 3;
-
-    //     // Define message data outside the loop (single message)
-    //     let mut message_data = vec![0];
-
-    //     for i in 0..2 {
-    //         // let store_clone = Arc::clone(&store);
-    //         let thread = thread::spawn(move || {
-    //             for segment_id in 0..SEGMENTS_PER_THREAD {
-    //                 let topic = format!("topic_{}", i);
-    //                 let messages_metadata = DashMap::new();
-
-    //                 // Modify message_data for each message
-    //                 for message_id in 0..MESSAGES_PER_SEGMENT {
-    //                     message_data.push(message_id as u8); // Add message ID to data
-    //                     let offset = message_id * message_data.len();
-    //                     let message_metadata = MessageMetadata {
-    //                         sequence_id: message_id as u64,
-    //                         segment_id: (i * SEGMENTS_PER_THREAD + segment_id) as u64,
-    //                         offset,
-    //                         length: message_data.len(),
-    //                     };
-    //                     messages_metadata
-    //                         .insert(message_metadata.sequence_id, message_metadata.clone());
-    //                     // Clear message_data for the next message
-    //                     message_data.clear();
-    //                     message_data.push(0); // Reset to initial value
-    //                 }
-
-    //                 let segment_metadata = SegmentMetadata {
-    //                     segment_id: (i * SEGMENTS_PER_THREAD + segment_id) as u64,
-    //                     topic: topic.to_string(),
-    //                     messages_metadata,
-    //                 };
-
-    //                 let data = message_data
-    //                     .clone()
-    //                     .into_iter()
-    //                     .clone()
-    //                     .collect::<Vec<u8>>();
-
-    //                 store.store_segment(segment_metadata, data);
-    //             }
-    //         });
-    //         threads.push(thread);
-    //     }
-
-    //     // Wait for all threads to finish
-    //     for thread in threads {
-    //         thread.join().unwrap();
-    //     }
-
-    //     // Verify the number of segments stored
-    //     let total_segments = SEGMENTS_PER_THREAD * 2;
-    //     assert_eq!(store.segments.len(), total_segments);
-
-    //     // Verify the number of topics (assuming each thread uses a unique topic)
-    //     assert_eq!(store.segments_per_topic.len(), 2);
-    // }
 }

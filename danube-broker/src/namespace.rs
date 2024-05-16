@@ -27,7 +27,7 @@ impl NameSpace {
     }
 
     // Retrieves the list of topics within the specified namespace
-    pub(crate) fn get_list__of_topics(
+    pub(crate) fn get_list_of_topics(
         namespace_name: String,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         todo!()
