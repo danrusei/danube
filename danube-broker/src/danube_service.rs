@@ -28,7 +28,7 @@ impl DanubeService {
             MetadataStorage::MemoryStore(MemoryMetadataStore::new().await?)
         };
 
-        let storage = storage::Storage::new();
+        let storage = storage::memory_segment_storage::SegmentStore::new();
 
         // initialize the broker
         let broker = broker_service::BrokerService::new(self.config.broker_addr);
