@@ -5,10 +5,10 @@ Danube Stream
 ## Work In Progress
 
 * [] One Cluster with multiple brokers
-  * [] Non-Persistent data
+  * [] Metadata
     * [] In-Memory metadata
     * [] Use ETCD for metadata
+  * [] Non-Persistent data
+    * [] In-Memory Segment based
   * [] Persistent data
 * [] Multiple Clusters
-  * [] Non-Persistent data
-  * [] Persistent data

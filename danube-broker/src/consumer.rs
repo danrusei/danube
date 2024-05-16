@@ -3,7 +3,7 @@ use bytes::Bytes;
 
 use crate::subscription::{self, Subscription};
 
-/// A Consumer is a consumer connected and associated with a Subscription.
+/// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug, Default)]
 pub(crate) struct Consumer {
     consumer_id: u64,
