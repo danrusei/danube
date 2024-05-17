@@ -4,7 +4,7 @@ use bytes::Bytes;
 use crate::subscription::{self, Subscription};
 
 /// Represents a consumer connected and associated with a Subscription.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub(crate) struct Consumer {
     consumer_id: u64,
     consumer_name: String,
@@ -24,7 +24,7 @@ impl Consumer {
     }
 
     // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(entries: Vec<Bytes>, batch_size: u32) -> Result<()> {
+    pub(crate) async fn send_messages(&self, entries: Vec<Bytes>, batch_size: u32) -> Result<()> {
         let unacked_messages = entries.len();
         todo!()
     }
@@ -43,7 +43,12 @@ impl Consumer {
     }
 
     // acked message from client
-    pub(crate) fn message_acked() -> Result<()> {
+    pub(crate) fn message_acked(&self) -> Result<()> {
+        todo!()
+    }
+
+    pub(crate) fn disconnect(&self) -> Result<()> {
+        // close the consumer connection
         todo!()
     }
 }
