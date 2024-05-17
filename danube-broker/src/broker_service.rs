@@ -1,11 +1,10 @@
 use dashmap::DashMap;
 use std::net::SocketAddr;
-
-use crate::proto::danube_server::{Danube, DanubeServer};
-use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
-use crate::topic::Topic;
 use tonic::transport::Server;
-use tonic::{Request, Response};
+
+use crate::grpc_handlers::DanubeServerImpl;
+use crate::proto::danube_server::{Danube, DanubeServer};
+use crate::topic::Topic;
 
 pub(crate) struct BrokerService {
     broker_addr: SocketAddr,
@@ -30,7 +29,7 @@ impl BrokerService {
         let socket_addr = self.broker_addr.clone();
 
         Server::builder()
-            .add_service(DanubeServer::new(self))
+            .add_service(DanubeServer::new(DanubeServerImpl::default()))
             .serve(socket_addr)
             .await?;
 
@@ -58,31 +57,4 @@ impl BrokerService {
     // ) {
     //     self.config_listeners.insert(config_key, listener);
     // }
-}
-
-#[tonic::async_trait]
-impl Danube for BrokerService {
-    async fn create_producer(
-        &self,
-        request: Request<ProducerRequest>,
-    ) -> Result<Response<ProducerResponse>, tonic::Status> {
-        let req = request.get_ref();
-
-        println!(
-            "{} {} {} {}",
-            req.request_id, req.producer_id, req.producer_name, req.topic,
-        );
-
-        let response = ProducerResponse {
-            request_id: req.request_id,
-        };
-
-        Ok(tonic::Response::new(response))
-    }
-    async fn subscribe(
-        &self,
-        _request: Request<ConsumerRequest>,
-    ) -> Result<Response<ConsumerResponse>, tonic::Status> {
-        todo!()
-    }
 }

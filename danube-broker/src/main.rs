@@ -2,6 +2,7 @@ mod broker_service;
 mod consumer;
 mod danube_service;
 mod dispatcher;
+mod grpc_handlers;
 mod metadata_store;
 mod namespace;
 mod producer;
