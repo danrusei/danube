@@ -14,6 +14,10 @@ impl Danube for DanubeServerImpl {
     ) -> Result<Response<ProducerResponse>, tonic::Status> {
         let req = request.get_ref();
 
+        if validate_topic(req.topic.as_ref()) == false {
+            // respond with invalid topic name
+        }
+
         println!(
             "{} {} {} {}",
             req.request_id, req.producer_id, req.producer_name, req.topic,
@@ -31,4 +35,20 @@ impl Danube for DanubeServerImpl {
     ) -> Result<Response<ConsumerResponse>, tonic::Status> {
         todo!()
     }
+}
+
+fn validate_topic(input: &str) -> bool {
+    // length from 5 to 20 characters
+    if input.len() < 5 || input.len() > 20 {
+        return false;
+    }
+
+    // allowed characters are letters, numbers and "_"
+    for ch in input.chars() {
+        if !ch.is_alphanumeric() && ch != '_' {
+            return false;
+        }
+    }
+
+    true
 }

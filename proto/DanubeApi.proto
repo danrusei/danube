@@ -21,12 +21,18 @@ service Danube {
     rpc Subscribe(ConsumerRequest) returns (ConsumerResponse);
 }
 
+enum ProducerAccessMode {
+    Shared = 0; // multiple producers can publish on a topic
+    Exclusive = 1; // exclusive access for producer
+}
+
 message ProducerRequest { 
     uint64 request_id = 1;
     uint64 producer_id = 2;
     string producer_name = 3;
     string topic = 4;
     Schema schema = 5;
+    ProducerAccessMode producer_access_mode = 6;
 }
 message ProducerResponse {
     uint64 request_id =1;

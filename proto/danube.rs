@@ -64,6 +64,8 @@ pub struct ProducerRequest {
     pub topic: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub schema: ::core::option::Option<Schema>,
+    #[prost(enumeration = "ProducerAccessMode", tag = "6")]
+    pub producer_access_mode: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -166,6 +168,34 @@ pub struct SchemaResponse {
     pub request_id: u64,
     #[prost(message, optional, tag = "2")]
     pub schema: ::core::option::Option<Schema>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ProducerAccessMode {
+    /// multiple producers can publish on a topic
+    Shared = 0,
+    /// exclusive access for producer
+    Exclusive = 1,
+}
+impl ProducerAccessMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ProducerAccessMode::Shared => "Shared",
+            ProducerAccessMode::Exclusive => "Exclusive",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Shared" => Some(Self::Shared),
+            "Exclusive" => Some(Self::Exclusive),
+            _ => None,
+        }
+    }
 }
 /// Generated client implementations.
 pub mod danube_client {

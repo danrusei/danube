@@ -1,4 +1,4 @@
-use crate::proto::{danube_client, ProducerRequest, Schema};
+use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, Schema};
 use crate::{errors::Result, DanubeClient};
 
 pub struct Producer {
@@ -46,6 +46,7 @@ impl ProducerBuilder {
                 schema_data: "1".as_bytes().to_vec(),
                 type_schema: 0,
             }),
+            producer_access_mode: ProducerAccessMode::Shared.into(),
         };
 
         let request = tonic::Request::new(req);
