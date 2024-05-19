@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     let producer = client
         .new_producer()
         .with_topic(topic)
-        .with_name("test producer")
+        .with_name("test_producer")
         .create()
         .await?;
 

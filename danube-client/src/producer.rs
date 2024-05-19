@@ -1,5 +1,9 @@
-use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, Schema};
+use crate::errors::DanubeError;
+use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, ProducerResponse, Schema};
 use crate::{errors::Result, DanubeClient};
+
+use tonic::{Response, Status};
+use tonic_types::StatusExt;
 
 pub struct Producer {
     danube: DanubeClient,
@@ -58,9 +62,21 @@ impl ProducerBuilder {
             .await?;
 
         let mut client = danube_client::DanubeClient::new(grpc_cnx.grpc_cnx.clone());
-        let response = client.create_producer(request).await?;
+        let response: std::result::Result<Response<ProducerResponse>, Status> =
+            client.create_producer(request).await;
 
-        println!("Response: {:?}", response.get_ref().request_id);
+        match response {
+            Ok(resp) => {
+                let r = resp.into_inner();
+                println!("Response: req_id {:?}", r.request_id,);
+            }
+            Err(status) => {
+                let err_details = status.get_error_details();
+                if let Some(bad_request) = err_details.bad_request() {
+                    println!("Invalid request: {:?}", bad_request)
+                }
+            }
+        };
 
         Ok(Producer {
             danube: self.danube,

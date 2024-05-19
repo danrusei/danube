@@ -2,18 +2,6 @@ syntax = "proto3";
 
 package danube;
 
-message Schema {
-    enum TypeSchema {
-        None = 0;
-        String = 1;
-        Int64 = 2;
-    }
-
-    string name = 1;
-    bytes schema_data = 3;
-    TypeSchema type_schema = 4;
-}
-
 service Danube {
     // Creates a new Producer on a topic
     rpc CreateProducer(ProducerRequest) returns (ProducerResponse);
@@ -35,7 +23,7 @@ message ProducerRequest {
     ProducerAccessMode producer_access_mode = 6;
 }
 message ProducerResponse {
-    uint64 request_id =1;
+    uint64 request_id = 1 ;
 } 
 
 message ConsumerRequest {
@@ -82,4 +70,16 @@ message SchemaRequest {
 message SchemaResponse {
     uint64 request_id = 1;
     Schema schema = 2;
+}
+
+message Schema {
+    enum TypeSchema {
+        None = 0;
+        String = 1;
+        Int64 = 2;
+    }
+
+    string name = 1;
+    bytes schema_data = 3;
+    TypeSchema type_schema = 4;
 }

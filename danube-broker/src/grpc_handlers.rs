@@ -1,7 +1,8 @@
 use crate::proto::danube_server::Danube;
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
 
-use tonic::{Request, Response};
+use tonic::{Code, Request, Response, Status};
+use tonic_types::{ErrorDetails, StatusExt};
 
 #[derive(Debug, Default)]
 pub(crate) struct DanubeServerImpl {}
@@ -12,16 +13,24 @@ impl Danube for DanubeServerImpl {
         &self,
         request: Request<ProducerRequest>,
     ) -> Result<Response<ProducerResponse>, tonic::Status> {
-        let req = request.get_ref();
+        let req = request.into_inner();
 
-        if validate_topic(req.topic.as_ref()) == false {
-            // respond with invalid topic name
+        let mut err_details = ErrorDetails::new();
+
+        if validate_topic(&req.topic) == false {
+            err_details.add_bad_request_violation("topic", "the topic should contain only alphanumerics and _ , and the size between 5 to 20 characters");
         }
 
         println!(
             "{} {} {} {}",
             req.request_id, req.producer_id, req.producer_name, req.topic,
         );
+
+        if err_details.has_bad_request_violations() {
+            let status =
+                Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
+            return Err(status);
+        }
 
         let response = ProducerResponse {
             request_id: req.request_id,
