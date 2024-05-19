@@ -4,11 +4,14 @@ use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerR
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, StatusExt};
 
+use tracing::info;
+
 #[derive(Debug, Default)]
 pub(crate) struct DanubeServerImpl {}
 
 #[tonic::async_trait]
 impl Danube for DanubeServerImpl {
+    // CMD to create a new Producer
     async fn create_producer(
         &self,
         request: Request<ProducerRequest>,
@@ -18,10 +21,13 @@ impl Danube for DanubeServerImpl {
         let mut err_details = ErrorDetails::new();
 
         if validate_topic(&req.topic) == false {
+            //TODO don't have yet a defined format for topic name
             err_details.add_bad_request_violation("topic", "the topic should contain only alphanumerics and _ , and the size between 5 to 20 characters");
         }
 
-        println!(
+        //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+
+        info!(
             "{} {} {} {}",
             req.request_id, req.producer_id, req.producer_name, req.topic,
         );
@@ -38,6 +44,8 @@ impl Danube for DanubeServerImpl {
 
         Ok(tonic::Response::new(response))
     }
+
+    // CMD to create a new Consumer
     async fn subscribe(
         &self,
         _request: Request<ConsumerRequest>,
