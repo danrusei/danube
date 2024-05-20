@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::danube_server;
+use crate::broker_server;
 use crate::metadata_store::{EtcdMetadataStore, MemoryMetadataStore, MetadataStorage};
 
 use crate::resources::DanubeResources;
@@ -36,10 +36,10 @@ impl DanubeService {
 
         let storage = storage::memory_segment_storage::SegmentStore::new();
 
-        let broker_server =
-            danube_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
+        let grpc_server =
+            broker_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
 
-        broker_server.start();
+        grpc_server.start();
 
         //TODO! here we may want to start the MetadataEventSynchronizer & CoordinationService
 
