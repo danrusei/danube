@@ -5,6 +5,7 @@ mod danube_service;
 mod dispatcher;
 mod metadata_store;
 mod namespace;
+mod policies;
 mod producer;
 mod resources;
 mod service_configuration;
