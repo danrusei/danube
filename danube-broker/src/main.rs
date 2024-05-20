@@ -1,8 +1,8 @@
 mod broker_service;
 mod consumer;
+mod danube_server;
 mod danube_service;
 mod dispatcher;
-mod grpc_handlers;
 mod metadata_store;
 mod namespace;
 mod producer;
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         etcd_addr: args.etcd_addr,
     };
 
-    let danube = DanubeService::new(broker_config);
+    let mut danube = DanubeService::new(broker_config);
 
     info!("Start the Danube Broker Service");
     danube.start().await.expect("the broker unable to start");

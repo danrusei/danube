@@ -1,13 +1,42 @@
-use crate::proto::danube_server::Danube;
+use crate::broker_service::BrokerService;
+use crate::proto::danube_server::{Danube, DanubeServer};
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
 
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, StatusExt};
-
 use tracing::info;
 
-#[derive(Debug, Default)]
-pub(crate) struct DanubeServerImpl {}
+#[derive(Debug)]
+pub(crate) struct DanubeServerImpl {
+    service: Arc<BrokerService>,
+    broker_addr: SocketAddr,
+}
+
+impl DanubeServerImpl {
+    pub(crate) fn new(service: Arc<BrokerService>, broker_addr: SocketAddr) -> Self {
+        DanubeServerImpl {
+            service,
+            broker_addr,
+        }
+    }
+    pub(crate) async fn start(self) -> anyhow::Result<()> {
+        //TODO! start other backgroud services like PublishRateLimiter, DispatchRateLimiter,
+        // compaction, innactivity monitor
+
+        let socket_addr = self.broker_addr.clone();
+
+        Server::builder()
+            .add_service(DanubeServer::new(self))
+            .serve(socket_addr)
+            .await?;
+
+        Ok(())
+    }
+}
 
 #[tonic::async_trait]
 impl Danube for DanubeServerImpl {
@@ -27,12 +56,21 @@ impl Danube for DanubeServerImpl {
 
         //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
 
+        if !self.service.check_if_producer_exist(req.producer_id) {
+            err_details.add_precondition_failure_violation(
+                "ptoducer_id",
+                "already present",
+                "the producer is already present on the connection",
+            );
+        }
         info!(
             "{} {} {} {}",
             req.request_id, req.producer_id, req.producer_name, req.topic,
         );
 
-        if err_details.has_bad_request_violations() {
+        if err_details.has_bad_request_violations()
+            || err_details.has_precondition_failure_violations()
+        {
             let status =
                 Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
             return Err(status);
