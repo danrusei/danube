@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::broker_server;
 use crate::metadata_store::{EtcdMetadataStore, MemoryMetadataStore, MetadataStorage};
@@ -11,7 +11,7 @@ use crate::{broker_service::BrokerService, storage};
 pub(crate) struct DanubeService {
     config: ServiceConfiguration,
     resources: DanubeResources,
-    broker: Arc<BrokerService>,
+    broker: Arc<Mutex<BrokerService>>,
 }
 
 // DanubeService act as a a coordinator for managing clusters, including storage and brokers.
@@ -20,7 +20,7 @@ impl DanubeService {
         DanubeService {
             config: service_config,
             resources: DanubeResources::new(),
-            broker: Arc::new(BrokerService::new()),
+            broker: Arc::new(Mutex::new(BrokerService::new())),
         }
     }
 

@@ -1,10 +1,11 @@
 use crate::broker_service::BrokerService;
 use crate::proto::danube_server::{Danube, DanubeServer};
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
+use crate::topic::Topic;
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, StatusExt};
@@ -12,12 +13,12 @@ use tracing::info;
 
 #[derive(Debug)]
 pub(crate) struct DanubeServerImpl {
-    service: Arc<BrokerService>,
+    service: Arc<Mutex<BrokerService>>,
     broker_addr: SocketAddr,
 }
 
 impl DanubeServerImpl {
-    pub(crate) fn new(service: Arc<BrokerService>, broker_addr: SocketAddr) -> Self {
+    pub(crate) fn new(service: Arc<Mutex<BrokerService>>, broker_addr: SocketAddr) -> Self {
         DanubeServerImpl {
             service,
             broker_addr,
@@ -56,13 +57,37 @@ impl Danube for DanubeServerImpl {
 
         //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
 
-        if !self.service.check_if_producer_exist(req.producer_id) {
+        if !self
+            .service
+            .lock()
+            .unwrap()
+            .check_if_producer_exist(req.producer_id)
+        {
             err_details.add_precondition_failure_violation(
                 "ptoducer_id",
                 "already present",
                 "the producer is already present on the connection",
             );
         }
+
+        let topic: &Topic;
+
+        if let Ok(top) = self
+            .service
+            .lock()
+            .unwrap()
+            .get_topic(req.topic.clone(), true)
+        {
+            topic = top
+        } else {
+            err_details.set_resource_info(
+                "topic",
+                "topic",
+                req.producer_name.clone(),
+                "unable to create",
+            );
+        }
+
         info!(
             "{} {} {} {}",
             req.request_id, req.producer_id, req.producer_name, req.topic,

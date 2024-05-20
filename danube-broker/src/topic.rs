@@ -1,27 +1,33 @@
 use bytes::BytesMut;
 use dashmap::DashMap;
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use danube_util::schema::Schema;
 
 use crate::{
+    broker_service::{self, BrokerService},
     consumer::Consumer,
     producer::Producer,
     subscription::{Subscription, SubscriptionOption},
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Topic {
     topic_name: String,
     topic_policies: TopicPolicies,
-    subscriptions: DashMap<String, Subscription>,
+    subscriptions: HashMap<String, Subscription>,
     // Producers currently connected to this topic
-    producers: DashMap<String, Producer>,
+    producers: HashMap<String, Producer>,
 }
 
 impl Topic {
-    pub(crate) fn initialize() -> Self {
-        Topic::default()
+    pub(crate) fn new(topic_name: String) -> Self {
+        Topic {
+            topic_name,
+            topic_policies: TopicPolicies::default(),
+            subscriptions: HashMap::new(),
+            producers: HashMap::new(),
+        }
     }
 
     // Close all producers and subscriptions associated with this topic
