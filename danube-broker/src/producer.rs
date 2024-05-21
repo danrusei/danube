@@ -8,7 +8,8 @@ use crate::topic::Topic;
 pub(crate) struct Producer {
     producer_id: u64,
     producer_name: String,
-    access_mode: ProducerAccessMode,
+    topic_name: String,
+    access_mode: i32, // should be ProducerAccessMode
 }
 
 #[derive(Debug, Clone)]
@@ -21,14 +22,15 @@ pub(crate) enum ProducerAccessMode {
 
 impl Producer {
     pub(crate) fn new(
-        topic: Topic,
         producer_id: u64,
         producer_name: String,
-        access_mode: ProducerAccessMode,
+        topic_name: String,
+        access_mode: i32,
     ) -> Self {
         Producer {
             producer_id,
             producer_name,
+            topic_name,
             access_mode,
         }
     }

@@ -3,7 +3,7 @@ use bytes::BytesMut;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
 
-use danube_util::schema::Schema;
+use crate::proto::Schema;
 
 use crate::{
     broker_service::{self, BrokerService},
@@ -16,6 +16,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct Topic {
     topic_name: String,
+    schema: Option<Schema>,
     topic_policies: Option<Policies>,
     subscriptions: HashMap<String, Subscription>,
     // Producers currently connected to this topic
@@ -26,6 +27,7 @@ impl Topic {
     pub(crate) fn new(topic_name: String) -> Self {
         Topic {
             topic_name,
+            schema: None,
             topic_policies: None,
             subscriptions: HashMap::new(),
             producers: HashMap::new(),
@@ -80,12 +82,13 @@ impl Topic {
     }
 
     // Add a schema to the topic.
-    pub(crate) fn add_schema(schema: Schema) -> Result<()> {
-        todo!()
+    pub(crate) fn add_schema(&mut self, schema: Schema) -> Result<()> {
+        self.schema = Some(schema);
+        Ok(())
     }
 
     // Add a schema to the topic.
-    pub(crate) fn delete_schema(schema: Schema) -> Result<()> {
+    pub(crate) fn delete_schema(&self, schema: Schema) -> Result<()> {
         todo!()
     }
 }

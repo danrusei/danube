@@ -1,12 +1,15 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 use dashmap::DashMap;
 use std::any;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
-use crate::proto::danube_server::{Danube, DanubeServer};
+use crate::proto::{
+    danube_server::{Danube, DanubeServer},
+    ProducerAccessMode, Schema,
+};
 use crate::topic::{self, Topic};
 use crate::{consumer::Consumer, producer::Producer};
 
@@ -40,17 +43,17 @@ impl BrokerService {
         &mut self,
         topic_name: String,
         create_if_missing: bool,
-    ) -> Result<&Topic> {
+    ) -> Result<&mut Topic> {
         // Check if the topic exists first
         if self.topics.contains_key(&topic_name) {
-            return Ok(self.topics.get(&topic_name).unwrap());
+            return Ok(self.topics.get_mut(&topic_name).unwrap());
         }
 
         // If the topic does not exist and create_if_missing is true
         if create_if_missing {
             let new_topic = topic::Topic::new(topic_name.clone());
             self.topics.insert(topic_name.clone(), new_topic);
-            return Ok(self.topics.get(&topic_name).unwrap());
+            return Ok(self.topics.get_mut(&topic_name).unwrap());
         }
 
         // If the topic does not exist and create_if_missing is false, return an error
@@ -63,6 +66,32 @@ impl BrokerService {
 
     pub(crate) fn check_if_producer_exist(&self, producer_id: u64) -> bool {
         self.producers.contains_key(&producer_id)
+    }
+
+    pub(crate) fn build_new_producer(
+        &mut self,
+        producer_id: u64,
+        producer_name: String,
+        topic_name: String,
+        //schema: Option<Schema>,
+        producer_access_mode: i32,
+    ) -> Result<()> {
+        match self.producers.entry(producer_id) {
+            Entry::Vacant(entry) => {
+                entry.insert(Producer::new(
+                    producer_id,
+                    producer_name,
+                    topic_name,
+                    producer_access_mode,
+                ));
+            }
+            Entry::Occupied(entry) => {
+                let current_producer = entry.get();
+                return Err(anyhow!(" the producer already exist"));
+            }
+        }
+
+        Ok(())
     }
 
     // pub(crate) async fn register_configuration_listener(
