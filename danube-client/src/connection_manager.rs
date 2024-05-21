@@ -64,9 +64,9 @@ impl ConnectionManager {
 
         let mut cnx = self.connections.lock().unwrap();
 
-        let entry = cnx.entry(broker);
+        // let entry = cnx.entry(broker);
 
-        match entry {
+        match cnx.entry(broker) {
             Entry::Occupied(mut occupied_entry) => match occupied_entry.get() {
                 ConnectionStatus::Connected(rpc_cnx) => Ok(rpc_cnx.clone()),
                 ConnectionStatus::Disconnected => {

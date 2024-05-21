@@ -12,7 +12,7 @@ pub use client::DanubeClient;
 pub mod errors;
 
 mod producer;
-pub use producer::{Producer, ProducerBuilder};
+pub use producer::{Producer, ProducerBuilder, ProducerOptions};
 
 mod lookup_service;
 
