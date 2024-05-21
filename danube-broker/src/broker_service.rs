@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Ok, Result};
 use dashmap::DashMap;
+use rand::Rng;
 use std::any;
 use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
@@ -22,9 +23,9 @@ pub(crate) struct BrokerService {
     // brokers to register listeners for configuration changes or updates
     // config_listeners: DashMap<String, Consumer>,
     // the list of active producers
-    producers: HashMap<u64, Producer>,
+    // producers: HashMap<u64, Producer>,
     // the list of active consumers
-    consumers: HashMap<u64, Consumer>,
+    //consumers: HashMap<u64, Consumer>,
 }
 
 impl BrokerService {
@@ -34,8 +35,8 @@ impl BrokerService {
             //topics: DashMap::new(),
             //config_listeners: DashMap::new,
             topics: HashMap::new(),
-            producers: HashMap::new(),
-            consumers: HashMap::new(),
+            // producers: HashMap::new(),
+            // consumers: HashMap::new(),
         }
     }
 
@@ -64,19 +65,33 @@ impl BrokerService {
         todo!()
     }
 
-    pub(crate) fn check_if_producer_exist(&self, producer_id: u64) -> bool {
-        self.producers.contains_key(&producer_id)
+    pub(crate) fn check_if_producer_exist(
+        &self,
+        topic_name: String,
+        producer_name: String,
+    ) -> bool {
+        let topic = self
+            .topics
+            .get(&topic_name)
+            .expect("unable to find the topic");
+        for producer in topic.producers.values() {
+            if producer.producer_name == producer_name {
+                return true;
+            }
+        }
+        false
     }
 
+    // create a new producer and attach to the topic
     pub(crate) fn build_new_producer(
         &mut self,
-        producer_id: u64,
         producer_name: String,
         topic_name: String,
-        //schema: Option<Schema>,
         producer_access_mode: i32,
-    ) -> Result<()> {
-        match self.producers.entry(producer_id) {
+    ) -> Result<&Producer> {
+        let topic = self.topics.get_mut(&topic_name).expect("todo");
+        let producer_id = get_random_id();
+        match topic.producers.entry(producer_id) {
             Entry::Vacant(entry) => {
                 entry.insert(Producer::new(
                     producer_id,
@@ -86,12 +101,15 @@ impl BrokerService {
                 ));
             }
             Entry::Occupied(entry) => {
-                let current_producer = entry.get();
+                //let current_producer = entry.get();
                 return Err(anyhow!(" the producer already exist"));
             }
         }
 
-        Ok(())
+        Ok(topic
+            .producers
+            .get(&producer_id)
+            .expect("the producer was created above"))
     }
 
     // pub(crate) async fn register_configuration_listener(
@@ -101,4 +119,9 @@ impl BrokerService {
     // ) {
     //     self.config_listeners.insert(config_key, listener);
     // }
+}
+
+fn get_random_id() -> u64 {
+    let mut rng = rand::thread_rng();
+    rng.gen::<u64>()
 }

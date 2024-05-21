@@ -3,6 +3,7 @@ use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, ProducerR
 use crate::{errors::Result, DanubeClient};
 
 use tonic::{Response, Status};
+use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
 
 pub struct Producer {
@@ -42,9 +43,8 @@ impl ProducerBuilder {
     pub async fn create(self) -> Result<Producer> {
         let req = ProducerRequest {
             request_id: 1,
-            producer_id: 2,
             producer_name: "hello_producer".to_string(),
-            topic: "hello_topic".to_string(),
+            topic_name: "hello_topic".to_string(),
             schema: Some(Schema {
                 name: "schema_name".to_string(),
                 schema_data: "1".as_bytes().to_vec(),
@@ -68,12 +68,14 @@ impl ProducerBuilder {
         match response {
             Ok(resp) => {
                 let r = resp.into_inner();
-                println!("Response: req_id {:?}", r.request_id,);
+                println!("Response: req_id {:?} {:?}", r.request_id, r.producer_id);
             }
             Err(status) => {
-                let err_details = status.get_error_details();
-                if let Some(bad_request) = err_details.bad_request() {
-                    println!("Invalid request: {:?}", bad_request)
+                //let err_details = status.get_error_details();
+                match status.get_error_details() {
+                    error_details => {
+                        println!("Invalid request: {:?}", error_details)
+                    }
                 }
             }
         };

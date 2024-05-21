@@ -1,4 +1,5 @@
 use crate::broker_service::BrokerService;
+use crate::producer;
 use crate::proto::danube_server::{Danube, DanubeServer};
 use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
 use crate::topic::Topic;
@@ -47,23 +48,50 @@ impl Danube for DanubeServerImpl {
         request: Request<ProducerRequest>,
     ) -> Result<Response<ProducerResponse>, tonic::Status> {
         let req = request.into_inner();
-        let mut service = self.service.lock().unwrap();
 
         info!(
-            "{} {} {} {}",
-            req.request_id, req.producer_id, req.producer_name, req.topic,
+            "{} {} {}",
+            req.request_id, req.producer_name, req.topic_name,
         );
 
         let mut err_details = ErrorDetails::new();
 
-        if validate_topic(&req.topic) == false {
+        if !validate_topic(&req.topic_name) {
             //TODO don't have yet a defined format for topic name
             err_details.add_bad_request_violation("topic", "the topic should contain only alphanumerics and _ , and the size between 5 to 20 characters");
         }
 
-        //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+        let topic_ref: &mut Topic;
 
-        if !service.check_if_producer_exist(req.producer_id) {
+        {
+            let mut service = self.service.lock().unwrap();
+            match service.get_topic(req.topic_name.clone(), true) {
+                Ok(top) => topic_ref = top,
+                Err(err) => {
+                    err_details.set_resource_info(
+                        "topic",
+                        "topic",
+                        req.producer_name.clone(),
+                        &err.to_string(),
+                    );
+                    let status = Status::with_error_details(
+                        Code::NotFound,
+                        "unable to create topic",
+                        err_details,
+                    );
+                    return Err(status);
+                }
+            }
+
+            if let Some(schema_req) = req.schema {
+                //TODO! save Schema to metadata Store, use from resources the topic to get and put schema
+                topic_ref.add_schema(schema_req);
+            }
+        }
+
+        //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+        let mut service = self.service.lock().unwrap();
+        if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
             err_details.add_precondition_failure_violation(
                 "ptoducer_id",
                 "already present",
@@ -71,42 +99,24 @@ impl Danube for DanubeServerImpl {
             );
         }
 
-        let topic_ref: &mut Topic;
-
-        match service.get_topic(req.topic.clone(), true) {
-            Ok(top) => topic_ref = top,
-            Err(err) => {
-                err_details.set_resource_info(
-                    "topic",
-                    "topic",
-                    req.producer_name.clone(),
-                    &err.to_string(),
-                );
-                let status = Status::with_error_details(
-                    Code::NotFound,
-                    "unable to create topic",
-                    err_details,
-                );
-                return Err(status);
-            }
-        }
-
-        if let Some(schema_req) = req.schema {
-            //TODO! save Schema to metadata Store, use from resources the topic to get and put schema
-            topic_ref.add_schema(schema_req);
-        }
-
         // for faster boostrap, or in certain conditions we may want to create an initial subscription
         // same time with the producer creation. But not doing this for now, leave to consumers to create subscription.
 
-        service.build_new_producer(
-            req.producer_id,
-            req.producer_name,
-            req.topic,
+        let new_producer = if let Ok(prod) = service.build_new_producer(
+            req.producer_name.clone(),
+            req.topic_name,
             // req.schema,
             req.producer_access_mode,
-        );
-        //handle error !!!
+        ) {
+            prod
+        } else {
+            let status = Status::with_error_details(
+                Code::NotFound,
+                "unable to create the producer",
+                err_details,
+            );
+            return Err(status);
+        };
 
         if err_details.has_bad_request_violations()
             || err_details.has_precondition_failure_violations()
@@ -118,6 +128,8 @@ impl Danube for DanubeServerImpl {
 
         let response = ProducerResponse {
             request_id: req.request_id,
+            producer_name: req.producer_name,
+            producer_id: new_producer.get_id(),
         };
 
         Ok(tonic::Response::new(response))

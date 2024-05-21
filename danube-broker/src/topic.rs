@@ -15,12 +15,13 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct Topic {
-    topic_name: String,
-    schema: Option<Schema>,
-    topic_policies: Option<Policies>,
-    subscriptions: HashMap<String, Subscription>,
-    // Producers currently connected to this topic
-    producers: HashMap<String, Producer>,
+    pub(crate) topic_name: String,
+    pub(crate) schema: Option<Schema>,
+    pub(crate) topic_policies: Option<Policies>,
+    // the subscriptions attached on the topic
+    pub(crate) subscriptions: HashMap<String, Subscription>,
+    // the producers currently connected to this topic
+    pub(crate) producers: HashMap<u64, Producer>,
 }
 
 impl Topic {

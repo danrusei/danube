@@ -39,7 +39,7 @@ impl DanubeService {
         let grpc_server =
             broker_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
 
-        grpc_server.start();
+        grpc_server.start().await?;
 
         //TODO! here we may want to start the MetadataEventSynchronizer & CoordinationService
 

@@ -4,12 +4,10 @@
 pub struct ProducerRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(uint64, tag = "2")]
-    pub producer_id: u64,
     #[prost(string, tag = "3")]
     pub producer_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub topic: ::prost::alloc::string::String,
+    pub topic_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub schema: ::core::option::Option<Schema>,
     #[prost(enumeration = "ProducerAccessMode", tag = "6")]
@@ -20,6 +18,10 @@ pub struct ProducerRequest {
 pub struct ProducerResponse {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub producer_id: u64,
+    #[prost(string, tag = "3")]
+    pub producer_name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

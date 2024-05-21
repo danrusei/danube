@@ -6,10 +6,10 @@ use crate::topic::Topic;
 // Represents the connected producer
 #[derive(Debug, Clone)]
 pub(crate) struct Producer {
-    producer_id: u64,
-    producer_name: String,
-    topic_name: String,
-    access_mode: i32, // should be ProducerAccessMode
+    pub(crate) producer_id: u64,
+    pub(crate) producer_name: String,
+    pub(crate) topic_name: String,
+    pub(crate) access_mode: i32, // should be ProducerAccessMode
 }
 
 #[derive(Debug, Clone)]
@@ -42,5 +42,9 @@ impl Producer {
     ) -> Result<()> {
         // it performs some checks then topic.publishMessage
         todo!()
+    }
+
+    pub(crate) fn get_id(&self) -> u64 {
+        self.producer_id
     }
 }
