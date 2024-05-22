@@ -1,9 +1,13 @@
 use crate::broker_service::BrokerService;
 use crate::producer;
 use crate::proto::danube_server::{Danube, DanubeServer};
-use crate::proto::{ConsumerRequest, ConsumerResponse, ProducerRequest, ProducerResponse};
+use crate::proto::{
+    ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse, ProducerRequest,
+    ProducerResponse,
+};
 use crate::topic::Topic;
 
+//use prost::Message;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -133,6 +137,13 @@ impl Danube for DanubeServerImpl {
         };
 
         Ok(tonic::Response::new(response))
+    }
+
+    async fn send_message(
+        &self,
+        request: Request<MessageRequest>,
+    ) -> Result<Response<MessageResponse>, tonic::Status> {
+        todo!()
     }
 
     // CMD to create a new Consumer

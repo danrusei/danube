@@ -10,7 +10,7 @@ service Danube {
     rpc Subscribe(ConsumerRequest) returns (ConsumerResponse);
 
     // Sends a message from the Producer
-    rpc Send(SendMessage) returns (SendResponse);
+    rpc SendMessage(MessageRequest) returns (MessageResponse);
 
     // Acknowledges receipt of a message from the Consumer
     // rpc Ack(AckRequest) returns (AckResponse);
@@ -48,19 +48,19 @@ message ConsumerResponse {
     string consumer_name = 3;
 }
 
-message SendMessage {
+message MessageRequest {
     uint64 request_id =1;
     uint64 producer_id = 2;
-    MessageMetada metadata = 3;
+    MessageMetadata metadata = 3;
     bytes message = 4;
 }
 
-message SendResponse {
+message MessageResponse {
     uint64 request_id = 1;
     uint64 message_id = 2;
 }
 
-message MessageMetada {
+message MessageMetadata {
     // Identifies the name of the producer that sent the message.
     string producer_name = 1;
     // Represents the sequence ID of the message within the topic

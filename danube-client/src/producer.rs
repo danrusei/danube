@@ -1,8 +1,15 @@
 use crate::errors::DanubeError;
-use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, ProducerResponse};
+use crate::proto::{
+    danube_client, MessageRequest, MessageResponse, ProducerAccessMode, ProducerRequest,
+    ProducerResponse,
+};
 use crate::{errors::Result, DanubeClient};
-use crate::{schema::Schema, schema::SchemaType};
+use crate::{
+    message::{MessageMetadata, SendMessage},
+    schema::{Schema, SchemaType},
+};
 
+use bytes::Bytes;
 use tonic::{Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
@@ -79,8 +86,24 @@ impl Producer {
 
         Ok(())
     }
-    pub async fn send(&self) -> Result<()> {
-        todo!();
+
+    // the Producer sends messages to the topic
+    pub async fn send(&self, data: impl Into<Bytes>) -> Result<()> {
+        let meta_data = MessageMetadata {
+            producer_name: self.name.clone(),
+            sequence_id: todo!(),
+            publish_time: todo!(),
+        };
+
+        let send_message = SendMessage {
+            request_id: todo!(),
+            producer_id: todo!(),
+            metadata: Some(meta_data),
+            message: todo!(),
+        };
+
+        let req: MessageRequest = send_message.to_proto();
+
         Ok(())
     }
 }

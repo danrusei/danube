@@ -49,19 +49,19 @@ pub struct ConsumerResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SendMessage {
+pub struct MessageRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
     #[prost(uint64, tag = "2")]
     pub producer_id: u64,
     #[prost(message, optional, tag = "3")]
-    pub metadata: ::core::option::Option<MessageMetada>,
+    pub metadata: ::core::option::Option<MessageMetadata>,
     #[prost(bytes = "vec", tag = "4")]
     pub message: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SendResponse {
+pub struct MessageResponse {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
     #[prost(uint64, tag = "2")]
@@ -69,7 +69,7 @@ pub struct SendResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MessageMetada {
+pub struct MessageMetadata {
     /// Identifies the name of the producer that sent the message.
     #[prost(string, tag = "1")]
     pub producer_name: ::prost::alloc::string::String,
@@ -375,10 +375,13 @@ pub mod danube_client {
             self.inner.unary(req, path, codec).await
         }
         /// Sends a message from the Producer
-        pub async fn send(
+        pub async fn send_message(
             &mut self,
-            request: impl tonic::IntoRequest<super::SendMessage>,
-        ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::MessageRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::MessageResponse>,
+            tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
@@ -389,9 +392,11 @@ pub mod danube_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/danube.Danube/Send");
+            let path = http::uri::PathAndQuery::from_static(
+                "/danube.Danube/SendMessage",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "Send"));
+            req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "SendMessage"));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -557,10 +562,10 @@ pub mod danube_server {
             tonic::Status,
         >;
         /// Sends a message from the Producer
-        async fn send(
+        async fn send_message(
             &self,
-            request: tonic::Request<super::SendMessage>,
-        ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status>;
+            request: tonic::Request<super::MessageRequest>,
+        ) -> std::result::Result<tonic::Response<super::MessageResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct DanubeServer<T: Danube> {
@@ -729,23 +734,23 @@ pub mod danube_server {
                     };
                     Box::pin(fut)
                 }
-                "/danube.Danube/Send" => {
+                "/danube.Danube/SendMessage" => {
                     #[allow(non_camel_case_types)]
-                    struct SendSvc<T: Danube>(pub Arc<T>);
-                    impl<T: Danube> tonic::server::UnaryService<super::SendMessage>
-                    for SendSvc<T> {
-                        type Response = super::SendResponse;
+                    struct SendMessageSvc<T: Danube>(pub Arc<T>);
+                    impl<T: Danube> tonic::server::UnaryService<super::MessageRequest>
+                    for SendMessageSvc<T> {
+                        type Response = super::MessageResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::SendMessage>,
+                            request: tonic::Request<super::MessageRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Danube>::send(&inner, request).await
+                                <T as Danube>::send_message(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -757,7 +762,7 @@ pub mod danube_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = SendSvc(inner);
+                        let method = SendMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
