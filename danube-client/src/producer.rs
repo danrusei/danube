@@ -1,6 +1,7 @@
 use crate::errors::DanubeError;
-use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, ProducerResponse, Schema};
+use crate::proto::{danube_client, ProducerAccessMode, ProducerRequest, ProducerResponse};
 use crate::{errors::Result, DanubeClient};
+use crate::{schema::Schema, schema::SchemaType};
 
 use tonic::{Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
@@ -10,6 +11,7 @@ pub struct Producer {
     client: DanubeClient,
     topic: String,
     name: String,
+    schema: Option<Schema>,
     producer_options: ProducerOptions,
 }
 
@@ -18,21 +20,30 @@ impl Producer {
         client: DanubeClient,
         topic: String,
         name: String,
+        schema: Option<Schema>,
         producer_options: ProducerOptions,
     ) -> Self {
         Producer {
             client,
             topic,
             name,
+            schema,
             producer_options,
         }
     }
     pub async fn create(&self) -> Result<()> {
+        // default schema is Bytes if not specified
+        let mut schema = Schema::new("bytes_schema".into(), SchemaType::Bytes);
+
+        if let Some(sch) = self.schema.clone() {
+            schema = sch;
+        }
+
         let req = ProducerRequest {
             request_id: 1,
             producer_name: self.name.clone(),
             topic_name: self.topic.clone(),
-            schema: self.producer_options.schema.clone(),
+            schema: Some(schema.to_proto()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
         };
 
@@ -51,7 +62,10 @@ impl Producer {
         match response {
             Ok(resp) => {
                 let r = resp.into_inner();
-                println!("Response: req_id {:?} {:?}", r.request_id, r.producer_id);
+                println!(
+                    "Response: req_id: {:?}, producer_id: {:?}",
+                    r.request_id, r.producer_id
+                );
             }
             Err(status) => {
                 //let err_details = status.get_error_details();
@@ -72,6 +86,7 @@ pub struct ProducerBuilder {
     client: DanubeClient,
     topic: Option<String>,
     name: Option<String>,
+    schema: Option<Schema>,
     producer_options: ProducerOptions,
 }
 
@@ -81,6 +96,7 @@ impl ProducerBuilder {
             client: client.clone(),
             topic: None,
             name: None,
+            schema: None,
             producer_options: ProducerOptions::default(),
         }
     }
@@ -94,6 +110,11 @@ impl ProducerBuilder {
     /// sets the producer's name
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
+        self
+    }
+
+    pub fn with_schema(mut self, schema_name: String, schema_type: SchemaType) -> Self {
+        self.schema = Some(Schema::new(schema_name, schema_type));
         self
     }
 
@@ -111,6 +132,7 @@ impl ProducerBuilder {
             name: self
                 .name
                 .expect("you should provide a name to the created producer"),
+            schema: self.schema,
             producer_options: self.producer_options,
         }
     }
@@ -120,5 +142,5 @@ impl ProducerBuilder {
 #[derive(Debug, Clone, Default)]
 pub struct ProducerOptions {
     // schema used to encode the messages
-    pub schema: Option<Schema>,
+    pub others: String,
 }

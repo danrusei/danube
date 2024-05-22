@@ -144,9 +144,10 @@ pub mod schema {
     )]
     #[repr(i32)]
     pub enum TypeSchema {
-        None = 0,
+        Bytes = 0,
         String = 1,
         Int64 = 2,
+        Json = 3,
     }
     impl TypeSchema {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -155,17 +156,19 @@ pub mod schema {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                TypeSchema::None => "None",
+                TypeSchema::Bytes => "Bytes",
                 TypeSchema::String => "String",
                 TypeSchema::Int64 => "Int64",
+                TypeSchema::Json => "JSON",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
         pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
             match value {
-                "None" => Some(Self::None),
+                "Bytes" => Some(Self::Bytes),
                 "String" => Some(Self::String),
                 "Int64" => Some(Self::Int64),
+                "JSON" => Some(Self::Json),
                 _ => None,
             }
         }

@@ -75,9 +75,10 @@ message SchemaResponse {
 
 message Schema {
     enum TypeSchema {
-        None = 0;
+        Bytes = 0;
         String = 1;
         Int64 = 2;
+        JSON = 3;
     }
 
     string name = 1;

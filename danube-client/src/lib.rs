@@ -14,6 +14,9 @@ pub mod errors;
 mod producer;
 pub use producer::{Producer, ProducerBuilder, ProducerOptions};
 
+mod schema;
+pub use schema::SchemaType;
+
 mod lookup_service;
 
 mod connection_manager;
