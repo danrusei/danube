@@ -1,7 +1,7 @@
 use crate::errors::DanubeError;
 use crate::proto::{
-    danube_client, MessageRequest, MessageResponse, ProducerAccessMode, ProducerRequest,
-    ProducerResponse,
+    stream_client::StreamClient, MessageRequest, MessageResponse, ProducerAccessMode,
+    ProducerRequest, ProducerResponse,
 };
 use crate::{errors::Result, DanubeClient};
 use crate::{
@@ -62,7 +62,7 @@ impl Producer {
             .get_connection(&self.client.uri, &self.client.uri)
             .await?;
 
-        let mut client = danube_client::DanubeClient::new(grpc_cnx.grpc_cnx.clone());
+        let mut client = StreamClient::new(grpc_cnx.grpc_cnx.clone());
         let response: std::result::Result<Response<ProducerResponse>, Status> =
             client.create_producer(request).await;
 
@@ -88,7 +88,7 @@ impl Producer {
     }
 
     // the Producer sends messages to the topic
-    pub async fn send(&self, data: impl Into<Bytes>) -> Result<()> {
+    pub async fn send(&self, data: Vec<u8>) -> Result<()> {
         let meta_data = MessageMetadata {
             producer_name: self.name.clone(),
             sequence_id: todo!(),
@@ -99,7 +99,7 @@ impl Producer {
             request_id: todo!(),
             producer_id: todo!(),
             metadata: Some(meta_data),
-            message: todo!(),
+            message: data,
         };
 
         let req: MessageRequest = send_message.to_proto();

@@ -7,10 +7,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
-use crate::proto::{
-    danube_server::{Danube, DanubeServer},
-    ProducerAccessMode, Schema,
-};
+use crate::proto::{ProducerAccessMode, Schema};
 use crate::topic::{self, Topic};
 use crate::{consumer::Consumer, producer::Producer};
 

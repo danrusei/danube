@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package danube;
 
-service Danube {
+service Stream {
     // Creates a new Producer on a topic
     rpc CreateProducer(ProducerRequest) returns (ProducerResponse);
 

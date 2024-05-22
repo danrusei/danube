@@ -241,15 +241,15 @@ impl ProducerAccessMode {
     }
 }
 /// Generated client implementations.
-pub mod danube_client {
+pub mod stream_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
-    pub struct DanubeClient<T> {
+    pub struct StreamClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl DanubeClient<tonic::transport::Channel> {
+    impl StreamClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -260,7 +260,7 @@ pub mod danube_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> DanubeClient<T>
+    impl<T> StreamClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
@@ -278,7 +278,7 @@ pub mod danube_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> DanubeClient<InterceptedService<T, F>>
+        ) -> StreamClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -292,7 +292,7 @@ pub mod danube_client {
                 http::Request<tonic::body::BoxBody>,
             >>::Error: Into<StdError> + Send + Sync,
         {
-            DanubeClient::new(InterceptedService::new(inner, interceptor))
+            StreamClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -344,11 +344,11 @@ pub mod danube_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/danube.Danube/CreateProducer",
+                "/danube.Stream/CreateProducer",
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(GrpcMethod::new("danube.Danube", "CreateProducer"));
+                .insert(GrpcMethod::new("danube.Stream", "CreateProducer"));
             self.inner.unary(req, path, codec).await
         }
         /// Creates a new Subscriber
@@ -369,9 +369,9 @@ pub mod danube_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/danube.Danube/Subscribe");
+            let path = http::uri::PathAndQuery::from_static("/danube.Stream/Subscribe");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "Subscribe"));
+            req.extensions_mut().insert(GrpcMethod::new("danube.Stream", "Subscribe"));
             self.inner.unary(req, path, codec).await
         }
         /// Sends a message from the Producer
@@ -393,10 +393,10 @@ pub mod danube_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/danube.Danube/SendMessage",
+                "/danube.Stream/SendMessage",
             );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "SendMessage"));
+            req.extensions_mut().insert(GrpcMethod::new("danube.Stream", "SendMessage"));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -539,12 +539,12 @@ pub mod discovery_client {
     }
 }
 /// Generated server implementations.
-pub mod danube_server {
+pub mod stream_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with DanubeServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with StreamServer.
     #[async_trait]
-    pub trait Danube: Send + Sync + 'static {
+    pub trait Stream: Send + Sync + 'static {
         /// Creates a new Producer on a topic
         async fn create_producer(
             &self,
@@ -568,7 +568,7 @@ pub mod danube_server {
         ) -> std::result::Result<tonic::Response<super::MessageResponse>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct DanubeServer<T: Danube> {
+    pub struct StreamServer<T: Stream> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
@@ -576,7 +576,7 @@ pub mod danube_server {
         max_encoding_message_size: Option<usize>,
     }
     struct _Inner<T>(Arc<T>);
-    impl<T: Danube> DanubeServer<T> {
+    impl<T: Stream> StreamServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -628,9 +628,9 @@ pub mod danube_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for DanubeServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for StreamServer<T>
     where
-        T: Danube,
+        T: Stream,
         B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
@@ -646,10 +646,10 @@ pub mod danube_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/danube.Danube/CreateProducer" => {
+                "/danube.Stream/CreateProducer" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateProducerSvc<T: Danube>(pub Arc<T>);
-                    impl<T: Danube> tonic::server::UnaryService<super::ProducerRequest>
+                    struct CreateProducerSvc<T: Stream>(pub Arc<T>);
+                    impl<T: Stream> tonic::server::UnaryService<super::ProducerRequest>
                     for CreateProducerSvc<T> {
                         type Response = super::ProducerResponse;
                         type Future = BoxFuture<
@@ -662,7 +662,7 @@ pub mod danube_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Danube>::create_producer(&inner, request).await
+                                <T as Stream>::create_producer(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -690,10 +690,10 @@ pub mod danube_server {
                     };
                     Box::pin(fut)
                 }
-                "/danube.Danube/Subscribe" => {
+                "/danube.Stream/Subscribe" => {
                     #[allow(non_camel_case_types)]
-                    struct SubscribeSvc<T: Danube>(pub Arc<T>);
-                    impl<T: Danube> tonic::server::UnaryService<super::ConsumerRequest>
+                    struct SubscribeSvc<T: Stream>(pub Arc<T>);
+                    impl<T: Stream> tonic::server::UnaryService<super::ConsumerRequest>
                     for SubscribeSvc<T> {
                         type Response = super::ConsumerResponse;
                         type Future = BoxFuture<
@@ -706,7 +706,7 @@ pub mod danube_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Danube>::subscribe(&inner, request).await
+                                <T as Stream>::subscribe(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -734,10 +734,10 @@ pub mod danube_server {
                     };
                     Box::pin(fut)
                 }
-                "/danube.Danube/SendMessage" => {
+                "/danube.Stream/SendMessage" => {
                     #[allow(non_camel_case_types)]
-                    struct SendMessageSvc<T: Danube>(pub Arc<T>);
-                    impl<T: Danube> tonic::server::UnaryService<super::MessageRequest>
+                    struct SendMessageSvc<T: Stream>(pub Arc<T>);
+                    impl<T: Stream> tonic::server::UnaryService<super::MessageRequest>
                     for SendMessageSvc<T> {
                         type Response = super::MessageResponse;
                         type Future = BoxFuture<
@@ -750,7 +750,7 @@ pub mod danube_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Danube>::send_message(&inner, request).await
+                                <T as Stream>::send_message(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -793,7 +793,7 @@ pub mod danube_server {
             }
         }
     }
-    impl<T: Danube> Clone for DanubeServer<T> {
+    impl<T: Stream> Clone for StreamServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -805,7 +805,7 @@ pub mod danube_server {
             }
         }
     }
-    impl<T: Danube> Clone for _Inner<T> {
+    impl<T: Stream> Clone for _Inner<T> {
         fn clone(&self) -> Self {
             Self(Arc::clone(&self.0))
         }
@@ -815,8 +815,8 @@ pub mod danube_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: Danube> tonic::server::NamedService for DanubeServer<T> {
-        const NAME: &'static str = "danube.Danube";
+    impl<T: Stream> tonic::server::NamedService for StreamServer<T> {
+        const NAME: &'static str = "danube.Stream";
     }
 }
 /// Generated server implementations.

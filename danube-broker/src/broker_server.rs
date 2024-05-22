@@ -1,6 +1,6 @@
 use crate::broker_service::BrokerService;
 use crate::producer;
-use crate::proto::danube_server::{Danube, DanubeServer};
+use crate::proto::stream_server::{Stream, StreamServer};
 use crate::proto::{
     ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse, ProducerRequest,
     ProducerResponse,
@@ -36,7 +36,7 @@ impl DanubeServerImpl {
         let socket_addr = self.broker_addr.clone();
 
         Server::builder()
-            .add_service(DanubeServer::new(self))
+            .add_service(StreamServer::new(self))
             .serve(socket_addr)
             .await?;
 
@@ -45,7 +45,7 @@ impl DanubeServerImpl {
 }
 
 #[tonic::async_trait]
-impl Danube for DanubeServerImpl {
+impl Stream for DanubeServerImpl {
     // CMD to create a new Producer
     async fn create_producer(
         &self,
