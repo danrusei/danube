@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
 
     producer.create().await?;
 
-    // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
-    // producer.send(json_message).await;
+    let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
+    producer.send(json_message).await;
 
     Ok(())
 }

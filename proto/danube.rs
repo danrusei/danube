@@ -27,13 +27,13 @@ pub struct ProducerResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsumerRequest {
     #[prost(uint64, tag = "1")]
-    pub consumer_id: u64,
-    #[prost(uint64, tag = "2")]
     pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub consumer_name: u64,
     #[prost(string, tag = "3")]
     pub subscription_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub topic: ::prost::alloc::string::String,
+    pub topic_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub schema: ::core::option::Option<Schema>,
 }
@@ -42,6 +42,44 @@ pub struct ConsumerRequest {
 pub struct ConsumerResponse {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub consumer_id: u64,
+    #[prost(string, tag = "3")]
+    pub consumer_name: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SendMessage {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub producer_id: u64,
+    #[prost(message, optional, tag = "3")]
+    pub metadata: ::core::option::Option<MessageMetada>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub message: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SendResponse {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub message_id: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MessageMetada {
+    /// Identifies the name of the producer that sent the message.
+    #[prost(string, tag = "1")]
+    pub producer_name: ::prost::alloc::string::String,
+    /// Represents the sequence ID of the message within the topic
+    /// this is critical to maintain the messages order that are consumed by consumers
+    #[prost(uint64, tag = "2")]
+    pub sequence_id: u64,
+    /// Indicates the time when the message was published
+    #[prost(uint64, tag = "3")]
+    pub publish_time: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -336,6 +374,26 @@ pub mod danube_client {
             req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "Subscribe"));
             self.inner.unary(req, path, codec).await
         }
+        /// Sends a message from the Producer
+        pub async fn send(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SendMessage>,
+        ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/danube.Danube/Send");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new("danube.Danube", "Send"));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated client implementations.
@@ -498,6 +556,11 @@ pub mod danube_server {
             tonic::Response<super::ConsumerResponse>,
             tonic::Status,
         >;
+        /// Sends a message from the Producer
+        async fn send(
+            &self,
+            request: tonic::Request<super::SendMessage>,
+        ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct DanubeServer<T: Danube> {
@@ -651,6 +714,50 @@ pub mod danube_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = SubscribeSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/danube.Danube/Send" => {
+                    #[allow(non_camel_case_types)]
+                    struct SendSvc<T: Danube>(pub Arc<T>);
+                    impl<T: Danube> tonic::server::UnaryService<super::SendMessage>
+                    for SendSvc<T> {
+                        type Response = super::SendResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SendMessage>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Danube>::send(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = SendSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

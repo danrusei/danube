@@ -79,6 +79,10 @@ impl Producer {
 
         Ok(())
     }
+    pub async fn send(&self) -> Result<()> {
+        todo!();
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
