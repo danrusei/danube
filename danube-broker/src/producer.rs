@@ -37,12 +37,16 @@ impl Producer {
     // publish message to topic
     pub(crate) async fn publish_message(
         &self,
-        producer_id: u64,
-        message_sequence_id: u64,
-        message: Vec<u8>,
+        _producer_id: u64,
+        _message_sequence_id: u64,
+        _message: Vec<u8>,
     ) -> Result<()> {
-        // it performs some checks then topic.publishMessage
-        todo!()
+        // it performs some checks in regards to checksum, encryption etc
+        // and it calls the topic.publish_message()
+
+        //let's assume that the checks pass and let the broker_server to call the topic.publish_message
+
+        Ok(())
     }
 
     pub(crate) fn get_id(&self) -> u64 {

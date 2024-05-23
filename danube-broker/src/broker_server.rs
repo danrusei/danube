@@ -165,10 +165,10 @@ impl Stream for DanubeServerImpl {
             Entry::Occupied(_) => (),
         };
 
-        let producer = match service.get_producer(req.producer_id) {
-            Ok(producer) => producer,
+        let topic = match service.get_topic_for_producer(req.producer_id) {
+            Ok(topic) => topic,
             Err(err) => {
-                err_details.add_bad_request_violation("producer", err.to_string());
+                err_details.add_bad_request_violation("topic", err.to_string());
                 let status =
                     Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
                 return Err(status);
@@ -178,7 +178,7 @@ impl Stream for DanubeServerImpl {
         //TODO! this should not be Option, as it is mandatory to be present with the message request
         let meta = req.metadata.unwrap();
 
-        match producer
+        match topic
             .publish_message(req.producer_id, meta.sequence_id, req.message)
             .await
         {

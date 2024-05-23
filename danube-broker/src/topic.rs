@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bytes::BytesMut;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
@@ -55,8 +55,34 @@ impl Topic {
     }
 
     // Publishes a message to the topic
-    pub(crate) async fn publish_message(data: BytesMut) -> Result<()> {
-        todo!()
+    pub(crate) async fn publish_message(
+        &self,
+        producer_id: u64,
+        message_sequence_id: u64,
+        message: Vec<u8>,
+    ) -> Result<()> {
+        let producer = if let Some(top) = self.producers.get(&producer_id) {
+            top
+        } else {
+            return Err(anyhow!(
+                "the producer with id {} is not attached to topic name: {}",
+                producer_id,
+                self.topic_name
+            ));
+        };
+
+        //TODO! this is doing nothing for now, and may not need to be async
+        match producer
+            .publish_message(producer_id, message_sequence_id, message)
+            .await
+        {
+            Ok(_) => (),
+            Err(err) => {
+                return Err(anyhow!("the Producer checks have failed"));
+            }
+        }
+
+        Ok(())
     }
 
     // Create a new subscription for the topic

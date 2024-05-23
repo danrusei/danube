@@ -116,7 +116,8 @@ impl BrokerService {
     }
 
     // knowing the producer_id, return to the caller the producer if exist
-    pub(crate) fn get_producer(&mut self, producer_id: u64) -> Result<&Producer> {
+    // for now it returns both, producer and topic, we may want to return
+    pub(crate) fn get_topic_for_producer(&mut self, producer_id: u64) -> Result<&Topic> {
         let topic_name = match self.producers.entry(producer_id) {
             Entry::Vacant(entry) => {
                 return Err(anyhow!(
@@ -137,17 +138,7 @@ impl BrokerService {
             }
         };
 
-        let producer = if let Some(top) = topic.producers.get(&producer_id) {
-            top
-        } else {
-            return Err(anyhow!(
-                "the producer with id {} is not attached to topic name: {}",
-                producer_id,
-                topic_name
-            ));
-        };
-
-        Ok(producer)
+        Ok(topic)
     }
 
     // pub(crate) async fn register_configuration_listener(
