@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use bytes::BytesMut;
+use bytes::Bytes;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
 
@@ -73,12 +73,24 @@ impl Topic {
 
         //TODO! this is doing nothing for now, and may not need to be async
         match producer
-            .publish_message(producer_id, message_sequence_id, message)
+            .publish_message(producer_id, message_sequence_id, &message)
             .await
         {
             Ok(_) => (),
             Err(err) => {
                 return Err(anyhow!("the Producer checks have failed"));
+            }
+        }
+
+        let data: Bytes = message.into();
+
+        // dispatch message to all consumers
+
+        for (_name, subscription) in self.subscriptions.iter() {
+            let duplicate_data = data.clone();
+            if let Some(dispatcher) = subscription.get_dispatcher() {
+                //dispatcher.send_message(duplicate_data);
+                todo!()
             }
         }
 

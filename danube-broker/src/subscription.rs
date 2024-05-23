@@ -1,9 +1,15 @@
 use anyhow::Result;
 
-use crate::consumer::Consumer;
+use crate::{
+    consumer::Consumer,
+    dispatcher::{DispatcherMultipleConsumers, DispatcherSingleConsumer},
+};
 
 #[derive(Debug, Default)]
-pub(crate) struct Subscription {}
+pub(crate) struct Subscription {
+    disp_one_consumer: Option<DispatcherSingleConsumer>,
+    disp_multiple_consumers: Option<DispatcherMultipleConsumers>,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SubscriptionOption {
@@ -11,6 +17,22 @@ pub(crate) struct SubscriptionOption {
     consumer_id: f32,
     consumer_name: String,
     schema_type: String, // has to be SchemaType as type
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum SubscriptionType {
+    // only one consumer is allowed to receive messages from the subscription
+    Exclusive,
+    // Multiple consumers can connect to the subscription,
+    // but only one consumer (the active consumer) receives messages at any given time.
+    Failover,
+    // multiple consumers can subscribe to the same subscription and receive messages concurrently.
+    // messages from the subscription are load-balanced across all connected consumers
+    Shared,
+    // similar to Shared subscription but with the ability to partition messages based on a message key.
+    // messages with the same key are always delivered to the same consumer within a subscription,
+    // KeyShared subscriptions are useful for scenarios where message ordering based on a key attribute is required.
+    // KeyShared, - not supported yet
 }
 
 impl Subscription {
@@ -46,6 +68,12 @@ impl Subscription {
     // Get Consumers
     pub(crate) async fn get_consumers() -> Result<Vec<Consumer>> {
         // ask dispatcher
+        todo!()
+    }
+
+    // Get Dispatcher
+    pub(crate) fn get_dispatcher(&self) -> Option<DispatcherSingleConsumer> {
+        // maybe create  a trait that the both dispatachers will implement
         todo!()
     }
 }

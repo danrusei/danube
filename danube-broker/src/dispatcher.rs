@@ -1,29 +1,15 @@
 use anyhow::{anyhow, Ok, Result};
 use bytes::Bytes;
 
-use crate::{consumer::Consumer, subscription::Subscription, topic::Topic};
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum SubscriptionType {
-    // only one consumer is allowed to receive messages from the subscription
-    Exclusive,
-    // Multiple consumers can connect to the subscription,
-    // but only one consumer (the active consumer) receives messages at any given time.
-    Failover,
-    // multiple consumers can subscribe to the same subscription and receive messages concurrently.
-    // messages from the subscription are load-balanced across all connected consumers
-    Shared,
-    // similar to Shared subscription but with the ability to partition messages based on a message key.
-    // messages with the same key are always delivered to the same consumer within a subscription,
-    // KeyShared subscriptions are useful for scenarios where message ordering based on a key attribute is required.
-    // KeyShared, - not supported yet
-}
+use crate::{
+    consumer::Consumer,
+    subscription::{Subscription, SubscriptionType},
+    topic::Topic,
+};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
-    subscription_type: SubscriptionType,
     topic: Topic,
-    subsc: Subscription,
     consumers: Vec<Consumer>,
     active_consumer: Option<Consumer>,
 }
@@ -35,9 +21,7 @@ impl DispatcherSingleConsumer {
         subsc: Subscription,
     ) -> Self {
         DispatcherSingleConsumer {
-            subscription_type,
             topic,
-            subsc,
             active_consumer: None,
             consumers: Vec::new(),
         }
@@ -62,13 +46,17 @@ impl DispatcherSingleConsumer {
     }
 
     // manage the addition of consumers to the dispatcher
-    pub(crate) fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+    pub(crate) fn add_consumer(
+        &mut self,
+        consumer: Consumer,
+        subscription_type: SubscriptionType,
+    ) -> Result<()> {
         // Handle Exclusive Subscription
-        if self.subscription_type == SubscriptionType::Exclusive && !self.consumers.is_empty() {
+        if subscription_type == SubscriptionType::Exclusive && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
             return Ok(());
         }
-        if self.subscription_type == SubscriptionType::Failover {
+        if subscription_type == SubscriptionType::Failover {
             self.consumers.push(consumer);
         }
 
@@ -97,22 +85,14 @@ impl DispatcherSingleConsumer {
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
-    subscription_type: SubscriptionType,
     topic: Topic,
-    subsc: Subscription,
     consumers: Vec<Consumer>,
 }
 
 impl DispatcherMultipleConsumers {
-    pub(crate) fn new(
-        subscription_type: SubscriptionType,
-        topic: Topic,
-        subsc: Subscription,
-    ) -> Self {
+    pub(crate) fn new(topic: Topic) -> Self {
         DispatcherMultipleConsumers {
-            subscription_type,
             topic,
-            subsc,
             consumers: Vec::new(),
         }
     }
