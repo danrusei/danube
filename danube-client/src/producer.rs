@@ -10,35 +10,59 @@ use crate::{
 };
 
 use bytes::Bytes;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::{Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
 
+/// Represents a Producer
 pub struct Producer {
+    // the Danube client
     client: DanubeClient,
+    // the topic name, used by the producer to publish messages
     topic: String,
-    name: String,
+    // the name of the producer
+    producer_name: String,
+    // unique identifier of the producer, provided by the Broker
+    producer_id: Option<u64>,
+    // unique identifier for every request sent by the producer
+    request_id: AtomicU64,
+    // it represents the sequence ID of the message within the topic
+    message_sequence_id: AtomicU64,
+    // the schema represent the message payload schema
     schema: Option<Schema>,
+    // other configurable options for the producer
     producer_options: ProducerOptions,
+    // the grpc client cnx
+    stream_client: Option<StreamClient<tonic::transport::Channel>>,
 }
 
 impl Producer {
     pub fn new(
         client: DanubeClient,
         topic: String,
-        name: String,
+        producer_name: String,
         schema: Option<Schema>,
         producer_options: ProducerOptions,
     ) -> Self {
         Producer {
             client,
             topic,
-            name,
+            producer_name,
+            producer_id: None,
+            request_id: AtomicU64::new(0),
+            message_sequence_id: AtomicU64::new(0),
             schema,
             producer_options,
+            stream_client: None,
         }
     }
-    pub async fn create(&self) -> Result<()> {
+    pub async fn create(&mut self) -> Result<()> {
+        // Initialize the gRPC client connection
+        self.initialize_grpc_client().await?;
+
         // default schema is Bytes if not specified
         let mut schema = Schema::new("bytes_schema".into(), SchemaType::Bytes);
 
@@ -47,8 +71,8 @@ impl Producer {
         }
 
         let req = ProducerRequest {
-            request_id: 1,
-            producer_name: self.name.clone(),
+            request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            producer_name: self.producer_name.clone(),
             topic_name: self.topic.clone(),
             schema: Some(schema.to_proto()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
@@ -56,19 +80,14 @@ impl Producer {
 
         let request = tonic::Request::new(req);
 
-        let grpc_cnx = self
-            .client
-            .cnx_manager
-            .get_connection(&self.client.uri, &self.client.uri)
-            .await?;
-
-        let mut client = StreamClient::new(grpc_cnx.grpc_cnx.clone());
+        let mut client = self.stream_client.as_mut().unwrap().clone();
         let response: std::result::Result<Response<ProducerResponse>, Status> =
             client.create_producer(request).await;
 
         match response {
             Ok(resp) => {
                 let r = resp.into_inner();
+                self.producer_id = Some(r.producer_id);
                 println!(
                     "Response: req_id: {:?}, producer_id: {:?}",
                     r.request_id, r.producer_id
@@ -89,21 +108,54 @@ impl Producer {
 
     // the Producer sends messages to the topic
     pub async fn send(&self, data: Vec<u8>) -> Result<()> {
+        let publish_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis() as u64;
+
         let meta_data = MessageMetadata {
-            producer_name: self.name.clone(),
-            sequence_id: todo!(),
-            publish_time: todo!(),
+            producer_name: self.producer_name.clone(),
+            sequence_id: self.message_sequence_id.fetch_add(1, Ordering::SeqCst),
+            publish_time: publish_time,
         };
 
         let send_message = SendMessage {
-            request_id: todo!(),
-            producer_id: todo!(),
+            request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            producer_id: self
+                .producer_id
+                .expect("Producer ID should be set before sending messages"),
             metadata: Some(meta_data),
             message: data,
         };
 
         let req: MessageRequest = send_message.to_proto();
 
+        let mut client = self.stream_client.as_ref().unwrap().clone();
+        let response: std::result::Result<Response<MessageResponse>, Status> =
+            client.send_message(tonic::Request::new(req)).await;
+
+        match response {
+            Ok(resp) => {
+                let r = resp.into_inner();
+                println!("Message sent: {:?}", r);
+            }
+            Err(status) => match status.get_error_details() {
+                error_details => {
+                    println!("Failed to send message: {:?}", error_details)
+                }
+            },
+        };
+
+        Ok(())
+    }
+    async fn initialize_grpc_client(&mut self) -> Result<()> {
+        let grpc_cnx = self
+            .client
+            .cnx_manager
+            .get_connection(&self.client.uri, &self.client.uri)
+            .await?;
+        let client = StreamClient::new(grpc_cnx.grpc_cnx.clone());
+        self.stream_client = Some(client);
         Ok(())
     }
 }
@@ -112,7 +164,7 @@ impl Producer {
 pub struct ProducerBuilder {
     client: DanubeClient,
     topic: Option<String>,
-    name: Option<String>,
+    producer_name: Option<String>,
     schema: Option<Schema>,
     producer_options: ProducerOptions,
 }
@@ -122,7 +174,7 @@ impl ProducerBuilder {
         ProducerBuilder {
             client: client.clone(),
             topic: None,
-            name: None,
+            producer_name: None,
             schema: None,
             producer_options: ProducerOptions::default(),
         }
@@ -135,8 +187,8 @@ impl ProducerBuilder {
     }
 
     /// sets the producer's name
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
+    pub fn with_name(mut self, producer_name: impl Into<String>) -> Self {
+        self.producer_name = Some(producer_name.into());
         self
     }
 
@@ -151,17 +203,19 @@ impl ProducerBuilder {
     }
 
     pub fn build(self) -> Producer {
-        Producer {
-            client: self.client,
-            topic: self
-                .topic
-                .expect("can't create a producer without assigning to a topic"),
-            name: self
-                .name
-                .expect("you should provide a name to the created producer"),
-            schema: self.schema,
-            producer_options: self.producer_options,
-        }
+        let topic = self
+            .topic
+            .expect("can't create a producer without assigning to a topic");
+        let producer_name = self
+            .producer_name
+            .expect("you should provide a name to the created producer");
+        Producer::new(
+            self.client,
+            topic,
+            producer_name,
+            self.schema,
+            self.producer_options,
+        )
     }
 }
 

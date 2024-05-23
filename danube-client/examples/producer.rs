@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
 
     let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
 
-    let producer = client
+    let mut producer = client
         .new_producer()
         .with_topic(topic)
         .with_name("test_producer")
