@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use crate::{
     consumer::Consumer,
-    dispatcher::{DispatcherMultipleConsumers, DispatcherSingleConsumer},
+    dispatcher::{
+        dispatcher_multiple_consumers::DispatcherMultipleConsumers,
+        dispatcher_single_consumer::DispatcherSingleConsumer,
+    },
 };
 
 #[derive(Debug, Default)]
