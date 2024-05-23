@@ -1,5 +1,5 @@
 use crate::broker_service::BrokerService;
-use crate::producer;
+use crate::producer::{self, Producer};
 use crate::proto::stream_server::{Stream, StreamServer};
 use crate::proto::{
     ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse, ProducerRequest,
@@ -8,9 +8,10 @@ use crate::proto::{
 use crate::topic::Topic;
 
 //use prost::Message;
-use std::collections::HashSet;
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, StatusExt};
@@ -63,12 +64,15 @@ impl Stream for DanubeServerImpl {
         if !validate_topic(&req.topic_name) {
             //TODO don't have yet a defined format for topic name
             err_details.add_bad_request_violation("topic", "the topic should contain only alphanumerics and _ , and the size between 5 to 20 characters");
+            let status =
+                Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
+            return Err(status);
         }
 
         let topic_ref: &mut Topic;
 
         {
-            let mut service = self.service.lock().unwrap();
+            let mut service = self.service.lock().await;
             match service.get_topic(req.topic_name.clone(), true) {
                 Ok(top) => topic_ref = top,
                 Err(err) => {
@@ -94,19 +98,22 @@ impl Stream for DanubeServerImpl {
         }
 
         //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
-        let mut service = self.service.lock().unwrap();
+        let mut service = self.service.lock().await;
         if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
             err_details.add_precondition_failure_violation(
                 "ptoducer_id",
                 "already present",
                 "the producer is already present on the connection",
             );
+            let status =
+                Status::with_error_details(Code::AlreadyExists, "bad request", err_details);
+            return Err(status);
         }
 
         // for faster boostrap, or in certain conditions we may want to create an initial subscription
         // same time with the producer creation. But not doing this for now, leave to consumers to create subscription.
 
-        let new_producer = if let Ok(prod) = service.build_new_producer(
+        let new_producer = if let Ok(prod) = service.create_new_producer(
             req.producer_name.clone(),
             req.topic_name,
             // req.schema,
@@ -115,20 +122,12 @@ impl Stream for DanubeServerImpl {
             prod
         } else {
             let status = Status::with_error_details(
-                Code::NotFound,
+                Code::Unknown,
                 "unable to create the producer",
                 err_details,
             );
             return Err(status);
         };
-
-        if err_details.has_bad_request_violations()
-            || err_details.has_precondition_failure_violations()
-        {
-            let status =
-                Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
-            return Err(status);
-        }
 
         let response = ProducerResponse {
             request_id: req.request_id,
@@ -143,7 +142,64 @@ impl Stream for DanubeServerImpl {
         &self,
         request: Request<MessageRequest>,
     ) -> Result<Response<MessageResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        info!("{} {} {:?}", req.request_id, req.producer_id, req.metadata);
+
+        let mut err_details = ErrorDetails::new();
+
+        let arc_service = self.service.clone();
+        let mut service = arc_service.lock().await;
+
+        // check if the producer was created and get topic_name
+        match service.producers.entry(req.producer_id) {
+            Entry::Vacant(_) => {
+                err_details.add_bad_request_violation(
+                    "producer",
+                    "the producer with id {req.producer_id} does not exist",
+                );
+                let status =
+                    Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
+                return Err(status);
+            }
+            Entry::Occupied(_) => (),
+        };
+
+        let producer = match service.get_producer(req.producer_id) {
+            Ok(producer) => producer,
+            Err(err) => {
+                err_details.add_bad_request_violation("producer", err.to_string());
+                let status =
+                    Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
+                return Err(status);
+            }
+        };
+
+        //TODO! this should not be Option, as it is mandatory to be present with the message request
+        let meta = req.metadata.unwrap();
+
+        match producer
+            .publish_message(req.producer_id, meta.sequence_id, req.message)
+            .await
+        {
+            Ok(_) => (),
+            Err(err) => {
+                err_details.add_bad_request_violation("producer", err.to_string());
+                let status = Status::with_error_details(
+                    Code::Internal,
+                    "unable to publish the message",
+                    err_details,
+                );
+                return Err(status);
+            }
+        };
+
+        let response = MessageResponse {
+            request_id: req.request_id,
+            sequence_id: meta.sequence_id,
+        };
+
+        Ok(tonic::Response::new(response))
     }
 
     // CMD to create a new Consumer

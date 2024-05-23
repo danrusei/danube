@@ -18,9 +18,9 @@ pub(crate) struct Topic {
     pub(crate) topic_name: String,
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
-    // the subscriptions attached on the topic
+    // the subscriptions attached on the topic, subscription_id -> Subscription
     pub(crate) subscriptions: HashMap<String, Subscription>,
-    // the producers currently connected to this topic
+    // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
 }
 

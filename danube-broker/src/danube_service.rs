@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::broker_server;
 use crate::metadata_store::{EtcdMetadataStore, MemoryMetadataStore, MetadataStorage};

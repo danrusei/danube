@@ -57,7 +57,7 @@ message MessageRequest {
 
 message MessageResponse {
     uint64 request_id = 1;
-    uint64 message_id = 2;
+    uint64 sequence_id = 2;
 }
 
 message MessageMetadata {

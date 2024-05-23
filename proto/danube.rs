@@ -65,7 +65,7 @@ pub struct MessageResponse {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
     #[prost(uint64, tag = "2")]
-    pub message_id: u64,
+    pub sequence_id: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

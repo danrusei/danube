@@ -36,9 +36,10 @@ impl Producer {
     }
     // publish message to topic
     pub(crate) async fn publish_message(
+        &self,
         producer_id: u64,
         message_sequence_id: u64,
-        message: BytesMut,
+        message: Vec<u8>,
     ) -> Result<()> {
         // it performs some checks then topic.publishMessage
         todo!()

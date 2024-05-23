@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Ok, Result};
+use anyhow::{anyhow, Context, Result};
 use dashmap::DashMap;
 use rand::Rng;
 use std::any;
@@ -16,11 +16,12 @@ pub(crate) struct BrokerService {
     //broker_addr: SocketAddr,
     // a map with namespace wise topics - Namespace --> topicName --> topic
     //topics: DashMap<String, DashMap<String, Topic>>,
-    topics: HashMap<String, Topic>,
+    // topic_name to Topic
+    pub(crate) topics: HashMap<String, Topic>,
     // brokers to register listeners for configuration changes or updates
     // config_listeners: DashMap<String, Consumer>,
-    // the list of active producers
-    // producers: HashMap<u64, Producer>,
+    // the list of active producers, mapping producer_id to topic_name
+    pub(crate) producers: HashMap<u64, String>,
     // the list of active consumers
     //consumers: HashMap<u64, Consumer>,
 }
@@ -32,7 +33,7 @@ impl BrokerService {
             //topics: DashMap::new(),
             //config_listeners: DashMap::new,
             topics: HashMap::new(),
-            // producers: HashMap::new(),
+            producers: HashMap::new(),
             // consumers: HashMap::new(),
         }
     }
@@ -80,20 +81,23 @@ impl BrokerService {
     }
 
     // create a new producer and attach to the topic
-    pub(crate) fn build_new_producer(
+    pub(crate) fn create_new_producer(
         &mut self,
         producer_name: String,
         topic_name: String,
         producer_access_mode: i32,
     ) -> Result<&Producer> {
-        let topic = self.topics.get_mut(&topic_name).expect("todo");
+        let topic = self
+            .topics
+            .get_mut(&topic_name)
+            .expect("we know that the topic exist");
         let producer_id = get_random_id();
         match topic.producers.entry(producer_id) {
             Entry::Vacant(entry) => {
                 entry.insert(Producer::new(
                     producer_id,
                     producer_name,
-                    topic_name,
+                    topic_name.clone(),
                     producer_access_mode,
                 ));
             }
@@ -103,10 +107,47 @@ impl BrokerService {
             }
         }
 
+        self.producers.entry(producer_id).or_insert(topic_name);
+
         Ok(topic
             .producers
             .get(&producer_id)
             .expect("the producer was created above"))
+    }
+
+    // knowing the producer_id, return to the caller the producer if exist
+    pub(crate) fn get_producer(&mut self, producer_id: u64) -> Result<&Producer> {
+        let topic_name = match self.producers.entry(producer_id) {
+            Entry::Vacant(entry) => {
+                return Err(anyhow!(
+                    "the producer with id {} does not exist",
+                    producer_id
+                ))
+            }
+            Entry::Occupied(entry) => entry.get().to_owned(),
+        };
+
+        let topic = match self.get_topic(topic_name.clone(), false) {
+            Ok(topic) => topic,
+            Err(err) => {
+                return Err(anyhow!(
+                    "unable to find the topic associated with producer_id {}",
+                    producer_id
+                ))
+            }
+        };
+
+        let producer = if let Some(top) = topic.producers.get(&producer_id) {
+            top
+        } else {
+            return Err(anyhow!(
+                "the producer with id {} is not attached to topic name: {}",
+                producer_id,
+                topic_name
+            ));
+        };
+
+        Ok(producer)
     }
 
     // pub(crate) async fn register_configuration_listener(
