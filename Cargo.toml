@@ -10,9 +10,6 @@ members = [
 
     # -- Danube lib client
     "danube-client", 
-    
-    # -- Danube util is used for shared structs
-    "danube-util",
 ]
 
 [workspace.dependencies]

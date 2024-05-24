@@ -1,11 +1,12 @@
 use tonic::transport::Uri;
 
-use crate::lookup_service;
-use crate::producer::ProducerBuilder;
 use crate::{
     connection_manager::{ConnectionManager, ConnectionOptions},
+    consumer::ConsumerBuilder,
     errors::Result,
+    lookup_service,
     lookup_service::{LookupResult, LookupService},
+    producer::ProducerBuilder,
 };
 
 use std::sync::Arc;
@@ -38,6 +39,11 @@ impl DanubeClient {
     /// creates a Producer Builder
     pub fn new_producer(&self) -> ProducerBuilder {
         ProducerBuilder::new(self)
+    }
+
+    /// creates a Consumer Builder
+    pub fn new_consumer(&self) -> ConsumerBuilder {
+        ConsumerBuilder::new(self)
     }
 
     /// gets the address of a broker handling the topic

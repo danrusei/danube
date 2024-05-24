@@ -28,14 +28,55 @@ pub struct ProducerResponse {
 pub struct ConsumerRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(uint64, tag = "2")]
-    pub consumer_name: u64,
-    #[prost(string, tag = "3")]
-    pub subscription_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag = "2")]
     pub topic_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub schema: ::core::option::Option<Schema>,
+    #[prost(uint64, tag = "3")]
+    pub consumer_name: u64,
+    #[prost(string, tag = "4")]
+    pub subscription: ::prost::alloc::string::String,
+    #[prost(enumeration = "consumer_request::SubscriptionType", tag = "5")]
+    pub subscription_type: i32,
+}
+/// Nested message and enum types in `ConsumerRequest`.
+pub mod consumer_request {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum SubscriptionType {
+        /// Multiple consumers can subscribe to the topic concurrently.
+        Shared = 0,
+        /// Only one consumer can subscribe to the topic at a time.
+        Exclusive = 1,
+    }
+    impl SubscriptionType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                SubscriptionType::Shared => "Shared",
+                SubscriptionType::Exclusive => "Exclusive",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "Shared" => Some(Self::Shared),
+                "Exclusive" => Some(Self::Exclusive),
+                _ => None,
+            }
+        }
+    }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

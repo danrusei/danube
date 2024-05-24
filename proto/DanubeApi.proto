@@ -21,6 +21,7 @@ enum ProducerAccessMode {
     Exclusive = 1; // exclusive access for producer
 }
 
+
 message ProducerRequest { 
     uint64 request_id = 1;
     string producer_name = 3;
@@ -35,11 +36,15 @@ message ProducerResponse {
 } 
 
 message ConsumerRequest {
+    enum SubscriptionType {
+        Shared = 0; // Multiple consumers can subscribe to the topic concurrently.
+        Exclusive = 1; // Only one consumer can subscribe to the topic at a time.
+    }
     uint64 request_id = 1;
-    uint64 consumer_name = 2;
-    string subscription_name = 3;
-    string topic_name = 4;
-    Schema schema = 5;
+    string topic_name = 2;
+    uint64 consumer_name = 3;
+    string subscription = 4;
+    SubscriptionType subscription_type = 5;
 }
 
 message ConsumerResponse {

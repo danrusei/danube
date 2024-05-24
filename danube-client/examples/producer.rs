@@ -1,5 +1,6 @@
 use anyhow::Result;
 use danube_client::{DanubeClient, SchemaType};
+use serde_json::json;
 use std::env;
 
 #[tokio::main]
@@ -24,8 +25,22 @@ async fn main() -> Result<()> {
 
     producer.create().await?;
 
-    let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
-    producer.send(json_message).await;
+    let mut i = 0;
+
+    while i < 10 {
+        let data = json!({
+            "field1": format!{"value{}", i},
+            "field2": 2020+i,
+        });
+
+        // Convert to string and encode to bytes
+        let json_string = serde_json::to_string(&data).unwrap();
+        let encoded_data = json_string.as_bytes().to_vec();
+
+        // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
+        producer.send(encoded_data).await?;
+        i += 1;
+    }
 
     Ok(())
 }

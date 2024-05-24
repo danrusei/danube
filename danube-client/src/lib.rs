@@ -14,6 +14,9 @@ pub mod errors;
 mod producer;
 pub use producer::{Producer, ProducerBuilder, ProducerOptions};
 
+mod consumer;
+pub use consumer::{Consumer, ConsumerBuilder, ConsumerOptions, SubType};
+
 mod schema;
 pub use schema::SchemaType;
 
