@@ -30,8 +30,8 @@ pub struct ConsumerRequest {
     pub request_id: u64,
     #[prost(string, tag = "2")]
     pub topic_name: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "3")]
-    pub consumer_name: u64,
+    #[prost(string, tag = "3")]
+    pub consumer_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub subscription: ::prost::alloc::string::String,
     #[prost(enumeration = "consumer_request::SubscriptionType", tag = "5")]

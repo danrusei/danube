@@ -42,7 +42,7 @@ message ConsumerRequest {
     }
     uint64 request_id = 1;
     string topic_name = 2;
-    uint64 consumer_name = 3;
+    string consumer_name = 3;
     string subscription = 4;
     SubscriptionType subscription_type = 5;
 }

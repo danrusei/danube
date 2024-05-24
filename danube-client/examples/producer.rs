@@ -1,7 +1,8 @@
 use anyhow::Result;
 use danube_client::{DanubeClient, SchemaType};
 use serde_json::json;
-use std::env;
+use std::time::Duration;
+use std::{env, thread};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,6 +40,8 @@ async fn main() -> Result<()> {
 
         // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
         producer.send(encoded_data).await?;
+
+        thread::sleep(Duration::from_secs(1));
         i += 1;
     }
 
