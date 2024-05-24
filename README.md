@@ -1,14 +1,5 @@
-# danube
+# Danube
 
-Danube Stream
+Danube is an open-source pub/sub and streaming platform (inspired by Apache Pulsar).
 
-## Work In Progress
-
-* [] One Cluster with multiple brokers
-  * [] Metadata
-    * [] In-Memory metadata
-    * [] Use ETCD for metadata
-  * [] Non-Persistent data
-    * [] In-Memory Segment based
-  * [] Persistent data
-* [] Multiple Clusters
+![Work in Progress](docs/pictures/work_in_progress.jpg "Work in Progress")
