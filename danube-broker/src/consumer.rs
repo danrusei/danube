@@ -6,8 +6,8 @@ use crate::subscription::{self, Subscription};
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub(crate) struct Consumer {
-    consumer_id: u64,
-    consumer_name: String,
+    pub(crate) consumer_id: u64,
+    pub(crate) consumer_name: String,
 }
 
 impl Consumer {

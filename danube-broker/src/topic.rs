@@ -10,7 +10,7 @@ use crate::{
     consumer::Consumer,
     policies::Policies,
     producer::Producer,
-    subscription::{Subscription, SubscriptionOption},
+    subscription::{Subscription, SubscriptionOptions},
 };
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl Topic {
     }
 
     // Create a new subscription for the topic
-    pub(crate) async fn create_subscription(
+    pub(crate) fn create_subscription(
         subscription_name: String,
         properties: HashMap<String, String>,
     ) -> Result<Consumer, Box<dyn Error>> {
@@ -106,17 +106,17 @@ impl Topic {
     }
 
     // Subscribe to the topic and create a consumer for receiving messages
-    pub(crate) async fn subscribe(options: SubscriptionOption) -> Result<Consumer> {
+    pub(crate) fn subscribe(&self, options: SubscriptionOptions) -> Result<Consumer> {
         todo!()
     }
 
     // Unsubscribes the specified subscription from the topic
-    pub(crate) async fn unsubscribe(subscription_name: String) -> Result<()> {
+    pub(crate) fn unsubscribe(&self, subscription_name: String) -> Result<()> {
         todo!()
     }
 
     // Update Topic Policies
-    pub(crate) fn policies_update(policies: Policies) -> Result<()> {
+    pub(crate) fn policies_update(&self, policies: Policies) -> Result<()> {
         todo!()
     }
 

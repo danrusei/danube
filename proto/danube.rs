@@ -56,6 +56,8 @@ pub mod consumer_request {
         Shared = 0,
         /// Only one consumer can subscribe to the topic at a time.
         Exclusive = 1,
+        /// Only one consumer (the active consumer) receives messages at any given time.
+        Failover = 2,
     }
     impl SubscriptionType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -66,6 +68,7 @@ pub mod consumer_request {
             match self {
                 SubscriptionType::Shared => "Shared",
                 SubscriptionType::Exclusive => "Exclusive",
+                SubscriptionType::Failover => "Failover",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -73,6 +76,7 @@ pub mod consumer_request {
             match value {
                 "Shared" => Some(Self::Shared),
                 "Exclusive" => Some(Self::Exclusive),
+                "Failover" => Some(Self::Failover),
                 _ => None,
             }
         }

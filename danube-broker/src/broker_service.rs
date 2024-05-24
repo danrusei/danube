@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
 use crate::proto::{ProducerAccessMode, Schema};
+use crate::subscription::SubscriptionOptions;
 use crate::topic::{self, Topic};
 use crate::{consumer::Consumer, producer::Producer};
 
@@ -23,7 +24,7 @@ pub(crate) struct BrokerService {
     // the list of active producers, mapping producer_id to topic_name
     pub(crate) producers: HashMap<u64, String>,
     // the list of active consumers
-    //consumers: HashMap<u64, Consumer>,
+    pub(crate) consumers: HashMap<u64, String>,
 }
 
 impl BrokerService {
@@ -34,7 +35,7 @@ impl BrokerService {
             //config_listeners: DashMap::new,
             topics: HashMap::new(),
             producers: HashMap::new(),
-            // consumers: HashMap::new(),
+            consumers: HashMap::new(),
         }
     }
 
@@ -78,6 +79,57 @@ impl BrokerService {
             }
         }
         false
+    }
+
+    pub(crate) fn check_if_consumer_exist(
+        &self,
+        consumer_name: impl Into<String>,
+        subscription_name: impl Into<String>,
+        topic_name: impl Into<String>,
+    ) -> bool {
+        let topic = self
+            .topics
+            .get(&topic_name.into())
+            .expect("unable to find the topic");
+        let subscription_name = subscription_name.into();
+        let consumer_name = consumer_name.into();
+        for subscription in topic.subscriptions.values() {
+            if subscription.subscription_name == subscription_name {
+                for consumer in subscription.consumers.values() {
+                    if consumer.consumer_name == consumer_name {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub(crate) fn allow_subscription_creation(&self, topic_name: impl Into<String>) -> bool {
+        // check the topic policies here
+        let _topic = self
+            .topics
+            .get(&topic_name.into())
+            .expect("unable to find the topic");
+
+        //TODO! once the policies Topic&Namespace Policies are in place we can verify if it is allowed
+
+        true
+    }
+
+    pub(crate) fn subscribe(
+        &self,
+        topic_name: impl Into<String>,
+        subscription_options: SubscriptionOptions,
+    ) -> Result<()> {
+        let topic = self
+            .topics
+            .get(&topic_name.into())
+            .expect("the topic should be there");
+
+        let _consumer = topic.subscribe(subscription_options).expect("should work");
+
+        Ok(())
     }
 
     // create a new producer and attach to the topic

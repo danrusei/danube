@@ -5,6 +5,7 @@ use crate::proto::{
     ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse, ProducerRequest,
     ProducerResponse,
 };
+use crate::subscription::SubscriptionOptions;
 use crate::topic::Topic;
 
 //use prost::Message;
@@ -14,7 +15,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
-use tonic_types::{ErrorDetails, StatusExt};
+use tonic_types::{ErrorDetails, FieldViolation, StatusExt};
 use tracing::info;
 
 #[derive(Debug)]
@@ -97,7 +98,8 @@ impl Stream for DanubeServerImpl {
             }
         }
 
-        //TODO Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+        //TODO! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+
         let mut service = self.service.lock().await;
         if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
             err_details.add_precondition_failure_violation(
@@ -205,8 +207,53 @@ impl Stream for DanubeServerImpl {
     // CMD to create a new Consumer
     async fn subscribe(
         &self,
-        _request: Request<ConsumerRequest>,
+        request: Request<ConsumerRequest>,
     ) -> Result<Response<ConsumerResponse>, tonic::Status> {
+        let req = request.into_inner();
+
+        info!(
+            "{} {} {}",
+            req.request_id, req.consumer_name, req.topic_name,
+        );
+
+        let mut err_details = ErrorDetails::new();
+
+        // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
+
+        let mut service = self.service.lock().await;
+        if service.check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name) {
+            err_details.add_precondition_failure_violation(
+                "consumer",
+                "already present",
+                "the consumer is already associated to subscription",
+            );
+            let status =
+                Status::with_error_details(Code::AlreadyExists, "bad request", err_details);
+            return Err(status);
+        }
+
+        // check if the topic policies allow the creation of the subscription if it doesn't exist
+        if !service.allow_subscription_creation(&req.topic_name) {
+            err_details.set_bad_request(vec![FieldViolation::new("field_1", "description 1")]);
+            let status = Status::with_error_details(
+                Code::PermissionDenied,
+                "not allowed to create subscription on the topic",
+                err_details,
+            );
+            return Err(status);
+        }
+
+        let consumer_id = 1; //TODO! should be generated somehow
+
+        let subscription_options = SubscriptionOptions {
+            subscription_name: req.subscription,
+            subscription_type: req.subscription_type,
+            consumer_id: consumer_id as f32,
+            consumer_name: req.consumer_name,
+        };
+
+        service.subscribe(&req.topic_name, subscription_options);
+
         todo!()
     }
 }

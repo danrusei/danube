@@ -1,11 +1,9 @@
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 
-use crate::{
-    consumer::Consumer,
-    subscription::{Subscription, SubscriptionType},
-    topic::Topic,
-};
+use crate::{consumer::Consumer, subscription::Subscription, topic::Topic};
+
+use crate::proto::consumer_request::SubscriptionType;
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
