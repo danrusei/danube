@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
 use crate::{
@@ -11,13 +11,13 @@ use crate::{
 
 use crate::proto::consumer_request::SubscriptionType;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Subscription {
     pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
     // the consumers registered to the subscription, consumer_id -> Consumer
     pub(crate) consumers: Option<HashMap<String, Consumer>>,
-    dispatcher: Option<DispatcherSelect>,
+    pub(crate) dispatcher: Option<DispatcherSelect>,
 }
 
 #[derive(Debug)]
@@ -51,8 +51,40 @@ impl Subscription {
     // add a consumer to the subscription
     // checks if there'a a dispatcher (responsible for distributing messages to consumers)
     // If not initializes a dispatcher based on the type of consumer: Exclusive, Shared, Failover, Key_Shared
-    pub(crate) async fn add_consumer(consumer: Consumer) -> Result<()> {
-        todo!()
+    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+        let dispatcher = match consumer.subscription_type {
+            //Exclusive
+            0 => DispatcherSelect::OneConsumer(DispatcherSingleConsumer::new(
+                &self.topic_name,
+                &self.subscription_name,
+                0,
+            )),
+            //Shared
+            1 => DispatcherSelect::MultipleConsumers(DispatcherMultipleConsumers::new(
+                &self.topic_name,
+                &self.subscription_name,
+            )),
+            //FailOver
+            2 => DispatcherSelect::OneConsumer(DispatcherSingleConsumer::new(
+                &self.topic_name,
+                &self.subscription_name,
+                2,
+            )),
+            _ => {
+                return Err(anyhow!("Should not get here"));
+            }
+        };
+
+        match dispatcher {
+            DispatcherSelect::OneConsumer(disp_single_consumer) => {
+                disp_single_consumer.add_consumer(consumer);
+            }
+            DispatcherSelect::MultipleConsumers(disp_multiple_consumers) => {
+                disp_multiple_consumers.add_consumer(consumer);
+            }
+        }
+
+        Ok(())
     }
 
     // remove a consumer from the subscription

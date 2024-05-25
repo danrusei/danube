@@ -249,12 +249,29 @@ impl Stream for DanubeServerImpl {
             subscription_name: req.subscription,
             subscription_type: req.subscription_type,
             consumer_id,
+            consumer_name: req.consumer_name.clone(),
+        };
+
+        match service.subscribe(&req.topic_name, subscription_options) {
+            Ok(_) => {}
+            Err(err) => {
+                err_details.set_error_info("unable to subscribe", err.to_string(), HashMap::new());
+                let status = Status::with_error_details(
+                    Code::PermissionDenied,
+                    "not abled to subscribe to the topic",
+                    err_details,
+                );
+                return Err(status);
+            }
+        }
+
+        let response = ConsumerResponse {
+            request_id: req.request_id,
+            consumer_id: consumer_id,
             consumer_name: req.consumer_name,
         };
 
-        service.subscribe(&req.topic_name, subscription_options);
-
-        todo!()
+        Ok(tonic::Response::new(response))
     }
 }
 

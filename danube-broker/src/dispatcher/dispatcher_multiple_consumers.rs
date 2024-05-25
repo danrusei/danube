@@ -7,14 +7,16 @@ use crate::proto::consumer_request::SubscriptionType;
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
-    topic: Topic,
+    topic_name: String,
+    subscription_name: String,
     consumers: Vec<Consumer>,
 }
 
 impl DispatcherMultipleConsumers {
-    pub(crate) fn new(topic: Topic) -> Self {
+    pub(crate) fn new(topic_name: &str, subscription_name: &str) -> Self {
         DispatcherMultipleConsumers {
-            topic,
+            topic_name: topic_name.into(),
+            subscription_name: subscription_name.into(),
             consumers: Vec::new(),
         }
     }

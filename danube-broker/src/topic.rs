@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 use bytes::Bytes;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
@@ -108,8 +108,8 @@ impl Topic {
 
     // Subscribe to the topic and create a consumer for receiving messages
     pub(crate) fn subscribe(
-        &self,
-        topic_name: impl Into<String>,
+        &mut self,
+        topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<Consumer> {
         //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
@@ -126,12 +126,16 @@ impl Topic {
         let consumer = Consumer::new(
             topic_name,
             options.consumer_id,
-            options.consumer_name,
-            options.subscription_name,
+            options.consumer_name.clone().as_str(),
+            options.subscription_name.clone().as_str(),
             options.subscription_type,
         );
 
-        //next add consumer to subscription
+        //Todo! Check the topic policies with max_consumers per topic
+
+        subscription.add_consumer(consumer.clone());
+
+        Ok(consumer)
     }
 
     // Unsubscribes the specified subscription from the topic

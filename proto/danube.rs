@@ -52,10 +52,10 @@ pub mod consumer_request {
     )]
     #[repr(i32)]
     pub enum SubscriptionType {
-        /// Multiple consumers can subscribe to the topic concurrently.
-        Shared = 0,
         /// Only one consumer can subscribe to the topic at a time.
-        Exclusive = 1,
+        Exclusive = 0,
+        /// Multiple consumers can subscribe to the topic concurrently.
+        Shared = 1,
         /// Only one consumer (the active consumer) receives messages at any given time.
         Failover = 2,
     }
@@ -66,16 +66,16 @@ pub mod consumer_request {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                SubscriptionType::Shared => "Shared",
                 SubscriptionType::Exclusive => "Exclusive",
+                SubscriptionType::Shared => "Shared",
                 SubscriptionType::Failover => "Failover",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
         pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
             match value {
-                "Shared" => Some(Self::Shared),
                 "Exclusive" => Some(Self::Exclusive),
+                "Shared" => Some(Self::Shared),
                 "Failover" => Some(Self::Failover),
                 _ => None,
             }

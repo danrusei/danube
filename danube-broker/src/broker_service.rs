@@ -119,12 +119,12 @@ impl BrokerService {
 
     pub(crate) fn subscribe(
         &self,
-        topic_name: impl Into<String>,
+        topic_name: &str,
         subscription_options: SubscriptionOptions,
     ) -> Result<()> {
-        let topic = self
+        let mut topic = self
             .topics
-            .get(&topic_name.into().clone())
+            .get(topic_name)
             .expect("the topic should be there");
 
         //TODO! use NameSpace service to checkTopicOwnership

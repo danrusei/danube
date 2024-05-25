@@ -7,19 +7,23 @@ use crate::proto::consumer_request::SubscriptionType;
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
-    topic: Topic,
+    topic_name: String,
+    subscription_name: String,
+    subscription_type: i32, // should be SubscriptionType,
     consumers: Vec<Consumer>,
     active_consumer: Option<Consumer>,
 }
 
 impl DispatcherSingleConsumer {
     pub(crate) fn new(
-        subscription_type: SubscriptionType,
-        topic: Topic,
-        subsc: Subscription,
+        topic_name: impl Into<String>,
+        subscription_name: impl Into<String>,
+        subscription_type: i32, // should be SubscriptionType,
     ) -> Self {
         DispatcherSingleConsumer {
-            topic,
+            topic_name: topic_name.into(),
+            subscription_name: subscription_name.into(),
+            subscription_type,
             active_consumer: None,
             consumers: Vec::new(),
         }
@@ -44,23 +48,24 @@ impl DispatcherSingleConsumer {
     }
 
     // manage the addition of consumers to the dispatcher
-    pub(crate) fn add_consumer(
-        &mut self,
-        consumer: Consumer,
-        subscription_type: SubscriptionType,
-    ) -> Result<()> {
-        // Handle Exclusive Subscription
-        if subscription_type == SubscriptionType::Exclusive && !self.consumers.is_empty() {
+    pub(crate) fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+        //Todo! alitle bit odd, have to recheck this function
+
+        // Handle Exclusive Subscription ... should be SubscriptionType::Exclusive
+        if consumer.subscription_type == 0 && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
             return Ok(());
         }
-        if subscription_type == SubscriptionType::Failover {
-            self.consumers.push(consumer);
+        // Handle Failover  Subscription ... should be SubscriptionType::Failover
+        if consumer.subscription_type == 2 {
+            self.consumers.push(consumer.clone());
         }
 
         if self.pick_active_consumer().is_ok_and(|x| x == false) {
             return Err(anyhow!("couldn't find an active consumer"));
         }
+
+        self.consumers.push(consumer);
 
         Ok(())
     }

@@ -37,8 +37,8 @@ message ProducerResponse {
 
 message ConsumerRequest {
     enum SubscriptionType {
-        Shared = 0; // Multiple consumers can subscribe to the topic concurrently.
-        Exclusive = 1; // Only one consumer can subscribe to the topic at a time.
+        Exclusive = 0; // Only one consumer can subscribe to the topic at a time.
+        Shared = 1 ; // Multiple consumers can subscribe to the topic concurrently.
         Failover = 2; // Only one consumer (the active consumer) receives messages at any given time.
     }
     uint64 request_id = 1;
