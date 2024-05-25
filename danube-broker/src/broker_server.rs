@@ -243,12 +243,12 @@ impl Stream for DanubeServerImpl {
             return Err(status);
         }
 
-        let consumer_id = 1; //TODO! should be generated somehow
+        let consumer_id: u64 = 1; //TODO! should be generated somehow
 
         let subscription_options = SubscriptionOptions {
             subscription_name: req.subscription,
             subscription_type: req.subscription_type,
-            consumer_id: consumer_id as f32,
+            consumer_id,
             consumer_name: req.consumer_name,
         };
 

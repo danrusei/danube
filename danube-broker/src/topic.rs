@@ -98,16 +98,40 @@ impl Topic {
     }
 
     // Create a new subscription for the topic
-    pub(crate) fn create_subscription(
-        subscription_name: String,
-        properties: HashMap<String, String>,
-    ) -> Result<Consumer, Box<dyn Error>> {
-        todo!()
-    }
+    // pub(crate) fn create_subscription(
+    //     &mut self,
+    //     subscription_name: String,
+    //     properties: HashMap<String, String>,
+    // ) -> Result<()> {
+    //     todo!()
+    // }
 
     // Subscribe to the topic and create a consumer for receiving messages
-    pub(crate) fn subscribe(&self, options: SubscriptionOptions) -> Result<Consumer> {
-        todo!()
+    pub(crate) fn subscribe(
+        &self,
+        topic_name: impl Into<String>,
+        options: SubscriptionOptions,
+    ) -> Result<Consumer> {
+        //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
+        let sub_metadata = HashMap::new();
+        let subscription =
+            self.subscriptions
+                .entry(options.consumer_name)
+                .or_insert(Subscription::new(
+                    topic_name,
+                    options.subscription_name,
+                    sub_metadata,
+                ));
+
+        let consumer = Consumer::new(
+            topic_name,
+            options.consumer_id,
+            options.consumer_name,
+            options.subscription_name,
+            options.subscription_type,
+        );
+
+        //next add consumer to subscription
     }
 
     // Unsubscribes the specified subscription from the topic

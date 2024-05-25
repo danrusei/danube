@@ -1,25 +1,33 @@
 use anyhow::Result;
 use bytes::Bytes;
 
+use crate::proto::consumer_request::SubscriptionType;
 use crate::subscription::{self, Subscription};
 
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub(crate) struct Consumer {
+    pub(crate) topic_name: String,
     pub(crate) consumer_id: u64,
     pub(crate) consumer_name: String,
+    pub(crate) subscription_name: String,
+    pub(crate) subscription_type: i32, // should be SubscriptionType,
 }
 
 impl Consumer {
     pub(crate) fn new(
-        subscription: Subscription,
-        topic_name: String,
-        consumer_name: String,
+        topic_name: impl Into<String>,
         consumer_id: u64,
+        consumer_name: impl Into<String>,
+        subscription_name: impl Into<String>,
+        subscription_type: i32, // should be SubscriptionType,
     ) -> Self {
         Consumer {
-            consumer_id,
-            consumer_name,
+            topic_name: topic_name.into(),
+            consumer_id: consumer_id.into(),
+            consumer_name: consumer_name.into(),
+            subscription_name: subscription_name.into(),
+            subscription_type,
         }
     }
 

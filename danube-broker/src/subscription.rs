@@ -13,22 +13,41 @@ use crate::proto::consumer_request::SubscriptionType;
 
 #[derive(Debug, Default)]
 pub(crate) struct Subscription {
+    pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
     // the consumers registered to the subscription, consumer_id -> Consumer
-    pub(crate) consumers: HashMap<String, Consumer>,
-    disp_one_consumer: Option<DispatcherSingleConsumer>,
-    disp_multiple_consumers: Option<DispatcherMultipleConsumers>,
+    pub(crate) consumers: Option<HashMap<String, Consumer>>,
+    dispatcher: Option<DispatcherSelect>,
+}
+
+#[derive(Debug)]
+pub(crate) enum DispatcherSelect {
+    OneConsumer(DispatcherSingleConsumer),
+    MultipleConsumers(DispatcherMultipleConsumers),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct SubscriptionOptions {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be moved to SubscriptionType
-    pub(crate) consumer_id: f32,
+    pub(crate) consumer_id: u64,
     pub(crate) consumer_name: String,
 }
 
 impl Subscription {
+    // create new subscription
+    pub(crate) fn new(
+        topic_name: impl Into<String>,
+        subscription_name: impl Into<String>,
+        meta_properties: HashMap<String, String>,
+    ) -> Self {
+        Subscription {
+            topic_name: topic_name.into(),
+            subscription_name: subscription_name.into(),
+            consumers: None,
+            dispatcher: None,
+        }
+    }
     // add a consumer to the subscription
     // checks if there'a a dispatcher (responsible for distributing messages to consumers)
     // If not initializes a dispatcher based on the type of consumer: Exclusive, Shared, Failover, Key_Shared

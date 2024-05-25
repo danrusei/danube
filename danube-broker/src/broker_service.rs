@@ -124,10 +124,16 @@ impl BrokerService {
     ) -> Result<()> {
         let topic = self
             .topics
-            .get(&topic_name.into())
+            .get(&topic_name.into().clone())
             .expect("the topic should be there");
 
-        let _consumer = topic.subscribe(subscription_options).expect("should work");
+        //TODO! use NameSpace service to checkTopicOwnership
+        // if it's owened by this instance continue,
+        // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
+
+        let _consumer = topic
+            .subscribe(topic_name, subscription_options)
+            .expect("should work");
 
         Ok(())
     }
