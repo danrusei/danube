@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     consumer::Consumer,
@@ -11,6 +11,8 @@ use crate::{
 
 use crate::proto::consumer_request::SubscriptionType;
 
+// Subscriptions manage the consumers that are subscribed to them.
+// They also handle dispatchers that manage the distribution of messages to these consumers.
 #[derive(Debug)]
 pub(crate) struct Subscription {
     pub(crate) topic_name: String,
@@ -52,43 +54,43 @@ impl Subscription {
     // checks if there'a a dispatcher (responsible for distributing messages to consumers)
     // If not initializes a dispatcher based on the type of consumer: Exclusive, Shared, Failover, Key_Shared
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
-        let dispatcher = match consumer.subscription_type {
+        let mut dispatcher = match consumer.subscription_type {
             //Exclusive
-            0 => DispatcherSelect::OneConsumer(DispatcherSingleConsumer::new(
-                &self.topic_name,
-                &self.subscription_name,
-                0,
-            )),
+            0 => {
+                let mut dispatcher =
+                    DispatcherSingleConsumer::new(&self.topic_name, &self.subscription_name, 0);
+                dispatcher.add_consumer(consumer);
+                DispatcherSelect::OneConsumer(dispatcher)
+            }
             //Shared
-            1 => DispatcherSelect::MultipleConsumers(DispatcherMultipleConsumers::new(
-                &self.topic_name,
-                &self.subscription_name,
-            )),
+            1 => {
+                let mut dispatcher =
+                    DispatcherMultipleConsumers::new(&self.topic_name, &self.subscription_name);
+
+                dispatcher.add_consumer(consumer);
+
+                DispatcherSelect::MultipleConsumers(dispatcher)
+            }
+
             //FailOver
-            2 => DispatcherSelect::OneConsumer(DispatcherSingleConsumer::new(
-                &self.topic_name,
-                &self.subscription_name,
-                2,
-            )),
+            2 => {
+                let mut dispatcher =
+                    DispatcherSingleConsumer::new(&self.topic_name, &self.subscription_name, 2);
+                dispatcher.add_consumer(consumer);
+                DispatcherSelect::OneConsumer(dispatcher)
+            }
             _ => {
                 return Err(anyhow!("Should not get here"));
             }
         };
 
-        match dispatcher {
-            DispatcherSelect::OneConsumer(disp_single_consumer) => {
-                disp_single_consumer.add_consumer(consumer);
-            }
-            DispatcherSelect::MultipleConsumers(disp_multiple_consumers) => {
-                disp_multiple_consumers.add_consumer(consumer);
-            }
-        }
+        self.dispatcher = Some(dispatcher);
 
         Ok(())
     }
 
     // remove a consumer from the subscription
-    pub(crate) async fn remove_consumer(consumer: Consumer) -> Result<()> {
+    pub(crate) fn remove_consumer(consumer: Consumer) -> Result<()> {
         // removes consumer from the dispatcher
         //If there are no consumers left after removing the specified one,
         // it unsubscribes the subscription from the topic.
@@ -96,21 +98,31 @@ impl Subscription {
     }
 
     // handles the disconnection of consumers associated with the subscription.
-    pub(crate) async fn disconnect() -> Result<()> {
+    pub(crate) fn disconnect() -> Result<()> {
         //  It checks if there is a dispatcher associated with the subscription.
         // If there is, it calls the disconnectAllConsumers method of the dispatcher
         todo!()
     }
 
     // Deletes the subscription after it is unsubscribed from the topic and disconnected from consumers.
-    pub(crate) async fn delete() -> Result<()> {
+    pub(crate) fn delete() -> Result<()> {
         //  It checks if there is a dispatcher associated with the subscription.
         // If there is, it calls the disconnectAllConsumers method of the dispatcher
         todo!()
     }
 
+    // Get Consumer - returns consumer ID
+    pub(crate) fn get_consumer_id(&self, consumer_name: &str) -> Option<u64> {
+        if let Some(consumers) = &self.consumers {
+            match consumers.get(consumer_name) {
+                Some(consumer) => return Some(consumer.consumer_id),
+                None => return None,
+            }
+        }
+        None
+    }
     // Get Consumers
-    pub(crate) async fn get_consumers() -> Result<Vec<Consumer>> {
+    pub(crate) fn get_consumers() -> Result<Vec<Consumer>> {
         // ask dispatcher
         todo!()
     }

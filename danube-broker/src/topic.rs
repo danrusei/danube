@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Ok, Result};
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
@@ -13,21 +13,31 @@ use crate::{
     subscription::{Subscription, SubscriptionOptions},
 };
 
+// Topic
+//
+// Manage its own producers and subscriptions. This includes maintaining the state of producers
+// and subscriptions and handling message publishing and consumption.
+//
+// Topics are responsible for accepting messages from producers
+// and ensuring they are delivered to the correct subscriptions.
+//
+// Topics provide the functionality for consumers to subscribe to them,
+// linking consumers to the appropriate subscriptions.
 #[derive(Debug)]
 pub(crate) struct Topic {
     pub(crate) topic_name: String,
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
-    // the subscriptions attached on the topic, subscription_id -> Subscription
+    // subscription_id -> Subscription
     pub(crate) subscriptions: HashMap<String, Subscription>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
 }
 
 impl Topic {
-    pub(crate) fn new(topic_name: String) -> Self {
+    pub(crate) fn new(topic_name: &str) -> Self {
         Topic {
-            topic_name,
+            topic_name: topic_name.into(),
             schema: None,
             topic_policies: None,
             subscriptions: HashMap::new(),
@@ -114,19 +124,19 @@ impl Topic {
     ) -> Result<Consumer> {
         //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
-        let subscription =
-            self.subscriptions
-                .entry(options.consumer_name)
-                .or_insert(Subscription::new(
-                    topic_name,
-                    options.subscription_name,
-                    sub_metadata,
-                ));
+        let subscription = self
+            .subscriptions
+            .entry(options.consumer_name.clone())
+            .or_insert(Subscription::new(
+                topic_name,
+                options.subscription_name.clone(),
+                sub_metadata,
+            ));
 
         let consumer = Consumer::new(
             topic_name,
             options.consumer_id,
-            options.consumer_name.clone().as_str(),
+            options.consumer_name.as_str(),
             options.subscription_name.clone().as_str(),
             options.subscription_type,
         );
@@ -139,8 +149,12 @@ impl Topic {
     }
 
     // Unsubscribes the specified subscription from the topic
-    pub(crate) fn unsubscribe(&self, subscription_name: String) -> Result<()> {
+    pub(crate) fn unsubscribe(&self, subscription_name: &str) -> Result<()> {
         todo!()
+    }
+
+    pub(crate) fn get_subscription(&self, subscription_name: &str) -> Option<&Subscription> {
+        self.subscriptions.get(subscription_name)
     }
 
     // Update Topic Policies

@@ -1,6 +1,7 @@
 use crate::topic::Topic;
 use std::error::Error;
 
+// NameSpace - coordinates topics ownership
 pub(crate) struct NameSpace {}
 
 impl NameSpace {

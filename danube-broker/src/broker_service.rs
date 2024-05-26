@@ -12,6 +12,8 @@ use crate::subscription::SubscriptionOptions;
 use crate::topic::{self, Topic};
 use crate::{consumer::Consumer, producer::Producer};
 
+// BrokerService - owns the topics and  and manage their lifecycle.
+// adn facilitate the creation of producers and subscriptions.
 #[derive(Debug)]
 pub(crate) struct BrokerService {
     //broker_addr: SocketAddr,
@@ -39,26 +41,57 @@ impl BrokerService {
         }
     }
 
-    pub(crate) fn get_topic(
+    pub(crate) fn find_or_create_topic(
         &mut self,
-        topic_name: String,
+        topic_name: &str,
+        schema: Option<Schema>,
         create_if_missing: bool,
-    ) -> Result<&mut Topic> {
-        // Check if the topic exists first
-        if self.topics.contains_key(&topic_name) {
-            return Ok(self.topics.get_mut(&topic_name).unwrap());
+    ) -> Result<String> {
+        if self.topics.contains_key(topic_name) {
+            return Ok(topic_name.into());
         }
 
-        // If the topic does not exist and create_if_missing is true
-        if create_if_missing {
-            let new_topic = topic::Topic::new(topic_name.clone());
-            self.topics.insert(topic_name.clone(), new_topic);
-            return Ok(self.topics.get_mut(&topic_name).unwrap());
+        if !validate_topic(topic_name) {
+            return Err(anyhow!("The topic name has invalid format"));
         }
 
-        // If the topic does not exist and create_if_missing is false, return an error
-        Err(anyhow!("unable to create the topic"))
+        // If the topic does not exist and create_if_missing is false
+        if !create_if_missing {
+            return Err(anyhow!(
+                "The topic does not exist and not allowed to be created"
+            ));
+        }
+
+        let mut new_topic = Topic::new(topic_name);
+        if let Some(schema) = schema {
+            new_topic.add_schema(schema);
+            //Todo! save Schema to metadata Store, use topic resources to get and put schema
+        }
+        self.topics.insert(topic_name.into(), new_topic);
+
+        Ok(topic_name.into())
     }
+
+    // pub(crate) fn get_topic(
+    //     &mut self,
+    //     topic_name: String,
+    //     create_if_missing: bool,
+    // ) -> Result<&mut Topic> {
+    //     // Check if the topic exists first
+    //     if self.topics.contains_key(&topic_name) {
+    //         return Ok(self.topics.get_mut(&topic_name).unwrap());
+    //     }
+
+    //     // If the topic does not exist and create_if_missing is true
+    //     if create_if_missing {
+    //         let new_topic = topic::Topic::new(topic_name.clone());
+    //         self.topics.insert(topic_name.clone(), new_topic);
+    //         return Ok(self.topics.get_mut(&topic_name).unwrap());
+    //     }
+
+    //     // If the topic does not exist and create_if_missing is false, return an error
+    //     Err(anyhow!("unable to create the topic"))
+    // }
 
     pub(crate) async fn delete_topic(&mut self, topic: String) -> Result<Topic> {
         todo!()
@@ -83,26 +116,27 @@ impl BrokerService {
 
     pub(crate) fn check_if_consumer_exist(
         &self,
-        consumer_name: impl Into<String>,
-        subscription_name: impl Into<String>,
-        topic_name: impl Into<String>,
-    ) -> bool {
+        consumer_name: &str,
+        subscription_name: &str,
+        topic_name: &str,
+    ) -> Option<u64> {
+        // assuming that we know that the topic exist
         let topic = self
             .topics
-            .get(&topic_name.into())
+            .get(topic_name)
             .expect("unable to find the topic");
-        let subscription_name = subscription_name.into();
-        let consumer_name = consumer_name.into();
-        for subscription in topic.subscriptions.values() {
-            if subscription.subscription_name == subscription_name {
-                for consumer in subscription.consumers.values() {
-                    if consumer.consumer_name == consumer_name {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
+
+        let subscription = match topic.get_subscription(subscription_name) {
+            Some(subscr) => subscr,
+            None => return None,
+        };
+
+        let consumer_id = match subscription.get_consumer_id(consumer_name) {
+            Some(id) => id,
+            None => return None,
+        };
+
+        Some(consumer_id)
     }
 
     pub(crate) fn allow_subscription_creation(&self, topic_name: impl Into<String>) -> bool {
@@ -118,13 +152,13 @@ impl BrokerService {
     }
 
     pub(crate) fn subscribe(
-        &self,
+        &mut self,
         topic_name: &str,
         subscription_options: SubscriptionOptions,
     ) -> Result<()> {
-        let mut topic = self
+        let topic = self
             .topics
-            .get(topic_name)
+            .get_mut(topic_name)
             .expect("the topic should be there");
 
         //TODO! use NameSpace service to checkTopicOwnership
@@ -141,21 +175,22 @@ impl BrokerService {
     // create a new producer and attach to the topic
     pub(crate) fn create_new_producer(
         &mut self,
-        producer_name: String,
-        topic_name: String,
+        producer_name: &str,
+        topic_name: &str,
         producer_access_mode: i32,
-    ) -> Result<&Producer> {
+    ) -> Result<u64> {
         let topic = self
             .topics
-            .get_mut(&topic_name)
+            .get_mut(topic_name)
             .expect("we know that the topic exist");
+
         let producer_id = get_random_id();
         match topic.producers.entry(producer_id) {
             Entry::Vacant(entry) => {
                 entry.insert(Producer::new(
                     producer_id,
-                    producer_name,
-                    topic_name.clone(),
+                    producer_name.into(),
+                    topic_name.into(),
                     producer_access_mode,
                 ));
             }
@@ -165,16 +200,14 @@ impl BrokerService {
             }
         }
 
-        self.producers.entry(producer_id).or_insert(topic_name);
+        self.producers
+            .entry(producer_id)
+            .or_insert(topic_name.into());
 
-        Ok(topic
-            .producers
-            .get(&producer_id)
-            .expect("the producer was created above"))
+        Ok(producer_id)
     }
 
-    // knowing the producer_id, return to the caller the producer if exist
-    // for now it returns both, producer and topic, we may want to return
+    // knowing the producer_id, return to the caller the topic associated to the producer
     pub(crate) fn get_topic_for_producer(&mut self, producer_id: u64) -> Result<&Topic> {
         let topic_name = match self.producers.entry(producer_id) {
             Entry::Vacant(entry) => {
@@ -186,17 +219,13 @@ impl BrokerService {
             Entry::Occupied(entry) => entry.get().to_owned(),
         };
 
-        let topic = match self.get_topic(topic_name.clone(), false) {
-            Ok(topic) => topic,
-            Err(err) => {
-                return Err(anyhow!(
-                    "unable to find the topic associated with producer_id {}",
-                    producer_id
-                ))
-            }
-        };
+        if !self.topics.contains_key(&topic_name) {
+            return Err(anyhow!(
+                "Unable to find any topic associated to this producer"
+            ));
+        }
 
-        Ok(topic)
+        Ok(self.topics.get_mut(&topic_name).unwrap())
     }
 
     // pub(crate) async fn register_configuration_listener(
@@ -211,4 +240,20 @@ impl BrokerService {
 fn get_random_id() -> u64 {
     let mut rng = rand::thread_rng();
     rng.gen::<u64>()
+}
+
+fn validate_topic(input: &str) -> bool {
+    // length from 5 to 20 characters
+    if input.len() < 5 || input.len() > 20 {
+        return false;
+    }
+
+    // allowed characters are letters, numbers and "_"
+    for ch in input.chars() {
+        if !ch.is_alphanumeric() && ch != '_' {
+            return false;
+        }
+    }
+
+    true
 }

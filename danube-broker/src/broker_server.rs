@@ -62,79 +62,56 @@ impl Stream for DanubeServerImpl {
 
         let mut err_details = ErrorDetails::new();
 
-        if !validate_topic(&req.topic_name) {
-            //TODO don't have yet a defined format for topic name
-            err_details.add_bad_request_violation("topic", "the topic should contain only alphanumerics and _ , and the size between 5 to 20 characters");
-            let status =
-                Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
-            return Err(status);
-        }
-
-        let topic_ref: &mut Topic;
-
-        {
-            let mut service = self.service.lock().await;
-            match service.get_topic(req.topic_name.clone(), true) {
-                Ok(top) => topic_ref = top,
-                Err(err) => {
-                    err_details.set_resource_info(
-                        "topic",
-                        "topic",
-                        req.producer_name.clone(),
-                        &err.to_string(),
-                    );
-                    let status = Status::with_error_details(
-                        Code::NotFound,
-                        "unable to create topic",
-                        err_details,
-                    );
-                    return Err(status);
-                }
-            }
-
-            if let Some(schema_req) = req.schema {
-                //TODO! save Schema to metadata Store, use from resources the topic to get and put schema
-                topic_ref.add_schema(schema_req);
-            }
-        }
-
-        //TODO! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
-
         let mut service = self.service.lock().await;
+
+        match service.find_or_create_topic(&req.topic_name, req.schema, true) {
+            Ok(topic_name) => {
+                info!("topic_name: {} exist or was created", topic_name)
+            }
+            Err(err) => {
+                err_details.set_bad_request(vec![FieldViolation::new("Topic", err.to_string())]);
+                let status = Status::with_error_details(
+                    Code::PermissionDenied,
+                    "not able to create the Topic",
+                    err_details,
+                );
+                return Err(status);
+            }
+        }
+
+        //Todo! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
+
         if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
-            err_details.add_precondition_failure_violation(
-                "ptoducer_id",
-                "already present",
-                "the producer is already present on the connection",
-            );
+            err_details.set_bad_request(vec![FieldViolation::new(
+                "Producer",
+                "This producer is already present on the connection",
+            )]);
             let status =
                 Status::with_error_details(Code::AlreadyExists, "bad request", err_details);
             return Err(status);
         }
 
-        // for faster boostrap, or in certain conditions we may want to create an initial subscription
-        // same time with the producer creation. But not doing this for now, leave to consumers to create subscription.
-
-        let new_producer = if let Ok(prod) = service.create_new_producer(
-            req.producer_name.clone(),
-            req.topic_name,
-            // req.schema,
+        let new_producer_id = match service.create_new_producer(
+            &req.producer_name,
+            &req.topic_name,
             req.producer_access_mode,
         ) {
-            prod
-        } else {
-            let status = Status::with_error_details(
-                Code::Unknown,
-                "unable to create the producer",
-                err_details,
-            );
-            return Err(status);
+            Ok(prod_id) => prod_id,
+            Err(err) => {
+                err_details.set_bad_request(vec![FieldViolation::new("Producer", err.to_string())]);
+                let status = Status::with_error_details(
+                    Code::AlreadyExists,
+                    "not able to create the Producer",
+                    err_details,
+                );
+                return Err(status);
+            }
         };
 
         let response = ProducerResponse {
             request_id: req.request_id,
             producer_name: req.producer_name,
-            producer_id: new_producer.get_id(),
+            producer_id: new_producer_id,
         };
 
         Ok(tonic::Response::new(response))
@@ -156,12 +133,15 @@ impl Stream for DanubeServerImpl {
         // check if the producer was created and get topic_name
         match service.producers.entry(req.producer_id) {
             Entry::Vacant(_) => {
-                err_details.add_bad_request_violation(
-                    "producer",
+                err_details.set_bad_request(vec![FieldViolation::new(
+                    "Producer",
                     "the producer with id {req.producer_id} does not exist",
+                )]);
+                let status = Status::with_error_details(
+                    Code::InvalidArgument,
+                    "Unable to find the Producer",
+                    err_details,
                 );
-                let status =
-                    Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
                 return Err(status);
             }
             Entry::Occupied(_) => (),
@@ -170,9 +150,12 @@ impl Stream for DanubeServerImpl {
         let topic = match service.get_topic_for_producer(req.producer_id) {
             Ok(topic) => topic,
             Err(err) => {
-                err_details.add_bad_request_violation("topic", err.to_string());
-                let status =
-                    Status::with_error_details(Code::InvalidArgument, "bad request", err_details);
+                err_details.set_bad_request(vec![FieldViolation::new("Topic", err.to_string())]);
+                let status = Status::with_error_details(
+                    Code::InvalidArgument,
+                    "Unable to get the topic for the producer",
+                    err_details,
+                );
                 return Err(status);
             }
         };
@@ -186,10 +169,10 @@ impl Stream for DanubeServerImpl {
         {
             Ok(_) => (),
             Err(err) => {
-                err_details.add_bad_request_violation("producer", err.to_string());
+                err_details.set_bad_request(vec![FieldViolation::new("Producer", err.to_string())]);
                 let status = Status::with_error_details(
                     Code::Internal,
-                    "unable to publish the message",
+                    "Unable to publish the message",
                     err_details,
                 );
                 return Err(status);
@@ -221,20 +204,29 @@ impl Stream for DanubeServerImpl {
         // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
 
         let mut service = self.service.lock().await;
-        if service.check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name) {
-            err_details.add_precondition_failure_violation(
-                "consumer",
-                "already present",
-                "the consumer is already associated to subscription",
-            );
-            let status =
-                Status::with_error_details(Code::AlreadyExists, "bad request", err_details);
-            return Err(status);
+
+        match service.check_if_consumer_exist(
+            &req.consumer_name,
+            &req.subscription,
+            &req.topic_name,
+        ) {
+            Some(consumer_id) => {
+                let response = ConsumerResponse {
+                    request_id: req.request_id,
+                    consumer_id: consumer_id,
+                    consumer_name: req.consumer_name,
+                };
+                return Ok(tonic::Response::new(response));
+            }
+            None => {}
         }
 
         // check if the topic policies allow the creation of the subscription if it doesn't exist
         if !service.allow_subscription_creation(&req.topic_name) {
-            err_details.set_bad_request(vec![FieldViolation::new("field_1", "description 1")]);
+            err_details.set_bad_request(vec![FieldViolation::new(
+                "Subscription",
+                "Creation not allowed",
+            )]);
             let status = Status::with_error_details(
                 Code::PermissionDenied,
                 "not allowed to create subscription on the topic",
@@ -273,20 +265,4 @@ impl Stream for DanubeServerImpl {
 
         Ok(tonic::Response::new(response))
     }
-}
-
-fn validate_topic(input: &str) -> bool {
-    // length from 5 to 20 characters
-    if input.len() < 5 || input.len() > 20 {
-        return false;
-    }
-
-    // allowed characters are letters, numbers and "_"
-    for ch in input.chars() {
-        if !ch.is_alphanumeric() && ch != '_' {
-            return false;
-        }
-    }
-
-    true
 }
