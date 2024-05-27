@@ -1,7 +1,7 @@
 use crate::errors::DanubeError;
 use crate::proto::{
-    stream_client::StreamClient, MessageRequest, MessageResponse, ProducerAccessMode,
-    ProducerRequest, ProducerResponse,
+    producer_service_client::ProducerServiceClient, MessageRequest, MessageResponse,
+    ProducerAccessMode, ProducerRequest, ProducerResponse,
 };
 use crate::{errors::Result, DanubeClient};
 use crate::{
@@ -36,7 +36,7 @@ pub struct Producer {
     // other configurable options for the producer
     producer_options: ProducerOptions,
     // the grpc client cnx
-    stream_client: Option<StreamClient<tonic::transport::Channel>>,
+    stream_client: Option<ProducerServiceClient<tonic::transport::Channel>>,
 }
 
 impl Producer {
@@ -154,7 +154,7 @@ impl Producer {
             .cnx_manager
             .get_connection(&self.client.uri, &self.client.uri)
             .await?;
-        let client = StreamClient::new(grpc_cnx.grpc_cnx.clone());
+        let client = ProducerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())
     }

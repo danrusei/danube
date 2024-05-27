@@ -1,9 +1,12 @@
 use crate::broker_service::BrokerService;
 use crate::producer::{self, Producer};
-use crate::proto::stream_server::{Stream, StreamServer};
 use crate::proto::{
-    ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse, ProducerRequest,
-    ProducerResponse,
+    consumer_service_server::{ConsumerService, ConsumerServiceServer},
+    producer_service_server::{ProducerService, ProducerServiceServer},
+};
+use crate::proto::{
+    AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse,
+    ProducerRequest, ProducerResponse, ReceiveRequest, StreamMessage,
 };
 use crate::subscription::SubscriptionOptions;
 use crate::topic::Topic;
@@ -13,12 +16,13 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, FieldViolation, StatusExt};
 use tracing::info;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct DanubeServerImpl {
     service: Arc<Mutex<BrokerService>>,
     broker_addr: SocketAddr,
@@ -38,7 +42,8 @@ impl DanubeServerImpl {
         let socket_addr = self.broker_addr.clone();
 
         Server::builder()
-            .add_service(StreamServer::new(self))
+            .add_service(ProducerServiceServer::new(self.clone()))
+            .add_service(ConsumerServiceServer::new(self))
             .serve(socket_addr)
             .await?;
 
@@ -47,7 +52,7 @@ impl DanubeServerImpl {
 }
 
 #[tonic::async_trait]
-impl Stream for DanubeServerImpl {
+impl ProducerService for DanubeServerImpl {
     // CMD to create a new Producer
     async fn create_producer(
         &self,
@@ -186,7 +191,11 @@ impl Stream for DanubeServerImpl {
 
         Ok(tonic::Response::new(response))
     }
+}
 
+#[tonic::async_trait]
+impl ConsumerService for DanubeServerImpl {
+    type ReceiveMessagesStream = ReceiverStream<Result<StreamMessage, Status>>;
     // CMD to create a new Consumer
     async fn subscribe(
         &self,
@@ -264,5 +273,21 @@ impl Stream for DanubeServerImpl {
         };
 
         Ok(tonic::Response::new(response))
+    }
+
+    // Stream of messages to Consumer
+    async fn receive_messages(
+        &self,
+        request: tonic::Request<ReceiveRequest>,
+    ) -> std::result::Result<tonic::Response<Self::ReceiveMessagesStream>, tonic::Status> {
+        todo!()
+    }
+
+    // Consumer acknowledge the received message
+    async fn ack(
+        &self,
+        request: tonic::Request<AckRequest>,
+    ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
+        todo!()
     }
 }

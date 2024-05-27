@@ -2,18 +2,12 @@ syntax = "proto3";
 
 package danube;
 
-service Stream {
+service ProducerService {
     // Creates a new Producer on a topic
     rpc CreateProducer(ProducerRequest) returns (ProducerResponse);
 
-    // Creates a new Subscriber
-    rpc Subscribe(ConsumerRequest) returns (ConsumerResponse);
-
     // Sends a message from the Producer
     rpc SendMessage(MessageRequest) returns (MessageResponse);
-
-    // Acknowledges receipt of a message from the Consumer
-    // rpc Ack(AckRequest) returns (AckResponse);
 }
 
 enum ProducerAccessMode {
@@ -21,7 +15,7 @@ enum ProducerAccessMode {
     Exclusive = 1; // exclusive access for producer
 }
 
-
+// Create Producer request
 message ProducerRequest { 
     uint64 request_id = 1;
     string producer_name = 3;
@@ -29,12 +23,52 @@ message ProducerRequest {
     Schema schema = 5;
     ProducerAccessMode producer_access_mode = 6;
 }
+
+// Create Producer response
 message ProducerResponse {
     uint64 request_id = 1 ;
     uint64 producer_id = 2;
     string producer_name = 3;
 } 
 
+// Producer send the message
+message MessageRequest {
+    uint64 request_id =1;
+    uint64 producer_id = 2;
+    MessageMetadata metadata = 3;
+    bytes message = 4;
+}
+
+message MessageMetadata {
+    // Identifies the name of the producer that sent the message.
+    string producer_name = 1;
+    // Represents the sequence ID of the message within the topic
+    // this is critical to maintain the messages order that are consumed by consumers 
+    uint64 sequence_id = 2;
+    // Indicates the time when the message was published
+    uint64 publish_time = 3;
+}
+
+// Producer receive acknowledge for the sent message
+message MessageResponse {
+    uint64 request_id = 1;
+    uint64 sequence_id = 2;
+}
+
+// ============================================================================================
+
+service ConsumerService {
+    // Creates a new Subscriber
+    rpc Subscribe(ConsumerRequest) returns (ConsumerResponse);
+
+    // Streaming messages to the Subscriber
+    rpc ReceiveMessages(ReceiveRequest) returns (stream StreamMessage);
+
+    // Acknowledges receipt of a message from the Consumer
+    rpc Ack(AckRequest) returns (AckResponse);
+}
+
+// Create Consumer request
 message ConsumerRequest {
     enum SubscriptionType {
         Exclusive = 0; // Only one consumer can subscribe to the topic at a time.
@@ -48,33 +82,30 @@ message ConsumerRequest {
     SubscriptionType subscription_type = 5;
 }
 
+// Create Consumer response
 message ConsumerResponse {
     uint64 request_id =1;
     uint64 consumer_id = 2;
     string consumer_name = 3;
 }
 
-message MessageRequest {
+message ReceiveRequest {
     uint64 request_id =1;
-    uint64 producer_id = 2;
-    MessageMetadata metadata = 3;
-    bytes message = 4;
 }
 
-message MessageResponse {
-    uint64 request_id = 1;
-    uint64 sequence_id = 2;
+message StreamMessage {
+    uint64 request_id =1; 
 }
 
-message MessageMetadata {
-    // Identifies the name of the producer that sent the message.
-    string producer_name = 1;
-    // Represents the sequence ID of the message within the topic
-    // this is critical to maintain the messages order that are consumed by consumers 
-    uint64 sequence_id = 2;
-    // Indicates the time when the message was published
-    uint64 publish_time = 3;
+message AckRequest {
+    uint64 request_id =1; 
 }
+
+message AckResponse {
+    uint64 request_id =1;
+}
+
+// ============================================================================================
 
 service Discovery {
     // Query the Pulsar cluster for information about a specific topic.

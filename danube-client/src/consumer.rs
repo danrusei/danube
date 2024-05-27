@@ -1,6 +1,8 @@
 use crate::{errors::Result, DanubeClient};
 
-use crate::proto::{stream_client::StreamClient, ConsumerRequest, ConsumerResponse};
+use crate::proto::{
+    consumer_service_client::ConsumerServiceClient, ConsumerRequest, ConsumerResponse,
+};
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use tonic::{Response, Status};
@@ -26,7 +28,7 @@ pub struct Consumer {
     // unique identifier for every request sent by consumer
     request_id: AtomicU64,
     // the grpc client cnx
-    stream_client: Option<StreamClient<tonic::transport::Channel>>,
+    stream_client: Option<ConsumerServiceClient<tonic::transport::Channel>>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +87,7 @@ impl Consumer {
                 let r = resp.into_inner();
                 self.consumer_id = Some(r.consumer_id);
                 println!(
-                    "Response: req_id: {:?}, producer_id: {:?}",
+                    "Response: req_id: {:?}, consumer_id: {:?}",
                     r.request_id, r.consumer_id
                 );
             }
@@ -107,7 +109,7 @@ impl Consumer {
             .cnx_manager
             .get_connection(&self.client.uri, &self.client.uri)
             .await?;
-        let client = StreamClient::new(grpc_cnx.grpc_cnx.clone());
+        let client = ConsumerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())
     }
@@ -174,7 +176,7 @@ impl ConsumerBuilder {
     }
 }
 
-/// Configuration options for producers
+/// Configuration options for consumers
 #[derive(Debug, Clone, Default)]
 pub struct ConsumerOptions {
     // schema used to encode the messages
