@@ -36,8 +36,8 @@ impl DispatcherMultipleConsumers {
         todo!()
     }
 
-    pub(crate) fn get_consumers(&self) -> Result<&Vec<Consumer>> {
-        Ok(&self.consumers)
+    pub(crate) fn get_consumers(&self) -> Option<&Vec<Consumer>> {
+        Some(&self.consumers)
     }
 
     pub(crate) fn disconnect_all_consumers(&self) -> Result<()> {

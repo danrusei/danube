@@ -5,7 +5,7 @@ use crate::{
     consumer::Consumer,
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
-        dispatcher_single_consumer::DispatcherSingleConsumer,
+        dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
     },
 };
 
@@ -19,13 +19,7 @@ pub(crate) struct Subscription {
     pub(crate) subscription_name: String,
     // the consumers registered to the subscription, consumer_id -> Consumer
     pub(crate) consumers: Option<HashMap<String, Consumer>>,
-    pub(crate) dispatcher: Option<DispatcherSelect>,
-}
-
-#[derive(Debug)]
-pub(crate) enum DispatcherSelect {
-    OneConsumer(DispatcherSingleConsumer),
-    MultipleConsumers(DispatcherMultipleConsumers),
+    pub(crate) dispatcher: Option<Dispatcher>,
 }
 
 #[derive(Debug, Clone)]
@@ -50,39 +44,37 @@ impl Subscription {
             dispatcher: None,
         }
     }
-    // add a consumer to the subscription
+    // Adds a consumer to the subscription
     // checks if there'a a dispatcher (responsible for distributing messages to consumers)
-    // If not initializes a dispatcher based on the type of consumer: Exclusive, Shared, Failover, Key_Shared
+    // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
         let mut dispatcher = match consumer.subscription_type {
             //Exclusive
-            0 => {
-                let mut dispatcher =
-                    DispatcherSingleConsumer::new(&self.topic_name, &self.subscription_name, 0);
-                dispatcher.add_consumer(consumer);
-                DispatcherSelect::OneConsumer(dispatcher)
-            }
+            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
+                &self.topic_name,
+                &self.subscription_name,
+                0,
+            )),
+
             //Shared
-            1 => {
-                let mut dispatcher =
-                    DispatcherMultipleConsumers::new(&self.topic_name, &self.subscription_name);
-
-                dispatcher.add_consumer(consumer);
-
-                DispatcherSelect::MultipleConsumers(dispatcher)
-            }
+            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(
+                &self.topic_name,
+                &self.subscription_name,
+            )),
 
             //FailOver
-            2 => {
-                let mut dispatcher =
-                    DispatcherSingleConsumer::new(&self.topic_name, &self.subscription_name, 2);
-                dispatcher.add_consumer(consumer);
-                DispatcherSelect::OneConsumer(dispatcher)
-            }
+            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
+                &self.topic_name,
+                &self.subscription_name,
+                2,
+            )),
+
             _ => {
                 return Err(anyhow!("Should not get here"));
             }
         };
+
+        dispatcher.add_consumer(consumer);
 
         self.dispatcher = Some(dispatcher);
 
@@ -128,8 +120,11 @@ impl Subscription {
     }
 
     // Get Dispatcher
-    pub(crate) fn get_dispatcher(&self) -> Option<DispatcherSingleConsumer> {
+    pub(crate) fn get_dispatcher(&self) -> Option<&Dispatcher> {
         // maybe create  a trait that the both dispatachers will implement
-        todo!()
+        if let Some(dispatcher) = &self.dispatcher {
+            return Some(dispatcher);
+        }
+        None
     }
 }

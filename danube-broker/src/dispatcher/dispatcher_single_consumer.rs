@@ -30,21 +30,35 @@ impl DispatcherSingleConsumer {
     }
 
     // Pick an active consumer for a topic for subscription.
-    pub(crate) fn pick_active_consumer(&mut self) -> Result<bool> {
+    pub(crate) fn pick_active_consumer(&mut self) -> bool {
         // sort the self.consumers ,after a specific logic, maybe highest priority
 
-        if let Some(consumer) = self.consumers.get(0) {
-            self.active_consumer = Some(consumer.clone());
+        if let Some(consumer) = self.consumers.pop() {
+            self.active_consumer = Some(consumer);
+            return true;
         }
 
-        Ok(true)
+        false
     }
 
     // sending messages to an active consumer
     pub(crate) async fn send_messages(&self, messages: Vec<Bytes>) -> Result<()> {
+        let current_consumer = if let Some(consumer) = &self.active_consumer {
+            consumer
+        } else {
+            return Err(anyhow!("There is no active Consumer"));
+        };
+
+        //Todo!
+        // 1. check first if the Consumer allow to send the messages
+        // 2. filter the messages for consumers
+        // 3. other permits like dispatch rate limiter, quota etc
+
         // maybe wrap Vec<Bytes> into a generic Message
 
-        todo!()
+        current_consumer.send_messages(messages, 1).await?;
+
+        Ok(())
     }
 
     // manage the addition of consumers to the dispatcher
@@ -61,8 +75,10 @@ impl DispatcherSingleConsumer {
             self.consumers.push(consumer.clone());
         }
 
-        if self.pick_active_consumer().is_ok_and(|x| x == false) {
-            return Err(anyhow!("couldn't find an active consumer"));
+        if !self.pick_active_consumer() {
+            return Err(anyhow!(
+                "couldn't make an active Consumer as there are none Consumers"
+            ));
         }
 
         self.consumers.push(consumer);
@@ -83,5 +99,9 @@ impl DispatcherSingleConsumer {
         let _ = self.pick_active_consumer();
 
         Ok(())
+    }
+
+    pub(crate) fn get_consumers(&self) -> Option<&Vec<Consumer>> {
+        todo!()
     }
 }

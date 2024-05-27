@@ -99,8 +99,7 @@ impl Topic {
         for (_name, subscription) in self.subscriptions.iter() {
             let duplicate_data = data.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
-                dispatcher.send_messages(vec![duplicate_data]);
-                todo!()
+                dispatcher.send_messages(vec![duplicate_data]).await?;
             }
         }
 

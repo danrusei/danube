@@ -32,8 +32,9 @@ impl Consumer {
     }
 
     // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(&self, entries: Vec<Bytes>, batch_size: u32) -> Result<()> {
+    pub(crate) async fn send_messages(&self, entries: Vec<Bytes>, batch_size: usize) -> Result<()> {
         let unacked_messages = entries.len();
+        //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
         todo!()
     }
 
