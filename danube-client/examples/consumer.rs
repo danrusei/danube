@@ -23,5 +23,11 @@ async fn main() -> Result<()> {
 
     consumer.subscribe().await?;
 
+    while let Some(message) = consumer.receive().await? {
+        println!("Received message: {:?}", message);
+
+        // Acknowledge the message
+    }
+
     Ok(())
 }

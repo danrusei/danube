@@ -18,7 +18,7 @@ pub(crate) struct Subscription {
     pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
     // the consumers registered to the subscription, consumer_id -> Consumer
-    pub(crate) consumers: Option<HashMap<String, Consumer>>,
+    pub(crate) consumers: HashMap<u64, Consumer>,
     pub(crate) dispatcher: Option<Dispatcher>,
 }
 
@@ -26,7 +26,7 @@ pub(crate) struct Subscription {
 pub(crate) struct SubscriptionOptions {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be moved to SubscriptionType
-    pub(crate) consumer_id: u64,
+    pub(crate) consumer_id: Option<u64>,
     pub(crate) consumer_name: String,
 }
 
@@ -40,14 +40,15 @@ impl Subscription {
         Subscription {
             topic_name: topic_name.into(),
             subscription_name: subscription_name.into(),
-            consumers: None,
+            consumers: HashMap::new(),
             dispatcher: None,
         }
     }
     // Adds a consumer to the subscription
-    // checks if there'a a dispatcher (responsible for distributing messages to consumers)
-    // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+        // checks if there'a a dispatcher (responsible for distributing messages to consumers)
+        // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
+
         let mut dispatcher = match consumer.subscription_type {
             //Exclusive
             0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
@@ -73,6 +74,10 @@ impl Subscription {
                 return Err(anyhow!("Should not get here"));
             }
         };
+
+        // is it ok to clone, or should I use ARC ?
+        self.consumers
+            .insert(consumer.consumer_id, consumer.clone());
 
         dispatcher.add_consumer(consumer);
 
@@ -105,10 +110,9 @@ impl Subscription {
 
     // Get Consumer - returns consumer ID
     pub(crate) fn get_consumer_id(&self, consumer_name: &str) -> Option<u64> {
-        if let Some(consumers) = &self.consumers {
-            match consumers.get(consumer_name) {
-                Some(consumer) => return Some(consumer.consumer_id),
-                None => return None,
+        for consumer in self.consumers.values() {
+            if consumer.consumer_name == consumer_name {
+                return Some(consumer.consumer_id);
             }
         }
         None

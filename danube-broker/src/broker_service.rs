@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Context, Result};
 use dashmap::DashMap;
-use rand::Rng;
 use std::any;
 use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
@@ -8,9 +7,13 @@ use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
 use crate::proto::{ProducerAccessMode, Schema};
-use crate::subscription::SubscriptionOptions;
-use crate::topic::{self, Topic};
-use crate::{consumer::Consumer, producer::Producer};
+use crate::{
+    consumer::Consumer,
+    producer::Producer,
+    subscription::SubscriptionOptions,
+    topic::{self, Topic},
+    utils::get_random_id,
+};
 
 // BrokerService - owns the topics and  and manage their lifecycle.
 // adn facilitate the creation of producers and subscriptions.
@@ -155,7 +158,7 @@ impl BrokerService {
         &mut self,
         topic_name: &str,
         subscription_options: SubscriptionOptions,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let topic = self
             .topics
             .get_mut(topic_name)
@@ -165,11 +168,11 @@ impl BrokerService {
         // if it's owened by this instance continue,
         // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
 
-        let _consumer = topic
+        let consumer = topic
             .subscribe(topic_name, subscription_options)
             .expect("should work");
 
-        Ok(())
+        Ok(consumer.consumer_id)
     }
 
     // create a new producer and attach to the topic
@@ -235,11 +238,6 @@ impl BrokerService {
     // ) {
     //     self.config_listeners.insert(config_key, listener);
     // }
-}
-
-fn get_random_id() -> u64 {
-    let mut rng = rand::thread_rng();
-    rng.gen::<u64>()
 }
 
 fn validate_topic(input: &str) -> bool {

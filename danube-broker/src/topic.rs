@@ -11,6 +11,7 @@ use crate::{
     policies::Policies,
     producer::Producer,
     subscription::{Subscription, SubscriptionOptions},
+    utils::get_random_id,
 };
 
 // Topic
@@ -64,7 +65,7 @@ impl Topic {
         todo!()
     }
 
-    // Publishes a message to the topic
+    // Publishes the message to the topic, and send to active consumers
     pub(crate) async fn publish_message(
         &self,
         producer_id: u64,
@@ -94,7 +95,7 @@ impl Topic {
 
         let data: Bytes = message.into();
 
-        // dispatch message to all consumers
+        // Dispatch message to all consumers
 
         for (_name, subscription) in self.subscriptions.iter() {
             let duplicate_data = data.clone();
@@ -105,15 +106,6 @@ impl Topic {
 
         Ok(())
     }
-
-    // Create a new subscription for the topic
-    // pub(crate) fn create_subscription(
-    //     &mut self,
-    //     subscription_name: String,
-    //     properties: HashMap<String, String>,
-    // ) -> Result<()> {
-    //     todo!()
-    // }
 
     // Subscribe to the topic and create a consumer for receiving messages
     pub(crate) fn subscribe(
@@ -132,9 +124,11 @@ impl Topic {
                 sub_metadata,
             ));
 
+        let consumer_id = get_random_id();
+
         let consumer = Consumer::new(
             topic_name,
-            options.consumer_id,
+            consumer_id,
             options.consumer_name.as_str(),
             options.subscription_name.clone().as_str(),
             options.subscription_type,
@@ -142,6 +136,7 @@ impl Topic {
 
         //Todo! Check the topic policies with max_consumers per topic
 
+        // is it ok to clone , or I should return just the ID, or ARC?
         subscription.add_consumer(consumer.clone());
 
         Ok(consumer)

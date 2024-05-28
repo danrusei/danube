@@ -12,6 +12,7 @@ mod service_configuration;
 mod storage;
 mod subscription;
 mod topic;
+mod utils;
 
 use crate::danube_service::DanubeService;
 use crate::service_configuration::ServiceConfiguration;

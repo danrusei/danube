@@ -63,25 +63,25 @@ impl DispatcherSingleConsumer {
 
     // manage the addition of consumers to the dispatcher
     pub(crate) fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
-        //Todo! alitle bit odd, have to recheck this function
-
-        // Handle Exclusive Subscription ... should be SubscriptionType::Exclusive
+        // Handle Exclusive Subscription
+        // the consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
         if consumer.subscription_type == 0 && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
+            return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
+        }
+
+        // Handle Failover Subscription ... should be SubscriptionType::Failover
+        if consumer.subscription_type == 2 {
+            self.consumers.push(consumer);
             return Ok(());
         }
-        // Handle Failover  Subscription ... should be SubscriptionType::Failover
-        if consumer.subscription_type == 2 {
-            self.consumers.push(consumer.clone());
-        }
+
+        // Handle Shared Subscription
+        self.consumers.push(consumer);
 
         if !self.pick_active_consumer() {
-            return Err(anyhow!(
-                "couldn't make an active Consumer as there are none Consumers"
-            ));
+            return Err(anyhow!("unable to pick an active Consumer"));
         }
-
-        self.consumers.push(consumer);
 
         Ok(())
     }

@@ -244,17 +244,15 @@ impl ConsumerService for DanubeServerImpl {
             return Err(status);
         }
 
-        let consumer_id: u64 = 1; //TODO! should be generated somehow
-
         let subscription_options = SubscriptionOptions {
             subscription_name: req.subscription,
             subscription_type: req.subscription_type,
-            consumer_id,
+            consumer_id: None,
             consumer_name: req.consumer_name.clone(),
         };
 
-        match service.subscribe(&req.topic_name, subscription_options) {
-            Ok(_) => {}
+        let consumer_id = match service.subscribe(&req.topic_name, subscription_options) {
+            Ok(id) => id,
             Err(err) => {
                 err_details.set_error_info("unable to subscribe", err.to_string(), HashMap::new());
                 let status = Status::with_error_details(
@@ -264,7 +262,7 @@ impl ConsumerService for DanubeServerImpl {
                 );
                 return Err(status);
             }
-        }
+        };
 
         let response = ConsumerResponse {
             request_id: req.request_id,
