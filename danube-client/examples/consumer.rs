@@ -1,5 +1,6 @@
 use anyhow::Result;
 use danube_client::{DanubeClient, SchemaType, SubType};
+use futures_util::stream::StreamExt;
 use std::env;
 
 #[tokio::main]
@@ -27,11 +28,16 @@ async fn main() -> Result<()> {
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
-    while let Some(message) = message_stream.next_message().await {
-        // Process the message
-        println!("Received message: {:?}", message);
-
-        // Acknowledge the message or perform other actions
+    while let Some(message) = message_stream.next().await {
+        match message {
+            Ok(stream_message) => {
+                println!("Received message: {:?}", stream_message.messages);
+            }
+            Err(e) => {
+                eprintln!("Error receiving message: {}", e);
+                break;
+            }
+        }
     }
 
     Ok(())

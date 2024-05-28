@@ -71,7 +71,7 @@ impl Consumer {
     }
     pub async fn subscribe(&mut self) -> Result<()> {
         // Initialize the gRPC client connection
-        self.initialize_grpc_client().await?;
+        self.connect().await?;
 
         let req = ConsumerRequest {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
@@ -83,7 +83,7 @@ impl Consumer {
 
         let request = tonic::Request::new(req);
 
-        let mut client = self.stream_client.as_mut().unwrap().clone();
+        let mut client = self.stream_client.as_mut().unwrap();
         let response: std::result::Result<Response<ConsumerResponse>, Status> =
             client.subscribe(request).await;
 
@@ -110,40 +110,21 @@ impl Consumer {
     }
 
     // receive messages
-    pub async fn receive(&mut self) -> Result<MessageStream> {
+    pub async fn receive(
+        &mut self,
+    ) -> Result<impl Stream<Item = std::result::Result<StreamMessage, Status>>> {
         let receive_request = ReceiveRequest {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
             consumer_id: self.consumer_id.unwrap(),
         };
 
-        let mut client = self.stream_client.as_mut().unwrap().clone();
+        let mut stream_client = self.stream_client.as_mut().unwrap();
 
-        let mut stream = client.receive_messages(receive_request).await?.into_inner();
-
-        let (tx, rx) = mpsc::channel(4);
-
-        tokio::spawn(async move {
-            while let Some(message) = stream.message().await.transpose() {
-                match message {
-                    Ok(msg) => {
-                        if tx.send(msg).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error receiving message: {:?}", e);
-                        break;
-                    }
-                }
-            }
-        });
-
-        Ok(MessageStream {
-            inner: ReceiverStream::new(rx),
-        })
+        let response = stream_client.receive_messages(receive_request).await?;
+        Ok(response.into_inner())
     }
 
-    async fn initialize_grpc_client(&mut self) -> Result<()> {
+    async fn connect(&mut self) -> Result<()> {
         let grpc_cnx = self
             .client
             .cnx_manager
@@ -152,28 +133,6 @@ impl Consumer {
         let client = ConsumerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())
-    }
-}
-
-// Define the MessageStream struct
-pub struct MessageStream {
-    inner: ReceiverStream<StreamMessage>,
-}
-
-impl Stream for MessageStream {
-    type Item = StreamMessage;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        self.inner.poll_next_unpin(cx)
-    }
-}
-
-impl MessageStream {
-    pub async fn next_message(&mut self) -> Option<StreamMessage> {
-        self.next().await
     }
 }
 
