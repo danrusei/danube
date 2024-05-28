@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
+use tokio::sync::Mutex;
 
 use crate::proto::Schema;
 
@@ -93,14 +94,14 @@ impl Topic {
             }
         }
 
-        let data: Bytes = message.into();
+        // let data: Bytes = message.into();
 
         // Dispatch message to all consumers
 
         for (_name, subscription) in self.subscriptions.iter() {
-            let duplicate_data = data.clone();
+            let duplicate_data = message.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
-                dispatcher.send_messages(vec![duplicate_data]).await?;
+                dispatcher.send_messages(duplicate_data).await?;
             }
         }
 
@@ -112,7 +113,7 @@ impl Topic {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
-    ) -> Result<Consumer> {
+    ) -> Result<Arc<Mutex<Consumer>>> {
         //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
         let subscription = self
@@ -126,13 +127,13 @@ impl Topic {
 
         let consumer_id = get_random_id();
 
-        let consumer = Consumer::new(
+        let consumer = Arc::new(Mutex::new(Consumer::new(
             topic_name,
             consumer_id,
             options.consumer_name.as_str(),
             options.subscription_name.clone().as_str(),
             options.subscription_type,
-        );
+        )));
 
         //Todo! Check the topic policies with max_consumers per topic
 

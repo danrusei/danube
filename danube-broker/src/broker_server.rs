@@ -12,10 +12,11 @@ use crate::subscription::SubscriptionOptions;
 use crate::topic::Topic;
 
 //use prost::Message;
+use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
@@ -214,11 +215,10 @@ impl ConsumerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
-        match service.check_if_consumer_exist(
-            &req.consumer_name,
-            &req.subscription,
-            &req.topic_name,
-        ) {
+        match service
+            .check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name)
+            .await
+        {
             Some(consumer_id) => {
                 let response = ConsumerResponse {
                     request_id: req.request_id,
@@ -251,7 +251,10 @@ impl ConsumerService for DanubeServerImpl {
             consumer_name: req.consumer_name.clone(),
         };
 
-        let consumer_id = match service.subscribe(&req.topic_name, subscription_options) {
+        let consumer_id = match service
+            .subscribe(&req.topic_name, subscription_options)
+            .await
+        {
             Ok(id) => id,
             Err(err) => {
                 err_details.set_error_info("unable to subscribe", err.to_string(), HashMap::new());
@@ -278,7 +281,51 @@ impl ConsumerService for DanubeServerImpl {
         &self,
         request: tonic::Request<ReceiveRequest>,
     ) -> std::result::Result<tonic::Response<Self::ReceiveMessagesStream>, tonic::Status> {
-        todo!()
+        let (tx, rx) = mpsc::channel(4); // Buffer size of 4, adjust as needed
+        let (tx_consumer, mut rx_consumer) = mpsc::channel(4);
+        let consumer_id = request.into_inner().consumer_id;
+
+        let mut err_details = ErrorDetails::new();
+
+        let mut service = self.service.lock().await;
+
+        let consumer = if let Some(consumer) = service.get_consumer(consumer_id) {
+            consumer
+        } else {
+            err_details.set_bad_request(vec![FieldViolation::new(
+                "Consumer",
+                "Consumer with ID can't be found",
+            )]);
+            let status = Status::with_error_details(
+                Code::NotFound,
+                "the provided consumer ID does not exist",
+                err_details,
+            );
+            return Err(status);
+        };
+
+        consumer.lock().await.set_tx(tx_consumer);
+
+        ///  call the internal function to trigger the send_messages
+        ///  how to send the tx to Consumer ???????
+        ///
+        tokio::spawn(async move {
+            loop {
+                if let Some(messages) = rx_consumer.recv().await {
+                    let stream_messages = StreamMessage {
+                        request_id: 1,
+                        messages: messages,
+                    };
+                    if tx.send(Ok(stream_messages)).await.is_err() {
+                        break;
+                    }
+                }
+
+                //tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     // Consumer acknowledge the received message

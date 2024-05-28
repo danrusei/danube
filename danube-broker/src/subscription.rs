@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 
 use crate::{
     consumer::Consumer,
@@ -18,7 +19,7 @@ pub(crate) struct Subscription {
     pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
     // the consumers registered to the subscription, consumer_id -> Consumer
-    pub(crate) consumers: HashMap<u64, Consumer>,
+    pub(crate) consumers: HashMap<u64, Arc<Mutex<Consumer>>>,
     pub(crate) dispatcher: Option<Dispatcher>,
 }
 
@@ -45,11 +46,11 @@ impl Subscription {
         }
     }
     // Adds a consumer to the subscription
-    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+    pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
 
-        let mut dispatcher = match consumer.subscription_type {
+        let mut dispatcher = match consumer.lock().await.subscription_type {
             //Exclusive
             0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
                 &self.topic_name,
@@ -75,9 +76,8 @@ impl Subscription {
             }
         };
 
-        // is it ok to clone, or should I use ARC ?
         self.consumers
-            .insert(consumer.consumer_id, consumer.clone());
+            .insert(consumer.lock().await.consumer_id, consumer.clone());
 
         dispatcher.add_consumer(consumer);
 
@@ -109,10 +109,10 @@ impl Subscription {
     }
 
     // Get Consumer - returns consumer ID
-    pub(crate) fn get_consumer_id(&self, consumer_name: &str) -> Option<u64> {
+    pub(crate) async fn get_consumer_id(&self, consumer_name: &str) -> Option<u64> {
         for consumer in self.consumers.values() {
-            if consumer.consumer_name == consumer_name {
-                return Some(consumer.consumer_id);
+            if consumer.lock().await.consumer_name == consumer_name {
+                return Some(consumer.lock().await.consumer_id);
             }
         }
         None

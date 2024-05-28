@@ -3,7 +3,8 @@ use dashmap::DashMap;
 use std::any;
 use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::transport::Server;
 
 use crate::proto::{ProducerAccessMode, Schema};
@@ -29,7 +30,7 @@ pub(crate) struct BrokerService {
     // the list of active producers, mapping producer_id to topic_name
     pub(crate) producers: HashMap<u64, String>,
     // the list of active consumers
-    pub(crate) consumers: HashMap<u64, String>,
+    pub(crate) consumers: HashMap<u64, Arc<Mutex<Consumer>>>,
 }
 
 impl BrokerService {
@@ -100,6 +101,10 @@ impl BrokerService {
         todo!()
     }
 
+    pub(crate) fn get_consumer(&self, consumer_id: u64) -> Option<Arc<Mutex<Consumer>>> {
+        self.consumers.get(&consumer_id).cloned()
+    }
+
     pub(crate) fn check_if_producer_exist(
         &self,
         topic_name: String,
@@ -117,7 +122,7 @@ impl BrokerService {
         false
     }
 
-    pub(crate) fn check_if_consumer_exist(
+    pub(crate) async fn check_if_consumer_exist(
         &self,
         consumer_name: &str,
         subscription_name: &str,
@@ -134,7 +139,7 @@ impl BrokerService {
             None => return None,
         };
 
-        let consumer_id = match subscription.get_consumer_id(consumer_name) {
+        let consumer_id = match subscription.get_consumer_id(consumer_name).await {
             Some(id) => id,
             None => return None,
         };
@@ -154,7 +159,7 @@ impl BrokerService {
         true
     }
 
-    pub(crate) fn subscribe(
+    pub(crate) async fn subscribe(
         &mut self,
         topic_name: &str,
         subscription_options: SubscriptionOptions,
@@ -172,7 +177,11 @@ impl BrokerService {
             .subscribe(topic_name, subscription_options)
             .expect("should work");
 
-        Ok(consumer.consumer_id)
+        let consumer_id = consumer.lock().await.consumer_id;
+
+        self.consumers.entry(consumer_id).or_insert(consumer);
+
+        Ok(consumer_id)
     }
 
     // create a new producer and attach to the topic

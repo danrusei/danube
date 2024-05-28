@@ -1,17 +1,19 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
+use tokio::time::error::Elapsed;
 
 use crate::proto::consumer_request::SubscriptionType;
 use crate::subscription::{self, Subscription};
 
 /// Represents a consumer connected and associated with a Subscription.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub(crate) struct Consumer {
     pub(crate) topic_name: String,
     pub(crate) consumer_id: u64,
     pub(crate) consumer_name: String,
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be SubscriptionType,
+    pub(crate) tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
 }
 
 impl Consumer {
@@ -28,14 +30,30 @@ impl Consumer {
             consumer_name: consumer_name.into(),
             subscription_name: subscription_name.into(),
             subscription_type,
+            tx: None,
         }
     }
 
     // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(&self, entries: Vec<Bytes>, batch_size: usize) -> Result<()> {
-        let unacked_messages = entries.len();
+    pub(crate) async fn send_messages(&self, messages: Vec<u8>, batch_size: usize) -> Result<()> {
+        let unacked_messages = messages.len();
         //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
-        todo!()
+
+        // It attempts to send the message through the tx channel.
+        // If sending fails (e.g., if the client disconnects), it breaks the loop.
+        if let Some(tx) = &self.tx {
+            tx.send(messages);
+        } else {
+            return Err(anyhow!(
+                "unable to send the message, as the tx is not found"
+            ));
+        };
+
+        Ok(())
+    }
+
+    pub(crate) fn set_tx(&mut self, tx: tokio::sync::mpsc::Sender<Vec<u8>>) -> () {
+        self.tx = Some(tx);
     }
 
     // Close the consumer if: a. the connection is dropped
