@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use crate::topic::Topic;
 
 // Represents the connected producer
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Producer {
     pub(crate) producer_id: u64,
     pub(crate) producer_name: String,

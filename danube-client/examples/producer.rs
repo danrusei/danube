@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     let mut producer = client
         .new_producer()
         .with_topic(topic)
-        .with_name("test_producer")
+        .with_name("test_producer1")
         .with_schema("my_app".into(), SchemaType::Json(json_schema))
         .build();
 

@@ -21,13 +21,18 @@ async fn main() -> Result<()> {
         .with_subscription_type(SubType::Exclusive)
         .build();
 
+    // Subscribe to the topic
     consumer.subscribe().await?;
 
-    // while let Some(message) = consumer.receive().await? {
-    //     println!("Received message: {:?}", message);
+    // Start receiving messages
+    let mut message_stream = consumer.receive().await?;
 
-    //     // Acknowledge the message
-    // }
+    while let Some(message) = message_stream.next_message().await {
+        // Process the message
+        println!("Received message: {:?}", message);
+
+        // Acknowledge the message or perform other actions
+    }
 
     Ok(())
 }

@@ -2,9 +2,14 @@ use crate::{errors::Result, DanubeClient};
 
 use crate::proto::{
     consumer_service_client::ConsumerServiceClient, ConsumerRequest, ConsumerResponse,
+    ReceiveRequest, StreamMessage,
 };
 
+use futures_core::Stream;
+use futures_util::stream::StreamExt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
@@ -103,6 +108,41 @@ impl Consumer {
 
         Ok(())
     }
+
+    // receive messages
+    pub async fn receive(&mut self) -> Result<MessageStream> {
+        let receive_request = ReceiveRequest {
+            request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            consumer_id: self.consumer_id.unwrap(),
+        };
+
+        let mut client = self.stream_client.as_mut().unwrap().clone();
+
+        let mut stream = client.receive_messages(receive_request).await?.into_inner();
+
+        let (tx, rx) = mpsc::channel(4);
+
+        tokio::spawn(async move {
+            while let Some(message) = stream.message().await.transpose() {
+                match message {
+                    Ok(msg) => {
+                        if tx.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error receiving message: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(MessageStream {
+            inner: ReceiverStream::new(rx),
+        })
+    }
+
     async fn initialize_grpc_client(&mut self) -> Result<()> {
         let grpc_cnx = self
             .client
@@ -112,6 +152,28 @@ impl Consumer {
         let client = ConsumerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())
+    }
+}
+
+// Define the MessageStream struct
+pub struct MessageStream {
+    inner: ReceiverStream<StreamMessage>,
+}
+
+impl Stream for MessageStream {
+    type Item = StreamMessage;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.inner.poll_next_unpin(cx)
+    }
+}
+
+impl MessageStream {
+    pub async fn next_message(&mut self) -> Option<StreamMessage> {
+        self.next().await
     }
 }
 
