@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 use crate::{consumer::Consumer, subscription::Subscription, topic::Topic};
 
@@ -75,23 +76,30 @@ impl DispatcherSingleConsumer {
     pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
         // Handle Exclusive Subscription
         // the consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
-        if consumer.lock().await.subscription_type == 0 && !self.consumers.is_empty() {
+        let consumer_guard = consumer.lock().await;
+
+        if consumer_guard.subscription_type == 0 && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
             return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
         }
 
         // Handle Failover Subscription ... should be SubscriptionType::Failover
-        if consumer.lock().await.subscription_type == 2 {
-            self.consumers.push(consumer);
+        if consumer_guard.subscription_type == 2 {
+            self.consumers.push(consumer.clone());
             return Ok(());
         }
 
         // Handle Shared Subscription
-        self.consumers.push(consumer);
+        self.consumers.push(consumer.clone());
 
         if !self.pick_active_consumer().await {
             return Err(anyhow!("unable to pick an active Consumer"));
         }
+
+        info!(
+            "The dispatcher {:?} has added the consumer {}",
+            self, consumer_guard.consumer_name
+        );
 
         Ok(())
     }

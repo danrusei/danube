@@ -3,6 +3,7 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use std::{collections::HashMap, error::Error, sync::Arc};
 use tokio::sync::Mutex;
+use tracing::{info, trace};
 
 use crate::proto::Schema;
 
@@ -101,7 +102,16 @@ impl Topic {
         for (_name, subscription) in self.subscriptions.iter() {
             let duplicate_data = message.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
+                trace!(
+                    "The dispatcher associated to subscription {} is sending messages",
+                    subscription.subscription_name
+                );
                 dispatcher.send_messages(duplicate_data).await?;
+            } else {
+                trace!(
+                    "No dispatcher has been found for subscription {}",
+                    subscription.subscription_name
+                )
             }
         }
 
@@ -109,7 +119,7 @@ impl Topic {
     }
 
     // Subscribe to the topic and create a consumer for receiving messages
-    pub(crate) fn subscribe(
+    pub(crate) async fn subscribe(
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
@@ -138,7 +148,7 @@ impl Topic {
         //Todo! Check the topic policies with max_consumers per topic
 
         // is it ok to clone , or I should return just the ID, or ARC?
-        subscription.add_consumer(consumer.clone());
+        subscription.add_consumer(consumer.clone()).await?;
 
         Ok(consumer)
     }

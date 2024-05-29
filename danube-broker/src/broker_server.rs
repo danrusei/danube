@@ -21,7 +21,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, FieldViolation, StatusExt};
-use tracing::info;
+use tracing::{info, trace, Level};
 
 #[derive(Debug, Clone)]
 pub(crate) struct DanubeServerImpl {
@@ -48,6 +48,8 @@ impl DanubeServerImpl {
             .serve(socket_addr)
             .await?;
 
+        info!("Server is listening on address: {socket_addr}");
+
         Ok(())
     }
 }
@@ -55,6 +57,7 @@ impl DanubeServerImpl {
 #[tonic::async_trait]
 impl ProducerService for DanubeServerImpl {
     // CMD to create a new Producer
+    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_producer(
         &self,
         request: Request<ProducerRequest>,
@@ -62,7 +65,7 @@ impl ProducerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "{} {} {}",
+            "New Producer request: {} {} {}",
             req.request_id, req.producer_name, req.topic_name,
         );
 
@@ -114,6 +117,8 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
+        info!("New producer has been created with id: {new_producer_id}");
+
         let response = ProducerResponse {
             request_id: req.request_id,
             producer_name: req.producer_name,
@@ -123,13 +128,19 @@ impl ProducerService for DanubeServerImpl {
         Ok(tonic::Response::new(response))
     }
 
+    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn send_message(
         &self,
         request: Request<MessageRequest>,
     ) -> Result<Response<MessageResponse>, tonic::Status> {
         let req = request.into_inner();
 
-        info!("{} {} {:?}", req.request_id, req.producer_id, req.metadata);
+        trace!(
+            "A new message {} from producer {} with metadata {:?} was received",
+            req.request_id,
+            req.producer_id,
+            req.metadata
+        );
 
         let mut err_details = ErrorDetails::new();
 
@@ -198,6 +209,7 @@ impl ProducerService for DanubeServerImpl {
 impl ConsumerService for DanubeServerImpl {
     type ReceiveMessagesStream = ReceiverStream<Result<StreamMessage, Status>>;
     // CMD to create a new Consumer
+    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn subscribe(
         &self,
         request: Request<ConsumerRequest>,
@@ -205,8 +217,8 @@ impl ConsumerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "{} {} {}",
-            req.request_id, req.consumer_name, req.topic_name,
+            "New request: {} form the consumer: {} for topic: {} with subscription_type {}",
+            req.request_id, req.consumer_name, req.topic_name, req.subscription_type
         );
 
         let mut err_details = ErrorDetails::new();
@@ -277,6 +289,7 @@ impl ConsumerService for DanubeServerImpl {
     }
 
     // Stream of messages to Consumer
+    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn receive_messages(
         &self,
         request: tonic::Request<ReceiveRequest>,
@@ -284,6 +297,11 @@ impl ConsumerService for DanubeServerImpl {
         let (tx, rx) = mpsc::channel(4); // Buffer size of 4, adjust as needed
         let (tx_consumer, mut rx_consumer) = mpsc::channel(4);
         let consumer_id = request.into_inner().consumer_id;
+
+        info!(
+            "The consumer {} requested to receive messages on the registrared topic",
+            consumer_id
+        );
 
         let mut err_details = ErrorDetails::new();
 

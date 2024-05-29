@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::Server;
+use tracing::info;
 
 use crate::proto::{ProducerAccessMode, Schema};
 use crate::{
@@ -173,9 +174,7 @@ impl BrokerService {
         // if it's owened by this instance continue,
         // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
 
-        let consumer = topic
-            .subscribe(topic_name, subscription_options)
-            .expect("should work");
+        let consumer = topic.subscribe(topic_name, subscription_options).await?;
 
         let consumer_id = consumer.lock().await.consumer_id;
 
@@ -208,6 +207,7 @@ impl BrokerService {
             }
             Entry::Occupied(entry) => {
                 //let current_producer = entry.get();
+                info!("the requested producer: {} already exists", entry.key());
                 return Err(anyhow!(" the producer already exist"));
             }
         }

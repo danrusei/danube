@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
+use tracing::{info, trace};
 
 use crate::{
     consumer::Consumer,
@@ -50,7 +51,9 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
 
-        let mut dispatcher = match consumer.lock().await.subscription_type {
+        let consumer_guard = consumer.lock().await;
+
+        let mut dispatcher = match consumer_guard.subscription_type {
             //Exclusive
             0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
                 &self.topic_name,
@@ -77,9 +80,14 @@ impl Subscription {
         };
 
         self.consumers
-            .insert(consumer.lock().await.consumer_id, consumer.clone());
+            .insert(consumer_guard.consumer_id, consumer.clone());
 
-        dispatcher.add_consumer(consumer);
+        dispatcher.add_consumer(consumer.clone()).await?;
+
+        info!(
+            "A dispatcher {:?} has been added on subscription {}",
+            dispatcher, self.subscription_name
+        );
 
         self.dispatcher = Some(dispatcher);
 

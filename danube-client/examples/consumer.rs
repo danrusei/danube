@@ -5,6 +5,9 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Setup tracing
+    tracing_subscriber::fmt::init();
+
     let client = DanubeClient::builder()
         .service_url("http://[::1]:6650")
         .build()
