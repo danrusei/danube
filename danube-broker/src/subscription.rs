@@ -84,9 +84,10 @@ impl Subscription {
 
         dispatcher.add_consumer(consumer.clone()).await?;
 
-        info!(
+        trace!(
             "A dispatcher {:?} has been added on subscription {}",
-            dispatcher, self.subscription_name
+            dispatcher,
+            self.subscription_name
         );
 
         self.dispatcher = Some(dispatcher);

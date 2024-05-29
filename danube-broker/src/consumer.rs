@@ -43,7 +43,7 @@ impl Consumer {
         // It attempts to send the message through the tx channel.
         // If sending fails (e.g., if the client disconnects), it breaks the loop.
         if let Some(tx) = &self.tx {
-            tx.send(messages);
+            tx.send(messages).await?;
             trace!("Consumer instace is sending the message over channel");
         } else {
             return Err(anyhow!(

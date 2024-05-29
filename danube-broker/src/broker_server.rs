@@ -65,8 +65,8 @@ impl ProducerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "New Producer - request_id: {} with name: {} for topic: {}",
-            req.request_id, req.producer_name, req.topic_name,
+            "New Producer request with name: {} for topic: {}",
+            req.producer_name, req.topic_name,
         );
 
         let mut err_details = ErrorDetails::new();
@@ -120,7 +120,10 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
-        info!("New producer has been created with id: {new_producer_id}");
+        info!(
+            "The Producer with name: {} and with id: {}, has been created",
+            req.producer_name, new_producer_id
+        );
 
         let response = ProducerResponse {
             request_id: req.request_id,
@@ -220,8 +223,8 @@ impl ConsumerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "New Consumer - request_id: {} with name: {} for topic: {} with subscription_type {}",
-            req.request_id, req.consumer_name, req.topic_name, req.subscription_type
+            "New Consumer request with name: {} for topic: {} with subscription_type {}",
+            req.consumer_name, req.topic_name, req.subscription_type
         );
 
         let mut err_details = ErrorDetails::new();
@@ -266,6 +269,8 @@ impl ConsumerService for DanubeServerImpl {
             consumer_name: req.consumer_name.clone(),
         };
 
+        let sub_name = subscription_options.subscription_name.clone();
+
         let consumer_id = match service
             .subscribe(&req.topic_name, subscription_options)
             .await
@@ -281,6 +286,11 @@ impl ConsumerService for DanubeServerImpl {
                 return Err(status);
             }
         };
+
+        info!(
+            "The Consumer with id: {} for subscription: {}, has been created.",
+            consumer_id, sub_name
+        );
 
         let response = ConsumerResponse {
             request_id: req.request_id,
@@ -302,7 +312,7 @@ impl ConsumerService for DanubeServerImpl {
         let consumer_id = request.into_inner().consumer_id;
 
         info!(
-            "The consumer: {} requested to receive messages from the topic",
+            "The Consumer with id: {} requested to receive messages",
             consumer_id
         );
 

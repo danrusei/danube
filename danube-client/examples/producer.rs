@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
 
     let mut i = 0;
 
-    while i < 10 {
+    while i < 20 {
         let data = json!({
             "field1": format!{"value{}", i},
             "field2": 2020+i,
