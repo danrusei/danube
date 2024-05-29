@@ -65,7 +65,7 @@ impl ProducerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "New Producer request: {} {} {}",
+            "New Producer - request_id: {} with name: {} for topic: {}",
             req.request_id, req.producer_name, req.topic_name,
         );
 
@@ -75,7 +75,10 @@ impl ProducerService for DanubeServerImpl {
 
         match service.find_or_create_topic(&req.topic_name, req.schema, true) {
             Ok(topic_name) => {
-                info!("topic_name: {} exist or was created", topic_name)
+                trace!(
+                    "topic_name: {} was found or was successfully created",
+                    topic_name
+                )
             }
             Err(err) => {
                 err_details.set_bad_request(vec![FieldViolation::new("Topic", err.to_string())]);
@@ -136,7 +139,7 @@ impl ProducerService for DanubeServerImpl {
         let req = request.into_inner();
 
         trace!(
-            "A new message {} from producer {} with metadata {:?} was received",
+            "New message {} from producer {} with metadata {:?} was received",
             req.request_id,
             req.producer_id,
             req.metadata
@@ -217,7 +220,7 @@ impl ConsumerService for DanubeServerImpl {
         let req = request.into_inner();
 
         info!(
-            "New request: {} form the consumer: {} for topic: {} with subscription_type {}",
+            "New Consumer - request_id: {} with name: {} for topic: {} with subscription_type {}",
             req.request_id, req.consumer_name, req.topic_name, req.subscription_type
         );
 
@@ -299,7 +302,7 @@ impl ConsumerService for DanubeServerImpl {
         let consumer_id = request.into_inner().consumer_id;
 
         info!(
-            "The consumer {} requested to receive messages on the registrared topic",
+            "The consumer: {} requested to receive messages from the topic",
             consumer_id
         );
 
@@ -330,13 +333,20 @@ impl ConsumerService for DanubeServerImpl {
         tokio::spawn(async move {
             loop {
                 if let Some(messages) = rx_consumer.recv().await {
+                    let request_id = 1;
+
                     let stream_messages = StreamMessage {
-                        request_id: 1,
+                        request_id: request_id,
                         messages: messages,
                     };
+
                     if tx.send(Ok(stream_messages)).await.is_err() {
                         break;
                     }
+                    trace!(
+                        "The message with request_id: {} was sent to consumer",
+                        request_id
+                    );
                 }
 
                 //tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

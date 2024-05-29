@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use tokio::time::error::Elapsed;
+use tracing::trace;
 
 use crate::proto::consumer_request::SubscriptionType;
 use crate::subscription::{self, Subscription};
@@ -43,6 +44,7 @@ impl Consumer {
         // If sending fails (e.g., if the client disconnects), it breaks the loop.
         if let Some(tx) = &self.tx {
             tx.send(messages);
+            trace!("Consumer instace is sending the message over channel");
         } else {
             return Err(anyhow!(
                 "unable to send the message, as the tx is not found"

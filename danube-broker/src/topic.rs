@@ -103,7 +103,7 @@ impl Topic {
             let duplicate_data = message.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
                 trace!(
-                    "The dispatcher associated to subscription {} is sending messages",
+                    "A dispatcher was found for the subscription {}",
                     subscription.subscription_name
                 );
                 dispatcher.send_messages(duplicate_data).await?;
