@@ -1,12 +1,12 @@
-use crate::errors::DanubeError;
 use crate::proto::{
     producer_service_client::ProducerServiceClient, MessageRequest, MessageResponse,
     ProducerAccessMode, ProducerRequest, ProducerResponse,
 };
-use crate::{errors::Result, DanubeClient};
 use crate::{
+    errors::{DanubeError, Result},
     message::{MessageMetadata, SendMessage},
     schema::{Schema, SchemaType},
+    DanubeClient,
 };
 
 use bytes::Bytes;
@@ -59,7 +59,7 @@ impl Producer {
             stream_client: None,
         }
     }
-    pub async fn create(&mut self) -> Result<()> {
+    pub async fn create(&mut self) -> Result<u64> {
         // Initialize the gRPC client connection
         self.initialize_grpc_client().await?;
 
@@ -86,24 +86,15 @@ impl Producer {
 
         match response {
             Ok(resp) => {
-                let r = resp.into_inner();
-                self.producer_id = Some(r.producer_id);
-                println!(
-                    "Response: req_id: {:?}, producer_id: {:?}",
-                    r.request_id, r.producer_id
-                );
+                let response = resp.into_inner();
+                self.producer_id = Some(response.producer_id);
+                return Ok(response.producer_id);
             }
             Err(status) => {
-                //let err_details = status.get_error_details();
-                match status.get_error_details() {
-                    error_details => {
-                        println!("Invalid request: {:?}", error_details)
-                    }
-                }
+                // maybe some checks on the status, if anything can be handled by server
+                return Err(DanubeError::FromStatus(status));
             }
         };
-
-        Ok(())
     }
 
     // the Producer sends messages to the topic

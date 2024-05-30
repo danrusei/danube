@@ -81,12 +81,7 @@ impl ProducerService for DanubeServerImpl {
                 )
             }
             Err(err) => {
-                err_details.set_bad_request(vec![FieldViolation::new("Topic", err.to_string())]);
-                let status = Status::with_error_details(
-                    Code::PermissionDenied,
-                    "not able to create the Topic",
-                    err_details,
-                );
+                let status = Status::invalid_argument(err.to_string());
                 return Err(status);
             }
         }

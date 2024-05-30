@@ -24,8 +24,8 @@ use crate::{
 // Topics are responsible for accepting messages from producers
 // and ensuring they are delivered to the correct subscriptions.
 //
-// Topics provide the functionality for consumers to subscribe to them,
-// linking consumers to the appropriate subscriptions.
+// Topics string representation:  /{namespace}/{topic-name}
+//
 #[derive(Debug)]
 pub(crate) struct Topic {
     pub(crate) topic_name: String,

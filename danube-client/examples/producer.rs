@@ -28,7 +28,8 @@ async fn main() -> Result<()> {
         .with_schema("my_app".into(), SchemaType::Json(json_schema))
         .build();
 
-    producer.create().await?;
+    let prod_id = producer.create().await?;
+    println!("The Producer was created with ID: {:?}", prod_id);
 
     let mut i = 0;
 

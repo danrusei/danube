@@ -57,7 +57,9 @@ impl BrokerService {
         }
 
         if !validate_topic(topic_name) {
-            return Err(anyhow!("The topic name has invalid format"));
+            return Err(anyhow!(
+                "The topic has an invalid format, should be: /namespace_name/topic_name"
+            ));
         }
 
         // If the topic does not exist and create_if_missing is false
@@ -249,15 +251,19 @@ impl BrokerService {
     // }
 }
 
+// Topics string representation:  /{namespace}/{topic-name}
 fn validate_topic(input: &str) -> bool {
-    // length from 5 to 20 characters
-    if input.len() < 5 || input.len() > 20 {
+    let parts: Vec<&str> = input.split('/').collect();
+
+    if parts.len() != 2 {
         return false;
     }
 
-    // allowed characters are letters, numbers and "_"
-    for ch in input.chars() {
-        if !ch.is_alphanumeric() && ch != '_' {
+    for part in parts.iter() {
+        if !part
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             return false;
         }
     }
