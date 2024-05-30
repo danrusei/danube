@@ -4,14 +4,14 @@ use tokio::sync::Mutex;
 use crate::broker_server;
 use crate::metadata_store::{EtcdMetadataStore, MemoryMetadataStore, MetadataStorage};
 
-use crate::resources::DanubeResources;
+use crate::resources::Resources;
 use crate::service_configuration::ServiceConfiguration;
 use crate::{broker_service::BrokerService, storage};
 
 #[derive(Debug)]
 pub(crate) struct DanubeService {
     config: ServiceConfiguration,
-    resources: DanubeResources,
+    resources: Resources,
     broker: Arc<Mutex<BrokerService>>,
 }
 
@@ -20,7 +20,7 @@ impl DanubeService {
     pub(crate) fn new(service_config: ServiceConfiguration) -> Self {
         DanubeService {
             config: service_config,
-            resources: DanubeResources::new(),
+            resources: Resources::new(),
             broker: Arc::new(Mutex::new(BrokerService::new())),
         }
     }

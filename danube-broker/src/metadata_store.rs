@@ -6,6 +6,7 @@ pub(crate) use memory_metadata_store::MemoryMetadataStore;
 use serde_json::Value;
 use std::error::Error;
 
+// MetadataStore is the storage layer for Danube Metadata
 pub(crate) trait MetadataStore {
     // Read the value of one key, identified by the path
     async fn get(&mut self, path: &str) -> Result<Value, Box<dyn Error>>;
