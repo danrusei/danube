@@ -34,7 +34,7 @@ struct Args {
 
     /// Danube Broker advertised address
     #[arg(short, long, default_value = "[::1]:6650")]
-    advertised_address: String,
+    server_addr: String,
 
     /// ETCD address
     #[arg(short, long)]
@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let broker_addr: std::net::SocketAddr = args.advertised_address.parse()?;
+    let broker_addr: std::net::SocketAddr = args.server_addr.parse()?;
 
     let broker_config = ServiceConfiguration {
         broker_addr: broker_addr,
