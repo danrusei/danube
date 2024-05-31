@@ -15,9 +15,7 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = env::var("DANUBE_TOPIC")
-        .ok()
-        .unwrap_or_else(|| "public_test".to_string());
+    let topic = "/default/test_topic".to_string();
 
     let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
 
@@ -44,7 +42,8 @@ async fn main() -> Result<()> {
         let encoded_data = json_string.as_bytes().to_vec();
 
         // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
-        producer.send(encoded_data).await?;
+        let message_id = producer.send(encoded_data).await?;
+        println!("The Message with id {} was sent", message_id);
 
         thread::sleep(Duration::from_secs(1));
         i += 1;

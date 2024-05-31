@@ -13,9 +13,7 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = env::var("DANUBE_TOPIC")
-        .ok()
-        .unwrap_or_else(|| "public_test".to_string());
+    let topic = "/default/test_topic".to_string();
 
     let mut consumer = client
         .new_consumer()
@@ -26,7 +24,8 @@ async fn main() -> Result<()> {
         .build();
 
     // Subscribe to the topic
-    consumer.subscribe().await?;
+    let consumer_id = consumer.subscribe().await?;
+    println!("The Consumer with ID: {:?} was created", consumer_id);
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;

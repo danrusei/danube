@@ -1,4 +1,7 @@
-use crate::{errors::Result, DanubeClient};
+use crate::{
+    errors::{DanubeError, Result},
+    DanubeClient,
+};
 
 use crate::proto::{
     consumer_service_client::ConsumerServiceClient, ConsumerRequest, ConsumerResponse,
@@ -69,7 +72,7 @@ impl Consumer {
             stream_client: None,
         }
     }
-    pub async fn subscribe(&mut self) -> Result<()> {
+    pub async fn subscribe(&mut self) -> Result<u64> {
         // Initialize the gRPC client connection
         self.connect().await?;
 
@@ -91,22 +94,11 @@ impl Consumer {
             Ok(resp) => {
                 let r = resp.into_inner();
                 self.consumer_id = Some(r.consumer_id);
-                println!(
-                    "Response: req_id: {:?}, consumer_id: {:?}",
-                    r.request_id, r.consumer_id
-                );
+                return Ok(r.consumer_id);
             }
-            Err(status) => {
-                //let err_details = status.get_error_details();
-                match status.get_error_details() {
-                    error_details => {
-                        println!("Invalid request: {:?}", error_details)
-                    }
-                }
-            }
+            // maybe some checks on the status, if anything can be handled by server
+            Err(status) => return Err(DanubeError::FromStatus(status)),
         };
-
-        Ok(())
     }
 
     // receive messages

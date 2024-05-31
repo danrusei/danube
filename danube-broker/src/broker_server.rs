@@ -73,7 +73,7 @@ impl ProducerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
-        match service.find_or_create_topic(&req.topic_name, req.schema, true) {
+        match service.get_topic(&req.topic_name, req.schema, true) {
             Ok(topic_name) => {
                 trace!(
                     "topic_name: {} was found or was successfully created",
@@ -89,12 +89,8 @@ impl ProducerService for DanubeServerImpl {
         //Todo! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
 
         if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
-            err_details.set_bad_request(vec![FieldViolation::new(
-                "Producer",
-                "This producer is already present on the connection",
-            )]);
             let status =
-                Status::with_error_details(Code::AlreadyExists, "bad request", err_details);
+                Status::already_exists("This producer is already present on the connection");
             return Err(status);
         }
 
@@ -105,12 +101,10 @@ impl ProducerService for DanubeServerImpl {
         ) {
             Ok(prod_id) => prod_id,
             Err(err) => {
-                err_details.set_bad_request(vec![FieldViolation::new("Producer", err.to_string())]);
-                let status = Status::with_error_details(
-                    Code::AlreadyExists,
-                    "not able to create the Producer",
-                    err_details,
-                );
+                let status = Status::permission_denied(format!(
+                    "Not able to create the Producer: {}",
+                    err.to_string(),
+                ));
                 return Err(status);
             }
         };
@@ -148,18 +142,13 @@ impl ProducerService for DanubeServerImpl {
         let arc_service = self.service.clone();
         let mut service = arc_service.lock().await;
 
-        // check if the producer was created and get topic_name
+        // check if the producer exist
         match service.producers.entry(req.producer_id) {
             Entry::Vacant(_) => {
-                err_details.set_bad_request(vec![FieldViolation::new(
-                    "Producer",
-                    "the producer with id {req.producer_id} does not exist",
-                )]);
-                let status = Status::with_error_details(
-                    Code::InvalidArgument,
-                    "Unable to find the Producer",
-                    err_details,
-                );
+                let status = Status::not_found(format!(
+                    "The producer with id {} does not exist",
+                    req.producer_id
+                ));
                 return Err(status);
             }
             Entry::Occupied(_) => (),
@@ -168,17 +157,16 @@ impl ProducerService for DanubeServerImpl {
         let topic = match service.get_topic_for_producer(req.producer_id) {
             Ok(topic) => topic,
             Err(err) => {
-                err_details.set_bad_request(vec![FieldViolation::new("Topic", err.to_string())]);
-                let status = Status::with_error_details(
-                    Code::InvalidArgument,
-                    "Unable to get the topic for the producer",
-                    err_details,
-                );
+                // Should not happen, as the Producer can only be created if it's associated with the Topic
+                let status = Status::internal(format!(
+                    "Unable to get the topic for the producer: {}",
+                    err.to_string()
+                ));
                 return Err(status);
             }
         };
 
-        //TODO! this should not be Option, as it is mandatory to be present with the message request
+        //TODO! should not be an Option, as it is mandatory to be present in the message request
         let meta = req.metadata.unwrap();
 
         match topic
@@ -187,12 +175,10 @@ impl ProducerService for DanubeServerImpl {
         {
             Ok(_) => (),
             Err(err) => {
-                err_details.set_bad_request(vec![FieldViolation::new("Producer", err.to_string())]);
-                let status = Status::with_error_details(
-                    Code::Internal,
-                    "Unable to publish the message",
-                    err_details,
-                );
+                let status = Status::permission_denied(format!(
+                    "Unable to publish the message: {}",
+                    err.to_string()
+                ));
                 return Err(status);
             }
         };
@@ -228,6 +214,16 @@ impl ConsumerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
+        match service.get_topic(&req.topic_name, None, false) {
+            Ok(topic_name) => {
+                trace!("topic_name: {} was found ", topic_name)
+            }
+            Err(err) => {
+                let status = Status::invalid_argument(err.to_string());
+                return Err(status);
+            }
+        }
+
         match service
             .check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name)
             .await
@@ -240,20 +236,18 @@ impl ConsumerService for DanubeServerImpl {
                 };
                 return Ok(tonic::Response::new(response));
             }
-            None => {}
+            None => {
+                // if the consumer doesn't exist it attempts to create below
+            }
         }
 
-        // check if the topic policies allow the creation of the subscription if it doesn't exist
+        // check if the topic policies allow the creation of the subscription
         if !service.allow_subscription_creation(&req.topic_name) {
-            err_details.set_bad_request(vec![FieldViolation::new(
-                "Subscription",
-                "Creation not allowed",
-            )]);
-            let status = Status::with_error_details(
-                Code::PermissionDenied,
-                "not allowed to create subscription on the topic",
-                err_details,
-            );
+            let status = Status::permission_denied(format!(
+                "Not allowed to create the subscription for the topic: {}",
+                &req.topic_name
+            ));
+
             return Err(status);
         }
 
@@ -272,12 +266,11 @@ impl ConsumerService for DanubeServerImpl {
         {
             Ok(id) => id,
             Err(err) => {
-                err_details.set_error_info("unable to subscribe", err.to_string(), HashMap::new());
-                let status = Status::with_error_details(
-                    Code::PermissionDenied,
-                    "not abled to subscribe to the topic",
-                    err_details,
-                );
+                let status = Status::permission_denied(format!(
+                    "Not able to subscribe to the topic {} due to {}",
+                    &req.topic_name,
+                    err.to_string()
+                ));
                 return Err(status);
             }
         };
@@ -318,23 +311,17 @@ impl ConsumerService for DanubeServerImpl {
         let consumer = if let Some(consumer) = service.get_consumer(consumer_id) {
             consumer
         } else {
-            err_details.set_bad_request(vec![FieldViolation::new(
-                "Consumer",
-                "Consumer with ID can't be found",
-            )]);
-            let status = Status::with_error_details(
-                Code::NotFound,
-                "the provided consumer ID does not exist",
-                err_details,
-            );
+            let status = Status::not_found(format!(
+                "The consumer with the id {} does not exist",
+                consumer_id
+            ));
             return Err(status);
         };
 
+        // sends the channel's tx to consumer
         consumer.lock().await.set_tx(tx_consumer);
 
-        ///  call the internal function to trigger the send_messages
-        ///  how to send the tx to Consumer ???????
-        ///
+        //for each consumer spawn a task to send messages
         tokio::spawn(async move {
             loop {
                 if let Some(messages) = rx_consumer.recv().await {
@@ -353,8 +340,6 @@ impl ConsumerService for DanubeServerImpl {
                         request_id
                     );
                 }
-
-                //tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         });
 

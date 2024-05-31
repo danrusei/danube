@@ -61,7 +61,7 @@ impl Producer {
     }
     pub async fn create(&mut self) -> Result<u64> {
         // Initialize the gRPC client connection
-        self.initialize_grpc_client().await?;
+        self.connect().await?;
 
         // default schema is Bytes if not specified
         let mut schema = Schema::new("bytes_schema".into(), SchemaType::Bytes);
@@ -90,15 +90,13 @@ impl Producer {
                 self.producer_id = Some(response.producer_id);
                 return Ok(response.producer_id);
             }
-            Err(status) => {
-                // maybe some checks on the status, if anything can be handled by server
-                return Err(DanubeError::FromStatus(status));
-            }
+            // maybe some checks on the status, if anything can be handled by server
+            Err(status) => return Err(DanubeError::FromStatus(status)),
         };
     }
 
     // the Producer sends messages to the topic
-    pub async fn send(&self, data: Vec<u8>) -> Result<()> {
+    pub async fn send(&self, data: Vec<u8>) -> Result<u64> {
         let publish_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
@@ -127,19 +125,14 @@ impl Producer {
 
         match response {
             Ok(resp) => {
-                let r = resp.into_inner();
-                println!("Message sent: {:?}", r);
+                let response = resp.into_inner();
+                return Ok(response.sequence_id);
             }
-            Err(status) => match status.get_error_details() {
-                error_details => {
-                    println!("Failed to send message: {:?}", error_details)
-                }
-            },
-        };
-
-        Ok(())
+            // maybe some checks on the status, if anything can be handled by server
+            Err(status) => return Err(DanubeError::FromStatus(status)),
+        }
     }
-    async fn initialize_grpc_client(&mut self) -> Result<()> {
+    async fn connect(&mut self) -> Result<()> {
         let grpc_cnx = self
             .client
             .cnx_manager
