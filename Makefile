@@ -50,8 +50,10 @@ etcd-clean:
 brokers:
 	@echo "Building Danube brokers..."
 	@for port in $(BROKER_PORTS); do \
+		log_file="broker_$$port.log"; \
+		echo "Starting broker on port $$port, logging to $$log_file"; \
 		cargo build --release --package danube-broker --bin danube-broker && \
-		RUST_BACKTRACE=1 ./target/release/danube-broker --server-addr "[::1]:"$$port & \
+		RUST_BACKTRACE=1 ./target/release/danube-broker --server-addr "[::1]:"$$port > temp/$$log_file 2>&1 & \
 	done
 	@echo "Danube brokers started on ports: $(BROKER_PORTS)"
 
