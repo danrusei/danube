@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::{anyhow, Context, Result};
 use dashmap::DashMap;
 use std::any;
 use std::collections::{hash_map::Entry, HashMap};
@@ -21,13 +21,12 @@ use crate::{
 // adn facilitate the creation of producers and subscriptions.
 #[derive(Debug)]
 pub(crate) struct BrokerService {
-    //broker_addr: SocketAddr,
+    // the id of the broker
+    pub(crate) broker_id: u64,
     // a map with namespace wise topics - Namespace --> topicName --> topic
     //topics: DashMap<String, DashMap<String, Topic>>,
     // topic_name to Topic
     pub(crate) topics: HashMap<String, Topic>,
-    // brokers to register listeners for configuration changes or updates
-    // config_listeners: DashMap<String, Consumer>,
     // the list of active producers, mapping producer_id to topic_name
     pub(crate) producers: HashMap<u64, String>,
     // the list of active consumers
@@ -36,10 +35,9 @@ pub(crate) struct BrokerService {
 
 impl BrokerService {
     pub(crate) fn new() -> Self {
+        let broker_id = get_random_id();
         BrokerService {
-            //broker_addr: broker_addr,
-            //topics: DashMap::new(),
-            //config_listeners: DashMap::new,
+            broker_id,
             topics: HashMap::new(),
             producers: HashMap::new(),
             consumers: HashMap::new(),

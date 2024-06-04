@@ -1,6 +1,7 @@
 mod broker_server;
 mod broker_service;
 mod consumer;
+mod controller;
 mod danube_service;
 mod dispatcher;
 mod metadata_store;
@@ -28,17 +29,21 @@ pub(crate) mod proto {
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// Cluster Name
+    #[arg(short, long)]
+    cluster_name: String,
+
     /// Path to config file
     #[arg(short, long)]
     config_file: Option<String>,
 
     /// Danube Broker advertised address
     #[arg(short, long, default_value = "[::1]:6650")]
-    server_addr: String,
+    broker_addr: String,
 
-    /// ETCD address
+    /// Metadata store address
     #[arg(short, long)]
-    etcd_addr: Option<String>,
+    meta_store_addr: Option<String>,
 }
 
 #[tokio::main]
@@ -48,11 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let broker_addr: std::net::SocketAddr = args.server_addr.parse()?;
+    let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
 
     let broker_config = ServiceConfiguration {
+        cluster_name: args.cluster_name,
         broker_addr: broker_addr,
-        etcd_addr: args.etcd_addr,
+        meta_store_addr: args.meta_store_addr,
     };
 
     let mut danube = DanubeService::new(broker_config);

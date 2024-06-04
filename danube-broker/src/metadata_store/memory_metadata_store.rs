@@ -1,27 +1,27 @@
+use anyhow::{anyhow, Result};
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::error::Error;
 
-use crate::metadata_store::MetadataStore;
+use crate::metadata_store::{MetaOptions, MetadataStore};
 
-#[derive(Debug)]
+use super::MetadataStoreConfig;
+
+/// Should be used for only one Broker instance, not available in Cluster mode
+#[derive(Debug, Clone)]
 pub(crate) struct MemoryMetadataStore {
     inner: DashMap<String, BTreeMap<String, Value>>,
 }
 
 impl MemoryMetadataStore {
-    pub(crate) async fn new() -> Result<Self, Box<dyn Error>> {
+    pub(crate) async fn new(_store_config: MetadataStoreConfig) -> Result<Self> {
         Ok(MemoryMetadataStore {
             inner: DashMap::new(),
         })
     }
 
-    fn get_map(
-        &self,
-        path: &str,
-    ) -> Result<RefMut<String, BTreeMap<String, Value>>, Box<dyn Error>> {
+    fn get_map(&self, path: &str) -> Result<RefMut<String, BTreeMap<String, Value>>> {
         let parts: Vec<&str> = path.split('/').take(3).collect();
         let key = parts.join("/");
 
@@ -33,7 +33,7 @@ impl MemoryMetadataStore {
 
 impl MetadataStore for MemoryMetadataStore {
     // Read the value of one key, identified by the path
-    async fn get(&mut self, path: &str) -> Result<Value, Box<dyn Error>> {
+    async fn get(&mut self, path: &str, _get_options: MetaOptions) -> Result<Value> {
         let bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
@@ -41,12 +41,12 @@ impl MetadataStore for MemoryMetadataStore {
 
         match bmap.get(&key) {
             Some(value) => Ok(value.clone()),
-            None => Err(From::from("Key not found")),
+            None => Err(anyhow!("Key not found")),
         }
     }
 
     // Return all the paths that are children to the specific path.
-    async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>> {
         let bmap = self.get_map(path)?;
         let mut child_paths = Vec::new();
 
@@ -66,14 +66,14 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Put a new value for a given key
-    async fn put(&mut self, path: &str, value: Value) -> Result<(), Box<dyn Error>> {
+    async fn put(&mut self, path: &str, value: Value, _put_options: MetaOptions) -> Result<()> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
         if key.is_empty() {
-            return Err(From::from("wrong path"));
+            return Err(anyhow!("wrong path"));
         }
 
         bmap.insert(key, value);
@@ -82,14 +82,14 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Delete the key / value from the store
-    async fn delete(&mut self, path: &str) -> Result<Option<Value>, Box<dyn Error>> {
+    async fn delete(&mut self, path: &str) -> Result<Option<Value>> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
         if key.is_empty() {
-            return Err(From::from("wrong path"));
+            return Err(anyhow!("wrong path"));
         }
 
         let value = bmap.remove(&key);
@@ -97,7 +97,7 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Delete a key-value pair and all the children nodes
-    async fn delete_recursive(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
+    async fn delete_recursive(&mut self, path: &str) -> Result<()> {
         let mut bmap = self.get_map(path)?;
         let mut keys_to_remove = Vec::new();
 
@@ -114,10 +114,14 @@ impl MetadataStore for MemoryMetadataStore {
         }
 
         for key in keys_to_remove {
-            let _ = bmap.remove(&key).ok_or("unable to remove key".to_owned())?;
+            let _ = bmap.remove(&key).ok_or(anyhow!("unable to remove key"))?;
         }
 
         Ok(())
+    }
+
+    fn get_client(&mut self) -> Option<etcd_client::Client> {
+        None
     }
 }
 
@@ -126,8 +130,9 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_put_get_delete() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = MemoryMetadataStore::new().await?;
+    async fn test_put_get_delete() -> Result<()> {
+        let store_config = MetadataStoreConfig::new();
+        let mut store = MemoryMetadataStore::new(store_config).await?;
 
         let topic_id = "another-topic";
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
@@ -135,29 +140,33 @@ mod tests {
         let path = format!("/danube/topics/{}/conf", topic_id);
 
         // Put a new value
-        store.put(&path, value.clone()).await?;
+        store.put(&path, value.clone(), MetaOptions::None).await?;
 
         // Get the value
-        let retrieved_value = store.get(&path).await?;
+        let retrieved_value = store.get(&path, MetaOptions::None).await?;
         assert_eq!(retrieved_value, value);
 
         // Delete the key
         store.delete(&path).await?;
 
         // Try to get the value again and assert it's an error (key not found)
-        assert!(store.get(&path).await.is_err());
+        assert!(store.get(&path, MetaOptions::None).await.is_err());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_nonexistent_key() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = MemoryMetadataStore::new().await?;
+    async fn test_get_nonexistent_key() -> Result<()> {
+        let store_config = MetadataStoreConfig::new();
+        let mut store = MemoryMetadataStore::new(store_config).await?;
         let topic_id = "unknown-topic";
 
         // Try to get a non-existent key
         let result = store
-            .get(format!("/danube/topics/{}/metrics", topic_id).as_str())
+            .get(
+                format!("/danube/topics/{}/metrics", topic_id).as_str(),
+                MetaOptions::None,
+            )
             .await;
         assert!(result.is_err());
         assert_eq!(result.err().unwrap().to_string(), "Key not found");
@@ -165,37 +174,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_put_invalid_path() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = MemoryMetadataStore::new().await?;
+    async fn test_put_invalid_path() -> Result<()> {
+        let store_config = MetadataStoreConfig::new();
+        let mut store = MemoryMetadataStore::new(store_config).await?;
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
 
         // Try to put with invalid path (missing segment)
-        let result = store.put("/danube/topics", value.clone()).await;
+        let result = store
+            .put("/danube/topics", value.clone(), MetaOptions::None)
+            .await;
         assert!(result.is_err());
 
         Ok(())
     }
     #[tokio::test]
-    async fn test_delete_recursive() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = MemoryMetadataStore::new().await?;
+    async fn test_delete_recursive() -> Result<()> {
+        let store_config = MetadataStoreConfig::new();
+        let mut store = MemoryMetadataStore::new(store_config).await?;
 
         // Create a sample data structure
         store
             .put(
                 "/danube/topics/topic_1/key1",
                 Value::String("value1".to_string()),
+                MetaOptions::None,
             )
             .await?;
         store
             .put(
                 "/danube/topics/topic_1/key2",
                 Value::String("value2".to_string()),
+                MetaOptions::None,
             )
             .await?;
         store
             .put(
                 "/danube/topics/topic_2/key3",
                 Value::String("value3".to_string()),
+                MetaOptions::None,
             )
             .await?;
 
@@ -203,40 +219,57 @@ mod tests {
         store.delete_recursive("/danube/topics/topic_1").await?;
 
         // Assert that keys under the deleted path are gone
-        assert!(store.get("/danube/topics/topic_1/key1").await.is_err());
-        assert!(store.get("/danube/topics/topic_1/key2").await.is_err());
+        assert!(store
+            .get("/danube/topics/topic_1/key1", MetaOptions::None)
+            .await
+            .is_err());
+        assert!(store
+            .get("/danube/topics/topic_1/key2", MetaOptions::None)
+            .await
+            .is_err());
 
         // Assert that other directory and its key remain
-        assert!(store.get("/danube/topics/topic_2/key3").await.is_ok());
+        assert!(store
+            .get("/danube/topics/topic_2/key3", MetaOptions::None)
+            .await
+            .is_ok());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_childrens() -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = MemoryMetadataStore::new().await?;
+    async fn test_get_childrens() -> Result<()> {
+        let store_config = MetadataStoreConfig::new();
+        let mut store = MemoryMetadataStore::new(store_config).await?;
 
         // Create a sample data structure
         store
             .put(
                 "/danube/topics/topic_1/key1",
                 Value::String("value1".to_string()),
+                MetaOptions::None,
             )
             .await?;
         store
             .put(
                 "/danube/topics/topic_2/key2",
                 Value::String("value2".to_string()),
+                MetaOptions::None,
             )
             .await?;
         store
             .put(
                 "/danube/topics/topic_1/subtopic/key3",
                 Value::String("value3".to_string()),
+                MetaOptions::None,
             )
             .await?;
         store
-            .put("/data/other/path", Value::String("value4".to_string()))
+            .put(
+                "/data/other/path",
+                Value::String("value4".to_string()),
+                MetaOptions::None,
+            )
             .await?;
 
         // Test finding paths containing "/danube/topics/topic_1"
