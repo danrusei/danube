@@ -1,6 +1,9 @@
 use crate::topic::Topic;
 use std::error::Error;
 
+pub(crate) static DEFAULT_NAMESPACE: &str = "default";
+pub(crate) static SYSTEM_NAMESPACE: &str = "system";
+
 // NameSpace - coordinates topics ownership
 pub(crate) struct NameSpace {}
 

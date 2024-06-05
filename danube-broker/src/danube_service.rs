@@ -10,10 +10,12 @@ use crate::{
     metadata_store::{
         EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
     },
+    namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
     policies::Policies,
-    resources::{Resources, DEFAULT_NAMESPACE},
+    resources::{self, Resources},
     service_configuration::ServiceConfiguration,
     storage,
+    topic::SYSTEM_TOPIC,
 };
 
 #[derive(Debug)]
@@ -51,27 +53,27 @@ impl DanubeService {
 
         let mut resources = Resources::new(metadata_store);
 
+        info!(
+            "Setting up the cluster {} with metadata-store {}",
+            self.config.cluster_name, "etcd"
+        );
         resources.cluster.create_cluster(
             &self.config.cluster_name,
             self.config.broker_addr.to_string(),
         );
 
         //create the default Namespace
-        if !resources
-            .namespace
-            .namespace_exist(DEFAULT_NAMESPACE)
-            .await?
-        {
-            let policies = Policies::new();
-            resources
-                .namespace
-                .create_policies(DEFAULT_NAMESPACE, policies)
-                .await?;
-        } else {
-            info!("Namespace {} already exists.", DEFAULT_NAMESPACE);
-            // ensure that the policies are in place for the Default Namespace
-            let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE).await?;
+        create_namespace_if_absent(&mut resources, DEFAULT_NAMESPACE).await?;
+
+        //create system Namespace
+        create_namespace_if_absent(&mut resources, SYSTEM_NAMESPACE).await?;
+
+        //create system topic
+        if !resources.topic.topic_exists(SYSTEM_TOPIC).await? {
+            resources.topic.create_topic(SYSTEM_TOPIC, 0).await?;
         }
+
+        //cluster metadata setup completed
 
         let storage = storage::memory_segment_storage::SegmentStore::new();
 
@@ -84,4 +86,23 @@ impl DanubeService {
 
         Ok(())
     }
+}
+
+async fn create_namespace_if_absent(resources: &mut Resources, namespace_name: &str) -> Result<()> {
+    if !resources
+        .namespace
+        .namespace_exist(DEFAULT_NAMESPACE)
+        .await?
+    {
+        let policies = Policies::new();
+        resources
+            .namespace
+            .create_policies(DEFAULT_NAMESPACE, policies)
+            .await?;
+    } else {
+        info!("Namespace {} already exists.", DEFAULT_NAMESPACE);
+        // ensure that the policies are in place for the Default Namespace
+        let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE).await?;
+    }
+    Ok(())
 }

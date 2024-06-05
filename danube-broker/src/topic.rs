@@ -16,6 +16,8 @@ use crate::{
     utils::get_random_id,
 };
 
+pub(crate) static SYSTEM_TOPIC: &str = "/system/_events_topic";
+
 // Topic
 //
 // Manage its own producers and subscriptions. This includes maintaining the state of producers
@@ -36,6 +38,8 @@ pub(crate) struct Topic {
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
 }
+
+// TODO! should be moved to support partitioned topics from scratch, in order to support hashing dispatch
 
 impl Topic {
     pub(crate) fn new(topic_name: &str) -> Self {

@@ -13,8 +13,10 @@ use anyhow::{Ok, Result};
 // Ex Key: /namespace/markets/retention that stores a Json like { "retentionTimeInMinutes": 1440 }
 // Ex Key: /namespace/markets/config that stores the namespace configuration
 //
-// Topic:
+// Topic (with partitions):
 // /topic/{namespace}/{topic}/{policy-name}
+// /topic/{namespace}/{topic}/partitions  - the number of partitions
+// /topic/{namespace}/{topic}/partition/{topic_name-part-1}
 // Ex Key: /topic/markets/trade-events/maxConsumers that host an Json like { "maxConsumers": 20 }
 // Ex Key: /topic/markets/trade-events/subscriptions that stores the names of all subscriptions
 // Ex Key: /topic/markets/trade-events/consig that stores the topic config
@@ -35,7 +37,7 @@ pub(crate) use topic::TopicResources;
 
 pub(crate) static BASE_CLUSTERS_PATH: &str = "/clusters";
 pub(crate) static BASE_NAMESPACE_PATH: &str = "/namespace";
-pub(crate) static DEFAULT_NAMESPACE: &str = "default";
+pub(crate) static BASE_TOPIC_PATH: &str = "/topic";
 
 #[derive(Debug)]
 pub(crate) struct Resources {
