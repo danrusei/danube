@@ -25,7 +25,17 @@ use anyhow::{Ok, Result};
 //
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 
-static BASE_CLUSTERS_PATH: &str = "/clusters";
+mod cluster;
+mod namespace;
+mod topic;
+
+pub(crate) use cluster::ClusterResources;
+pub(crate) use namespace::NamespaceResources;
+pub(crate) use topic::TopicResources;
+
+pub(crate) static BASE_CLUSTERS_PATH: &str = "/clusters";
+pub(crate) static BASE_NAMESPACE_PATH: &str = "/namespace";
+pub(crate) static DEFAULT_NAMESPACE: &str = "default";
 
 #[derive(Debug)]
 pub(crate) struct Resources {
@@ -45,52 +55,6 @@ impl Resources {
             namespace: NamespaceResources::new(store.clone()),
             topic: TopicResources::new(store),
         }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct ClusterResources {
-    store: MetadataStorage,
-}
-
-impl ClusterResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        ClusterResources { store }
-    }
-
-    pub(crate) async fn create_cluster(&mut self, path: &str, data: String) -> Result<()> {
-        self.create(&join_path(&[BASE_CLUSTERS_PATH, path]), data)
-            .await?;
-        Ok(())
-    }
-
-    pub(crate) async fn create(&mut self, path: &str, data: String) -> Result<()> {
-        self.store
-            .put(path, serde_json::Value::String(data), MetaOptions::None)
-            .await?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct NamespaceResources {
-    store: MetadataStorage,
-}
-
-impl NamespaceResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        NamespaceResources { store }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct TopicResources {
-    store: MetadataStorage,
-}
-
-impl TopicResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        TopicResources { store }
     }
 }
 

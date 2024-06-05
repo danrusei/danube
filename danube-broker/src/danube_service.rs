@@ -1,16 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
-use crate::controller::{Controller, LeaderElection};
-use crate::metadata_store::{
-    EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
+use crate::{
+    broker_server,
+    broker_service::{self, BrokerService},
+    controller::{Controller, LeaderElection},
+    metadata_store::{
+        EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
+    },
+    policies::Policies,
+    resources::{Resources, DEFAULT_NAMESPACE},
+    service_configuration::ServiceConfiguration,
+    storage,
 };
-use crate::{broker_server, broker_service};
-
-use crate::resources::Resources;
-use crate::service_configuration::ServiceConfiguration;
-use crate::{broker_service::BrokerService, storage};
 
 #[derive(Debug)]
 pub(crate) struct DanubeService {
@@ -51,6 +55,23 @@ impl DanubeService {
             &self.config.cluster_name,
             self.config.broker_addr.to_string(),
         );
+
+        //create the default Namespace
+        if !resources
+            .namespace
+            .namespace_exist(DEFAULT_NAMESPACE)
+            .await?
+        {
+            let policies = Policies::new();
+            resources
+                .namespace
+                .create_policies(DEFAULT_NAMESPACE, policies)
+                .await?;
+        } else {
+            info!("Namespace {} already exists.", DEFAULT_NAMESPACE);
+            // ensure that the policies are in place for the Default Namespace
+            let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE).await?;
+        }
 
         let storage = storage::memory_segment_storage::SegmentStore::new();
 
