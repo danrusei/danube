@@ -49,6 +49,7 @@ pub(crate) struct Resources {
     // as the resources translate the Danube requests into MetadataStore paths puts & gets
 }
 
+// A wrapper for interacting with Metadata Storage
 impl Resources {
     pub(crate) fn new(store: MetadataStorage) -> Self {
         Resources {

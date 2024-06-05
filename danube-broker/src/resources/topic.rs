@@ -27,10 +27,12 @@ impl TopicResources {
         &mut self,
         topic_name: &str,
         num_partitions: usize,
-    ) -> Result<String> {
-        todo!()
-    }
-    async fn is_partitioned(topic_name: &str) -> Result<bool> {
-        todo!()
+    ) -> Result<()> {
+        let path = join_path(&[BASE_TOPIC_PATH, topic_name]);
+        //TODO! all the partitions I guess should be added
+        self.store
+            .put(&path, num_partitions.into(), MetaOptions::None);
+
+        Ok(())
     }
 }

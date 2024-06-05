@@ -75,6 +75,11 @@ impl DanubeService {
 
         //cluster metadata setup completed
 
+        //create bootstrap namespaces
+        for namespace in &self.config.bootstrap_namespaces {
+            create_namespace_if_absent(&mut resources, &namespace).await?;
+        }
+
         let storage = storage::memory_segment_storage::SegmentStore::new();
 
         let grpc_server =

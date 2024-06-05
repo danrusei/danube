@@ -4,4 +4,5 @@ pub(crate) struct ServiceConfiguration {
     pub(crate) cluster_name: String,
     pub(crate) broker_addr: std::net::SocketAddr,
     pub(crate) meta_store_addr: Option<String>,
+    pub(crate) bootstrap_namespaces: Vec<String>,
 }
