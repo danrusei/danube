@@ -18,6 +18,7 @@ use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
 
 /// Represents a Producer
+#[derive(Debug)]
 pub struct Producer {
     // the Danube client
     client: DanubeClient,

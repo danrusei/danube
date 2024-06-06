@@ -1,9 +1,11 @@
 mod leader_election;
 mod local_cache;
+mod syncronizer;
 pub(crate) use leader_election::{LeaderElection, LeaderElectionState};
 
 use anyhow::Result;
 use std::sync::Arc;
+use syncronizer::Syncronizer;
 use tokio::sync::Mutex;
 
 use crate::{broker_service::BrokerService, metadata_store::MetadataStorage};
@@ -15,14 +17,16 @@ pub(crate) struct Controller {
     broker: Arc<Mutex<BrokerService>>,
     store: MetadataStorage,
     leader_election_service: Option<LeaderElection>,
+    syncronizer: Option<Syncronizer>,
 }
 
 impl Controller {
-    pub(crate) async fn new(broker: Arc<Mutex<BrokerService>>, store: MetadataStorage) -> Self {
+    pub(crate) fn new(broker: Arc<Mutex<BrokerService>>, store: MetadataStorage) -> Self {
         Controller {
             broker,
             store,
             leader_election_service: None,
+            syncronizer: None,
         }
     }
     pub(crate) async fn start(&self) -> Result<()> {
