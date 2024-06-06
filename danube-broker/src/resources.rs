@@ -22,7 +22,7 @@ use anyhow::{Ok, Result};
 // Ex Key: /topic/markets/trade-events/consig that stores the topic config
 //
 // Same for Subscription, Publisher & Consumers
-// /publisher/{namespace}/{topic}/{publisher-id}/config -> /publisher/markets/trade-events/publisher-123/config
+// /producer/{namespace}/{topic}/{producer-id}/config -> /producer/markets/trade-events/producer-123/config
 // /consumer/{namespace}/{topic}/{consumer-id}/config -> /consumer/markets/trade-events/consumer-456/config
 //
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore

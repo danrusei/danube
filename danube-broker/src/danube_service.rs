@@ -6,7 +6,7 @@ use tracing::info;
 use crate::{
     broker_server,
     broker_service::{self, BrokerService},
-    controller::{Controller, LeaderElection},
+    controller::{self, Controller, LeaderElection},
     metadata_store::{
         EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
     },
@@ -51,7 +51,7 @@ impl DanubeService {
                 MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
             };
 
-        let mut resources = Resources::new(metadata_store);
+        let mut resources = Resources::new(metadata_store.clone());
 
         info!(
             "Setting up the cluster {} with metadata-store {}",
@@ -79,6 +79,8 @@ impl DanubeService {
         for namespace in &self.config.bootstrap_namespaces {
             create_namespace_if_absent(&mut resources, &namespace).await?;
         }
+
+        let controller = Controller::new(Arc::clone(&self.broker), metadata_store);
 
         let storage = storage::memory_segment_storage::SegmentStore::new();
 

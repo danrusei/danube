@@ -21,6 +21,7 @@ anyhow = "1.0.83"
 tonic-types = { workspace = true }
 rand = "0.8.5"
 tokio-stream = "0.1.15"
+futures = "0.3.30"
 
 [build-dependencies]
 tonic-build = "0.11"
