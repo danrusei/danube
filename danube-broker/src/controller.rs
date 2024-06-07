@@ -71,7 +71,7 @@ impl Controller {
             local_cache,
             leader_election_service: None,
             syncronizer: None,
-            load_manager: LoadManager::new(),
+            load_manager: LoadManager::new(broker_id),
         }
     }
     pub(crate) async fn start(&mut self) -> Result<()> {
