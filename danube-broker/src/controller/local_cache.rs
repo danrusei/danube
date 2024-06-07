@@ -10,29 +10,38 @@ use tokio::sync::RwLock;
 // The LocalCache holds the local state of the metadata to enable quick access
 // and reduce the need for frequent queries to the central metadata store: ETCD.
 //
+// The resources/_resources.md document describe how the resources are organized in Metadata Store
+//
 // By updating the local cache based on the events,
 // brokers ensure they have the latest metadata without repeatedly querying the central store.
 //
 // The updates/events are received via the metadata event synchronizer and/or the Watch events.
 #[derive(Debug)]
 pub(crate) struct LocalCache {
-    namespaces: Arc<DashMap<String, Value>>,
-    topics: Arc<DashMap<String, Value>>,
-    consumers: Arc<DashMap<String, Value>>,
-    producers: Arc<DashMap<String, Value>>,
+    // holds information about the cluster and the cluster's brokers
+    pub(crate) cluster: Arc<DashMap<String, Value>>,
+    // holds information about the namespace policy and the namespace's topics
+    pub(crate) namespaces: Arc<DashMap<String, Value>>,
+    // holds information about the topic policy and topic metadata, including partitioned topics
+    pub(crate) topics: Arc<DashMap<String, Value>>,
+    // holds information about the topic subscriptions, including their consumers
+    pub(crate) subscriptions: Arc<DashMap<String, Value>>,
+    // holds information about the producers
+    pub(crate) producers: Arc<DashMap<String, Value>>,
 }
 
 impl LocalCache {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         LocalCache {
+            cluster: Arc::new(DashMap::new()),
             namespaces: Arc::new(DashMap::new()),
             topics: Arc::new(DashMap::new()),
-            consumers: Arc::new(DashMap::new()),
+            subscriptions: Arc::new(DashMap::new()),
             producers: Arc::new(DashMap::new()),
         }
     }
 
-    fn update_cache(&self, key: &str, value: Option<&[u8]>) {
+    pub(crate) fn update_cache(&self, key: &str, value: Option<&[u8]>) {
         let parts: Vec<&str> = key.split('/').collect();
         if parts.len() < 2 {
             return;
@@ -42,7 +51,7 @@ impl LocalCache {
         let cache = match category {
             "namespace" => &self.namespaces,
             "topic" => &self.topics,
-            "consumer" => &self.consumers,
+            "consumer" => &self.subscriptions,
             "producer" => &self.producers,
             _ => return,
         };
@@ -64,7 +73,7 @@ impl LocalCache {
 // to ensure that it is performing the action on the correct version of the metadata.
 
 // Function to populate cache with initial data from etcd
-async fn populate_cache(client: &mut Client, local_cache: &LocalCache) {
+pub(crate) async fn populate_cache(client: &mut Client, local_cache: &LocalCache) {
     let prefixes = vec!["/namespace", "/topic", "/consumer", "/producer"];
 
     for prefix in prefixes {
