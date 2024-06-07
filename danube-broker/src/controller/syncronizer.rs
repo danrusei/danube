@@ -18,7 +18,7 @@ pub(crate) struct Syncronizer {
 }
 
 impl Syncronizer {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let client = DanubeClient::builder()
             .service_url("http://[::1]:6650")
             .build()?;

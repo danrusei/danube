@@ -20,10 +20,11 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct DanubeService {
-    config: ServiceConfiguration,
-    resources: Option<Resources>,
+    broker_id: u64,
     broker: Arc<Mutex<BrokerService>>,
     controller: Option<Controller>,
+    config: ServiceConfiguration,
+    resources: Option<Resources>,
 }
 
 // DanubeService act as a a coordinator for managing clusters, including storage and brokers.
@@ -33,10 +34,11 @@ impl DanubeService {
         let controller = None;
 
         DanubeService {
-            config: service_config,
-            resources: None,
+            broker_id: broker_service.broker_id,
             broker: Arc::new(Mutex::new(broker_service)),
             controller,
+            config: service_config,
+            resources: None,
         }
     }
 
@@ -56,16 +58,13 @@ impl DanubeService {
         let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
 
         // instantiate the controller
-        {
-            let mut broker = self.broker.lock().await;
-            let broker_id = broker.broker_id;
-            let controller = Controller::new(
-                broker_id,
-                Arc::clone(&self.broker),
-                local_cache,
-                metadata_store,
-            );
-        }
+        let mut controller = Controller::new(
+            self.broker_id,
+            Arc::clone(&self.broker),
+            local_cache,
+            metadata_store,
+        );
+
         info!(
             "Setting up the cluster {} with metadata-store {}",
             self.config.cluster_name, "etcd"
@@ -94,14 +93,15 @@ impl DanubeService {
         }
 
         // Not used yet, will be used for persistent topic storage, which is not yet implemented
-        let _storage = storage::memory_segment_storage::SegmentStore::new();
+        // let _storage = storage::memory_segment_storage::SegmentStore::new();
 
         let grpc_server =
             broker_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
 
         grpc_server.start().await?;
 
-        //TODO! here we may want to start the MetadataEventSynchronizer and maybe the LeaderElection
+        // The Controller is responsible of starting the Syncronizer, LeaderElection and Load Manager Services
+        controller.start();
 
         Ok(())
     }

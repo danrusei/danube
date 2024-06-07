@@ -6,6 +6,7 @@ use etcd_client::{
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::time::{self, error::Elapsed, Duration, Interval};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LeaderElectionState {
@@ -61,14 +62,14 @@ impl LeaderElection {
             Ok(is_leader) => {
                 if is_leader {
                     self.set_state(LeaderElectionState::Leading);
-                    println!("Broker {} is the leader", self.broker_id);
+                    info!("Broker {} is the leader", self.broker_id);
                 } else {
                     self.set_state(LeaderElectionState::Following);
-                    println!("Broker {} is not the leader", self.broker_id);
+                    info!("Broker {} is not the leader", self.broker_id);
                 }
             }
             Err(e) => {
-                println!("Election error: {}", e);
+                warn!("Election error: {}", e);
             }
         }
     }
@@ -109,7 +110,7 @@ impl LeaderElection {
 
         tokio::spawn(async move {
             while let Some(_) = stream.message().await.unwrap_or(None) {
-                println!("Lease {} renewed", lease_id);
+                info!("Lease {} renewed", lease_id);
             }
         });
 
@@ -133,7 +134,7 @@ impl LeaderElection {
                 }
             }
             Err(e) => {
-                println!("Failed to check leader: {}", e);
+                warn!("Failed to check leader: {}", e);
             }
         }
         Ok(())

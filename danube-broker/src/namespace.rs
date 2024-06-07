@@ -9,7 +9,7 @@ pub(crate) static SYSTEM_NAMESPACE: &str = "system";
 #[derive(Debug, Default)]
 pub(crate) struct NameSpace {
     name: String,
-    //topics name associated with the Namespace
+    // list of topic_name associated with the Namespace
     topics: Vec<String>,
 }
 
@@ -25,12 +25,12 @@ impl NameSpace {
     }
 
     // Retrieves the list of topics within the specified namespace
-    pub(crate) fn get_list_of_topics(namespace_name: &str) -> Result<Vec<String>> {
-        todo!()
+    pub(crate) fn get_list_of_topics(&self, namespace_name: &str) -> Vec<String> {
+        self.topics.clone()
     }
 
     // Retrieves the list of all partitions within the specified namespace
-    pub(crate) fn get_all_partitions(namespace_name: &str) -> Result<Vec<String>> {
-        todo!()
+    pub(crate) fn get_all_partitions(&self, namespace_name: &str) -> Vec<String> {
+        self.topics.clone()
     }
 }

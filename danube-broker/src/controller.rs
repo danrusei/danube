@@ -1,12 +1,12 @@
 mod leader_election;
-mod load_balance;
+mod load_manager;
 mod local_cache;
 mod syncronizer;
 pub(crate) use leader_election::{LeaderElection, LeaderElectionState};
 pub(crate) use local_cache::LocalCache;
 
-use anyhow::Result;
-use load_balance::LoadBalance;
+use anyhow::{anyhow, Result};
+use load_manager::LoadManager;
 use std::sync::Arc;
 use syncronizer::Syncronizer;
 use tokio::sync::Mutex;
@@ -34,7 +34,7 @@ static LEADER_SELECTION_PATH: &str = "/broker/leader";
 // Leader Election:
 // Leader Election service is needed for critical tasks such as topic assignment to brokers or partitioning.
 //
-// Load Balance:
+// Load Manager/Balance:
 // Monitor and distribute load across brokers by managing topic and partitions assignments to brokers
 // Implement rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster.
 // Responsible of the failover mechanisms to handle broker failures
@@ -54,7 +54,7 @@ pub(crate) struct Controller {
     local_cache: LocalCache,
     leader_election_service: Option<LeaderElection>,
     syncronizer: Option<Syncronizer>,
-    load_balance: LoadBalance,
+    load_manager: LoadManager,
 }
 
 impl Controller {
@@ -71,19 +71,37 @@ impl Controller {
             local_cache,
             leader_election_service: None,
             syncronizer: None,
-            load_balance: LoadBalance::new(),
+            load_manager: LoadManager::new(),
         }
     }
-    pub(crate) async fn start(&self) -> Result<()> {
-        let leader_election_service =
+    pub(crate) async fn start(&mut self) -> Result<()> {
+        // Start the Syncronizer process
+        let syncronyzer = if let Ok(syncronizer) = Syncronizer::new() {
+            syncronizer
+        } else {
+            return Err(anyhow!("Unable to instantiate the Syncronizer"));
+        };
+
+        self.syncronizer = Some(syncronyzer);
+
+        // Start the Leader Election Service
+        let mut leader_election_service =
             LeaderElection::new(self.store.clone(), LEADER_SELECTION_PATH, self.broker_id);
+
+        leader_election_service.start();
+
+        // Start the Load Manager Service
+        // at this point the broker will become visible to the rest of the brokers
+        // by creating the registration and also
+
+        self.load_manager.start();
 
         Ok(())
     }
 
     // Checks whether the broker owns a specific topic
     pub(crate) fn check_topic_ownership(&self, topic_name: &str) -> bool {
-        self.load_balance
+        self.load_manager
             .check_ownership(self.broker_id, topic_name)
     }
 
