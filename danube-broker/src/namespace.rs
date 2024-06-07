@@ -14,11 +14,6 @@ pub(crate) struct NameSpace {
 }
 
 impl NameSpace {
-    // Lookup service for resolving topic names to their corresponding broker service URLs
-    pub(crate) async fn get_broker_service_url(topic_name: &str) -> Result<LookupResult> {
-        todo!();
-    }
-
     // Setting up predefined namespaces during the initialization phase of the Danube service.
     pub(crate) fn register_bootstrap_namespaces() -> Result<()> {
         todo!()
@@ -38,9 +33,4 @@ impl NameSpace {
     pub(crate) fn get_all_partitions(namespace_name: &str) -> Result<Vec<String>> {
         todo!()
     }
-}
-
-pub(crate) enum LookupResult {
-    BrokerUrl(String),
-    RedirectUrl(String),
 }

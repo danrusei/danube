@@ -1,18 +1,20 @@
 use anyhow::Result;
 
 use crate::{
+    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     resources::{join_path, BASE_TOPIC_PATH},
 };
 
 #[derive(Debug)]
 pub(crate) struct TopicResources {
+    local_cache: LocalCache,
     store: MetadataStorage,
 }
 
 impl TopicResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        TopicResources { store }
+    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+        TopicResources { local_cache, store }
     }
     pub(crate) async fn topic_exists(&mut self, topic_name: &str) -> Result<bool> {
         let path = join_path(&[BASE_TOPIC_PATH, topic_name]);

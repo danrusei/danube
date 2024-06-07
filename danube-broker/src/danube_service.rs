@@ -6,7 +6,7 @@ use tracing::info;
 use crate::{
     broker_server,
     broker_service::{self, BrokerService},
-    controller::{self, Controller, LeaderElection},
+    controller::{self, Controller, LeaderElection, LocalCache},
     metadata_store::{
         EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
     },
@@ -51,8 +51,21 @@ impl DanubeService {
                 MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
             };
 
-        let mut resources = Resources::new(metadata_store.clone());
+        let local_cache = LocalCache::new();
 
+        let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
+
+        // instantiate the controller
+        {
+            let mut broker = self.broker.lock().await;
+            let broker_id = broker.broker_id;
+            let controller = Controller::new(
+                broker_id,
+                Arc::clone(&self.broker),
+                local_cache,
+                metadata_store,
+            );
+        }
         info!(
             "Setting up the cluster {} with metadata-store {}",
             self.config.cluster_name, "etcd"
@@ -80,16 +93,15 @@ impl DanubeService {
             create_namespace_if_absent(&mut resources, &namespace).await?;
         }
 
-        let controller = Controller::new(Arc::clone(&self.broker), metadata_store);
-
-        let storage = storage::memory_segment_storage::SegmentStore::new();
+        // Not used yet, will be used for persistent topic storage, which is not yet implemented
+        let _storage = storage::memory_segment_storage::SegmentStore::new();
 
         let grpc_server =
             broker_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
 
         grpc_server.start().await?;
 
-        //TODO! here we may want to start the MetadataEventSynchronizer & CoordinationService
+        //TODO! here we may want to start the MetadataEventSynchronizer and maybe the LeaderElection
 
         Ok(())
     }

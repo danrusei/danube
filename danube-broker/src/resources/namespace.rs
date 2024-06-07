@@ -4,6 +4,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
+    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::{join_path, BASE_NAMESPACE_PATH},
@@ -11,12 +12,13 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct NamespaceResources {
+    local_cache: LocalCache,
     store: MetadataStorage,
 }
 
 impl NamespaceResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        NamespaceResources { store }
+    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+        NamespaceResources { local_cache, store }
     }
 
     pub(crate) async fn namespace_exist(&mut self, namespace_name: &str) -> Result<bool> {

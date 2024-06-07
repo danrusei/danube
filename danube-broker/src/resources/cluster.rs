@@ -1,18 +1,20 @@
 use anyhow::Result;
 
 use crate::{
+    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     resources::{join_path, BASE_CLUSTERS_PATH},
 };
 
 #[derive(Debug)]
 pub(crate) struct ClusterResources {
+    local_cache: LocalCache,
     store: MetadataStorage,
 }
 
 impl ClusterResources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
-        ClusterResources { store }
+    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+        ClusterResources { local_cache, store }
     }
 
     pub(crate) async fn create_cluster(&mut self, path: &str, data: String) -> Result<()> {

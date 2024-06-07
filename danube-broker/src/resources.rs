@@ -1,4 +1,7 @@
-use crate::metadata_store::{MetaOptions, MetadataStorage, MetadataStore};
+use crate::{
+    controller::LocalCache,
+    metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
+};
 use anyhow::{Ok, Result};
 
 mod cluster;
@@ -35,12 +38,12 @@ pub(crate) struct Resources {
 
 // A wrapper for interacting with Metadata Storage
 impl Resources {
-    pub(crate) fn new(store: MetadataStorage) -> Self {
+    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
         Resources {
             store: store.clone(),
-            cluster: ClusterResources::new(store.clone()),
-            namespace: NamespaceResources::new(store.clone()),
-            topic: TopicResources::new(store),
+            cluster: ClusterResources::new(local_cache.clone(), store.clone()),
+            namespace: NamespaceResources::new(local_cache.clone(), store.clone()),
+            topic: TopicResources::new(local_cache, store),
         }
     }
 }

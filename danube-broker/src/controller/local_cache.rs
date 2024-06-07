@@ -16,7 +16,10 @@ use tokio::sync::RwLock;
 // brokers ensure they have the latest metadata without repeatedly querying the central store.
 //
 // The updates/events are received via the metadata event synchronizer and/or the Watch events.
-#[derive(Debug)]
+//
+// Note: The instance can be safety Cloned as all it's fields ar wrapped in Arc<>,
+// allowing the LocalCache struct to be cloned without deep copying the underlying data.
+#[derive(Debug, Clone)]
 pub(crate) struct LocalCache {
     // holds information about the cluster and the cluster's brokers
     pub(crate) cluster: Arc<DashMap<String, Value>>,
