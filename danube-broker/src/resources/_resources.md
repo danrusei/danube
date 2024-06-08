@@ -14,6 +14,8 @@ This document describes how the resources are organized in the Metadata store
 
 * /cluster/cluster-name
 * /cluster/brokers/{broker-id}/{namespace}/{topic} - topics served by the broker
+* /cluster/brokers/load/{broker-id} - this is where each broker periodically reports its load metrics
+* /cluster/load_balance - this is load_balance updated decision, posted by the Load Manager
 
 ### Namespace Resources
 

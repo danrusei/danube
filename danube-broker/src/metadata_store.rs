@@ -1,7 +1,9 @@
 mod etcd_metadata_store;
+mod etcd_watch;
 mod memory_metadata_store;
 use anyhow::Result;
 pub(crate) use etcd_metadata_store::EtcdMetadataStore;
+pub(crate) use etcd_watch::{etcd_watch_prefixes, ETCDWatchEvent};
 pub(crate) use memory_metadata_store::MemoryMetadataStore;
 
 use etcd_client::{GetOptions, LeaseKeepAliveStream, PutOptions};

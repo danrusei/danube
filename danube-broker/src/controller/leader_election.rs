@@ -39,6 +39,7 @@ impl LeaderElection {
 
     pub async fn start(&mut self) {
         self.elect().await;
+        //maybe I want ot tokio spawn this loop to run on it's own task
         loop {
             self.check_leader().await;
             self.leader_check_interval.tick().await;

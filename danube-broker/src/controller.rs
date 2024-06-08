@@ -67,11 +67,11 @@ impl Controller {
         Controller {
             broker_id,
             broker,
-            store,
+            store: store.clone(),
             local_cache,
             leader_election_service: None,
             syncronizer: None,
-            load_manager: LoadManager::new(broker_id),
+            load_manager: LoadManager::new(broker_id, store),
         }
     }
     pub(crate) async fn start(&mut self) -> Result<()> {
@@ -100,9 +100,10 @@ impl Controller {
     }
 
     // Checks whether the broker owns a specific topic
-    pub(crate) fn check_topic_ownership(&self, topic_name: &str) -> bool {
+    pub(crate) async fn check_topic_ownership(&self, topic_name: &str) -> bool {
         self.load_manager
             .check_ownership(self.broker_id, topic_name)
+            .await
     }
 
     // Lookup service for resolving topic names to their corresponding broker service URLs

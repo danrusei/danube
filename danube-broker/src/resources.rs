@@ -12,9 +12,12 @@ pub(crate) use cluster::ClusterResources;
 pub(crate) use namespace::NamespaceResources;
 pub(crate) use topic::TopicResources;
 
-pub(crate) static BASE_CLUSTERS_PATH: &str = "/clusters";
+pub(crate) static BASE_CLUSTERS_PATH: &str = "/cluster";
+pub(crate) static BASE_BROKER_PATH: &str = "/cluster/broker";
 pub(crate) static BASE_NAMESPACE_PATH: &str = "/namespace";
 pub(crate) static BASE_TOPIC_PATH: &str = "/topic";
+
+pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
 
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 //
