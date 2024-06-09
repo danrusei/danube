@@ -100,9 +100,10 @@ impl Controller {
             .await?;
 
         let mut load_manager_cloned = self.load_manager.clone();
+        let broker_id_cloned = self.broker_id;
 
         // process the ETCD Watch events
-        tokio::spawn(async move { load_manager_cloned.start(rx_event).await });
+        tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id_cloned).await });
 
         Ok(())
     }

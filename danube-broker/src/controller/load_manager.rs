@@ -65,10 +65,25 @@ impl LoadManager {
         Ok(rx_event)
     }
 
-    pub(crate) async fn start(&mut self, mut rx_event: mpsc::Receiver<ETCDWatchEvent>) {
+    pub(crate) async fn start(
+        &mut self,
+        mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
+        broker_id: u64,
+    ) {
         while let Some(event) = rx_event.recv().await {
             self.process_event(event);
             self.calculate_rankings_simple();
+            let next_broker = self
+                .rankings
+                .lock()
+                .await
+                .get(0)
+                .get_or_insert(&(broker_id, 0))
+                .0;
+            let _ = self
+                .next_broker
+                .fetch_add(next_broker, std::sync::atomic::Ordering::SeqCst);
+
             // need to post it's decision on the Metadata Store
         }
     }
