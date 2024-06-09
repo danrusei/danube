@@ -77,6 +77,12 @@ impl BrokerService {
         Err(anyhow!("Unable to find the topic: {}", topic_name))
     }
 
+    // get all the topics currently served by the Broker
+    pub(crate) fn get_topics(&self) -> Vec<&String> {
+        let topics: Vec<&String> = self.topics.iter().map(|topic| topic.0).collect();
+        topics
+    }
+
     // creates a new topic
     pub(crate) fn create_new_topic(&mut self, topic_name: &str, schema: Schema) -> Result<String> {
         let mut new_topic = Topic::new(topic_name);

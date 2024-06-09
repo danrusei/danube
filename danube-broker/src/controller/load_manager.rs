@@ -1,3 +1,6 @@
+pub(crate) mod load_report;
+use load_report::{LoadReport, ResourceType, SystemLoad};
+
 use anyhow::{anyhow, Result};
 use etcd_client::{Client, EventType};
 use std::borrow::Borrow;
@@ -9,7 +12,6 @@ use tokio::task;
 use tokio::time::{self, Duration};
 
 use crate::{
-    load_report::{LoadReport, ResourceType},
     metadata_store::{etcd_watch_prefixes, ETCDWatchEvent, MetadataStorage, MetadataStore},
     resources::{BASE_BROKER_PATH, LOADBALACE_DECISION_PATH},
 };
@@ -137,7 +139,7 @@ impl LoadManager {
 
         let mut broker_loads: Vec<(u64, usize)> = brokers_usage
             .iter()
-            .map(|(&broker_id, load_report)| (broker_id, load_report.topics))
+            .map(|(&broker_id, load_report)| (broker_id, load_report.topics_len))
             .collect();
 
         broker_loads.sort_by_key(|&(_, load)| load);
@@ -154,7 +156,7 @@ impl LoadManager {
         let mut broker_loads: Vec<(u64, usize)> = brokers_usage
             .iter()
             .map(|(&broker_id, load_report)| {
-                let topics_load = load_report.topics as f64 * weights.0;
+                let topics_load = load_report.topics_len as f64 * weights.0;
                 let mut cpu_load = 0.0;
                 let mut memory_load = 0.0;
 
@@ -188,9 +190,8 @@ fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::load_report::SystemLoad;
 
-    fn create_load_report(cpu_usage: usize, memory_usage: usize, topics: usize) -> LoadReport {
+    fn create_load_report(cpu_usage: usize, memory_usage: usize, topics_len: usize) -> LoadReport {
         LoadReport {
             resources_usage: vec![
                 SystemLoad {
@@ -202,7 +203,7 @@ mod tests {
                     usage: memory_usage,
                 },
             ],
-            topics,
+            topics_len,
             topic_list: vec!["/default/topic_name".to_string()],
         }
     }

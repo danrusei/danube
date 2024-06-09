@@ -51,6 +51,6 @@ impl Resources {
     }
 }
 
-fn join_path(parts: &[&str]) -> String {
+pub(crate) fn join_path(parts: &[&str]) -> String {
     parts.join("/")
 }

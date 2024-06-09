@@ -9,6 +9,8 @@ use crate::metadata_store::{MetaOptions, MetadataStore};
 use super::MetadataStoreConfig;
 
 /// Should be used for only one Broker instance, not available in Cluster mode
+///
+/// TODO! this is wrong to figure out if I still keep this implementation or wrap into ARC
 #[derive(Debug, Clone)]
 pub(crate) struct MemoryMetadataStore {
     inner: DashMap<String, BTreeMap<String, Value>>,

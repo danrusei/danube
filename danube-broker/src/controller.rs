@@ -2,7 +2,9 @@ mod leader_election;
 mod load_manager;
 mod local_cache;
 mod syncronizer;
+use etcd_client::PutOptions;
 pub(crate) use leader_election::{LeaderElection, LeaderElectionState};
+pub(crate) use load_manager::load_report::{generate_load_report, LoadReport};
 pub(crate) use local_cache::LocalCache;
 
 use anyhow::{anyhow, Result};
@@ -10,8 +12,15 @@ use load_manager::LoadManager;
 use std::sync::Arc;
 use syncronizer::Syncronizer;
 use tokio::sync::Mutex;
+use tokio::time::{self, Duration};
 
-use crate::{broker_service::BrokerService, metadata_store::MetadataStorage, namespace::NameSpace};
+use crate::metadata_store::{MetaOptions, MetadataStore};
+use crate::{
+    broker_service::{self, BrokerService},
+    metadata_store::MetadataStorage,
+    namespace::NameSpace,
+    resources::{join_path, BASE_BROKER_PATH},
+};
 
 static LEADER_SELECTION_PATH: &str = "/broker/leader";
 
@@ -50,7 +59,7 @@ static LEADER_SELECTION_PATH: &str = "/broker/leader";
 pub(crate) struct Controller {
     broker_id: u64,
     broker: Arc<Mutex<BrokerService>>,
-    store: MetadataStorage,
+    meta_store: MetadataStorage,
     local_cache: LocalCache,
     leader_election_service: Option<LeaderElection>,
     syncronizer: Option<Syncronizer>,
@@ -67,7 +76,7 @@ impl Controller {
         Controller {
             broker_id,
             broker,
-            store: store.clone(),
+            meta_store: store.clone(),
             local_cache,
             leader_election_service: None,
             syncronizer: None,
@@ -85,8 +94,11 @@ impl Controller {
         self.syncronizer = Some(syncronyzer);
 
         // Start the Leader Election Service
-        let mut leader_election_service =
-            LeaderElection::new(self.store.clone(), LEADER_SELECTION_PATH, self.broker_id);
+        let mut leader_election_service = LeaderElection::new(
+            self.meta_store.clone(),
+            LEADER_SELECTION_PATH,
+            self.broker_id,
+        );
 
         leader_election_service.start();
 
@@ -96,7 +108,7 @@ impl Controller {
 
         let rx_event = self
             .load_manager
-            .bootstrap(self.broker_id, self.store.clone())
+            .bootstrap(self.broker_id, self.meta_store.clone())
             .await?;
 
         let mut load_manager_cloned = self.load_manager.clone();
@@ -104,6 +116,13 @@ impl Controller {
 
         // process the ETCD Watch events
         tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id_cloned).await });
+
+        let broker_service_cloned = Arc::clone(&self.broker);
+        let meta_store_cloned = self.meta_store.clone();
+        // posting periodic load reports
+        tokio::spawn(
+            async move { post_broker_load_report(broker_service_cloned, meta_store_cloned) },
+        );
 
         Ok(())
     }
@@ -118,6 +137,29 @@ impl Controller {
     // Lookup service for resolving topic names to their corresponding broker service URLs
     pub(crate) async fn get_broker_service_url(topic_name: &str) -> Result<LookupResult> {
         todo!();
+    }
+}
+
+async fn post_broker_load_report(
+    broker_service: Arc<Mutex<BrokerService>>,
+    mut meta_store: MetadataStorage,
+) {
+    let mut topics: Vec<String>;
+    let mut broker_id;
+    let mut interval = time::interval(Duration::from_secs(30));
+    loop {
+        interval.tick().await;
+        {
+            let broker_service = broker_service.lock().await;
+            topics = broker_service.get_topics().into_iter().cloned().collect();
+            broker_id = broker_service.broker_id;
+        }
+        let topics_len = topics.len();
+        let load_repot: LoadReport = generate_load_report(topics_len, topics);
+        if let Ok(value) = serde_json::to_value(load_repot) {
+            let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
+            meta_store.put(&path, value, MetaOptions::None);
+        }
     }
 }
 

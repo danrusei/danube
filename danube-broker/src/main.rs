@@ -4,7 +4,6 @@ mod consumer;
 mod controller;
 mod danube_service;
 mod dispatcher;
-mod load_report;
 mod metadata_store;
 mod namespace;
 mod policies;
