@@ -71,7 +71,7 @@ impl Controller {
             local_cache,
             leader_election_service: None,
             syncronizer: None,
-            load_manager: LoadManager::new(broker_id, store),
+            load_manager: LoadManager::new(broker_id),
         }
     }
     pub(crate) async fn start(&mut self) -> Result<()> {
@@ -94,7 +94,15 @@ impl Controller {
         // at this point the broker will become visible to the rest of the brokers
         // by creating the registration and also
 
-        self.load_manager.start();
+        let rx_event = self
+            .load_manager
+            .bootstrap(self.broker_id, self.store.clone())
+            .await?;
+
+        let mut load_manager_cloned = self.load_manager.clone();
+
+        // process the ETCD Watch events
+        tokio::spawn(async move { load_manager_cloned.start(rx_event).await });
 
         Ok(())
     }

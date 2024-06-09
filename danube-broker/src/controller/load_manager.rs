@@ -14,43 +14,40 @@ use crate::{
     resources::{BASE_BROKER_PATH, LOADBALACE_DECISION_PATH},
 };
 
-#[derive(Debug)]
+// Load Manager, monitor and distribute load across brokers
+// by managing topic and partitions assignments to brokers
+#[derive(Debug, Clone)]
 pub(crate) struct LoadManager {
-    // handle to the Metadata Store
-    store: MetadataStorage,
     // broker_id to LoadReport
     brokers_usage: Arc<Mutex<HashMap<u64, LoadReport>>>,
     // rankings based on the load calculation
     rankings: Arc<Mutex<Vec<(u64, usize)>>>,
     // the broker_id to be served to the caller on function get_next_broker
-    next_broker: AtomicU64,
+    next_broker: Arc<AtomicU64>,
 }
 
-// A Dummy implementation for the Load Manager, which has to be refined
 impl LoadManager {
-    pub fn new(broker_id: u64, store: MetadataStorage) -> Self {
-        let mut brokers = Vec::new();
-        brokers.push(broker_id);
+    pub fn new(broker_id: u64) -> Self {
         LoadManager {
-            store,
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
-            next_broker: AtomicU64::new(broker_id),
+            next_broker: Arc::new(AtomicU64::new(broker_id)),
         }
     }
-
-    pub(crate) async fn start(&mut self) -> Result<()> {
+    pub async fn bootstrap(
+        &self,
+        broker_id: u64,
+        mut store: MetadataStorage,
+    ) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
         // fetch the initial broker Load information
         self.fetch_initial_load().await;
 
-        let brokers_usage_clone = Arc::clone(&self.brokers_usage);
-        let rankings_clone = Arc::clone(&self.rankings);
+        //calculate rankings after the initial usage fetch
+        self.calculate_rankings_simple();
 
-        calculate_rankings_simple(&brokers_usage_clone, &rankings_clone);
+        let (tx_event, mut rx_event) = mpsc::channel(32);
 
-        let (tx1, mut rx1) = mpsc::channel(32);
-
-        let client = if let Some(client) = self.store.get_client() {
+        let client = if let Some(client) = store.get_client() {
             client
         } else {
             return Err(anyhow!(
@@ -62,25 +59,41 @@ impl LoadManager {
         tokio::spawn(async move {
             let mut prefixes = Vec::new();
             prefixes.push(BASE_BROKER_PATH);
-            etcd_watch_prefixes(client, prefixes, tx1).await;
+            etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
-        let brokers_usage_clone = Arc::clone(&self.brokers_usage);
-        let rankings_clone = Arc::clone(&self.rankings);
+        Ok(rx_event)
+    }
 
-        // process the ETCD events
-        tokio::spawn(async move {
-            while let Some(event) = rx1.recv().await {
-                process_event(event, &brokers_usage_clone);
-                calculate_rankings_simple(&brokers_usage_clone, &rankings_clone);
-            }
-        });
-
-        Ok(())
+    pub(crate) async fn start(&mut self, mut rx_event: mpsc::Receiver<ETCDWatchEvent>) {
+        while let Some(event) = rx_event.recv().await {
+            self.process_event(event);
+            self.calculate_rankings_simple();
+            // need to post it's decision on the Metadata Store
+        }
     }
 
     async fn fetch_initial_load(&self) {
         todo!()
+    }
+
+    async fn process_event(&self, event: ETCDWatchEvent) {
+        if event.event_type != EventType::Put {
+            return;
+        }
+
+        let broker_id = match extract_broker_id(&event.key) {
+            Some(id) => id,
+            None => return,
+        };
+
+        let load_report = match event.value.as_deref().and_then(parse_load_report) {
+            Some(report) => report,
+            None => return,
+        };
+
+        let mut brokers_usage = self.brokers_usage.lock().await;
+        brokers_usage.insert(broker_id, load_report);
     }
 
     pub async fn get_next_broker(&mut self) -> u64 {
@@ -102,28 +115,50 @@ impl LoadManager {
         }
         false
     }
-}
 
-async fn process_event(
-    event: ETCDWatchEvent,
-    brokers_usage: &Arc<Mutex<HashMap<u64, LoadReport>>>,
-) {
-    if event.event_type != EventType::Put {
-        return;
+    // Simple Load Calculation: the load is just based on the number of topics.
+    async fn calculate_rankings_simple(&self) {
+        let brokers_usage = self.brokers_usage.lock().await;
+
+        let mut broker_loads: Vec<(u64, usize)> = brokers_usage
+            .iter()
+            .map(|(&broker_id, load_report)| (broker_id, load_report.topics))
+            .collect();
+
+        broker_loads.sort_by_key(|&(_, load)| load);
+
+        *self.rankings.lock().await = broker_loads;
     }
 
-    let broker_id = match extract_broker_id(&event.key) {
-        Some(id) => id,
-        None => return,
-    };
+    // Composite Load Calculation: the load is based on the number of topics, CPU usage, and memory usage.
+    async fn calculate_rankings_composite(&self) {
+        let brokers_usage = self.brokers_usage.lock().await;
 
-    let load_report = match event.value.as_deref().and_then(parse_load_report) {
-        Some(report) => report,
-        None => return,
-    };
+        let weights = (1.0, 0.5, 0.5); // (topics_weight, cpu_weight, memory_weight)
 
-    let mut brokers_usage = brokers_usage.lock().await;
-    brokers_usage.insert(broker_id, load_report);
+        let mut broker_loads: Vec<(u64, usize)> = brokers_usage
+            .iter()
+            .map(|(&broker_id, load_report)| {
+                let topics_load = load_report.topics as f64 * weights.0;
+                let mut cpu_load = 0.0;
+                let mut memory_load = 0.0;
+
+                for system_load in &load_report.resources_usage {
+                    match system_load.resource {
+                        ResourceType::CPU => cpu_load += system_load.usage as f64 * weights.1,
+                        ResourceType::Memory => memory_load += system_load.usage as f64 * weights.2,
+                    }
+                }
+
+                let total_load = (topics_load + cpu_load + memory_load) as usize;
+                (broker_id, total_load)
+            })
+            .collect();
+
+        broker_loads.sort_by_key(|&(_, load)| load);
+
+        *self.rankings.lock().await = broker_loads;
+    }
 }
 
 fn extract_broker_id(key: &str) -> Option<u64> {
@@ -135,54 +170,126 @@ fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
     serde_json::from_str(value_str).ok()
 }
 
-// Simple Load Calculation: the load is just based on the number of topics.
-async fn calculate_rankings_simple(
-    brokers_usage: &Arc<Mutex<HashMap<u64, LoadReport>>>,
-    rankings: &Arc<Mutex<Vec<(u64, usize)>>>,
-) {
-    let brokers_usage = brokers_usage.lock().await;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::load_report::SystemLoad;
 
-    let mut broker_loads: Vec<(u64, usize)> = brokers_usage
-        .iter()
-        .map(|(&broker_id, load_report)| (broker_id, load_report.topics))
-        .collect();
+    fn create_load_report(cpu_usage: usize, memory_usage: usize, topics: usize) -> LoadReport {
+        LoadReport {
+            resources_usage: vec![
+                SystemLoad {
+                    resource: ResourceType::CPU,
+                    usage: cpu_usage,
+                },
+                SystemLoad {
+                    resource: ResourceType::Memory,
+                    usage: memory_usage,
+                },
+            ],
+            topics,
+            topic_list: vec!["/default/topic_name".to_string()],
+        }
+    }
 
-    broker_loads.sort_by_key(|&(_, load)| load);
+    #[tokio::test]
+    async fn test_single_broker() {
+        let load_manager = LoadManager {
+            brokers_usage: Arc::new(Mutex::new(HashMap::new())),
+            rankings: Arc::new(Mutex::new(Vec::new())),
+            next_broker: Arc::new(AtomicU64::new(0)),
+        };
 
-    let mut rankings = rankings.lock().await;
-    *rankings = broker_loads;
-}
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(1, create_load_report(50, 30, 10));
 
-// Composite Load Calculation: the load is based on the number of topics, CPU usage, and memory usage.
-async fn calculate_rankings_composite(
-    brokers_usage: Arc<Mutex<HashMap<u64, LoadReport>>>,
-    rankings: Arc<Mutex<Vec<(u64, usize)>>>,
-) {
-    let brokers_usage = brokers_usage.lock().await;
+        load_manager.calculate_rankings_composite().await;
 
-    let weights = (1.0, 0.5, 0.5); // (topics_weight, cpu_weight, memory_weight)
+        let rankings = load_manager.rankings.lock().await;
+        assert_eq!(rankings.len(), 1);
+        assert_eq!(rankings[0], (1, 50)); // 10 * 1.0 + 50 * 0.5 + 30 * 0.5 = 75
+    }
 
-    let mut broker_loads: Vec<(u64, usize)> = brokers_usage
-        .iter()
-        .map(|(&broker_id, load_report)| {
-            let topics_load = load_report.topics as f64 * weights.0;
-            let mut cpu_load = 0.0;
-            let mut memory_load = 0.0;
+    #[tokio::test]
+    async fn test_multiple_brokers() {
+        let load_manager = LoadManager {
+            brokers_usage: Arc::new(Mutex::new(HashMap::new())),
+            rankings: Arc::new(Mutex::new(Vec::new())),
+            next_broker: Arc::new(AtomicU64::new(0)),
+        };
 
-            for system_load in &load_report.resources_usage {
-                match system_load.resource {
-                    ResourceType::CPU => cpu_load += system_load.usage as f64 * weights.1,
-                    ResourceType::Memory => memory_load += system_load.usage as f64 * weights.2,
-                }
-            }
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(1, create_load_report(50, 30, 10));
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(2, create_load_report(20, 20, 5));
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(3, create_load_report(10, 10, 2));
 
-            let total_load = (topics_load + cpu_load + memory_load) as usize;
-            (broker_id, total_load)
-        })
-        .collect();
+        load_manager.calculate_rankings_composite().await;
 
-    broker_loads.sort_by_key(|&(_, load)| load);
+        let rankings = load_manager.rankings.lock().await;
+        assert_eq!(rankings.len(), 3);
+        assert_eq!(rankings[0], (3, 12)); // 2 * 1.0 + 10 * 0.5 + 10 * 0.5 = 12
+        assert_eq!(rankings[1], (2, 25)); // 5 * 1.0 + 20 * 0.5 + 20 * 0.5 = 25
+        assert_eq!(rankings[2], (1, 50)); // 10 * 1.0 + 50 * 0.5 + 30 * 0.5 = 75
+    }
 
-    let mut rankings = rankings.lock().await;
-    *rankings = broker_loads;
+    #[tokio::test]
+    async fn test_empty_brokers_usage() {
+        let load_manager = LoadManager {
+            brokers_usage: Arc::new(Mutex::new(HashMap::new())),
+            rankings: Arc::new(Mutex::new(Vec::new())),
+            next_broker: Arc::new(AtomicU64::new(0)),
+        };
+
+        load_manager.calculate_rankings_composite().await;
+
+        let rankings = load_manager.rankings.lock().await;
+        assert_eq!(rankings.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_same_load_brokers() {
+        let load_manager = LoadManager {
+            brokers_usage: Arc::new(Mutex::new(HashMap::new())),
+            rankings: Arc::new(Mutex::new(Vec::new())),
+            next_broker: Arc::new(AtomicU64::new(0)),
+        };
+
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(1, create_load_report(10, 10, 5)); // Load: 5 * 1.0 + 10 * 0.5 + 10 * 0.5 = 15
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(2, create_load_report(10, 10, 5)); // Load: 15
+        load_manager
+            .brokers_usage
+            .lock()
+            .await
+            .insert(3, create_load_report(10, 10, 5)); // Load: 15
+
+        load_manager.calculate_rankings_composite().await;
+
+        let rankings = load_manager.rankings.lock().await;
+        assert_eq!(rankings.len(), 3);
+        assert!(rankings.contains(&(1, 15))); // 5 * 1.0 + 10 * 0.5 + 10 * 0.5 = 15
+        assert!(rankings.contains(&(2, 15))); // 5 * 1.0 + 10 * 0.5 + 10 * 0.5 = 15
+        assert!(rankings.contains(&(3, 15))); // 5 * 1.0 + 10 * 0.5 + 10 * 0.5 = 15
+    }
 }
