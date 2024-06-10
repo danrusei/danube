@@ -84,7 +84,9 @@ impl Controller {
         }
     }
     pub(crate) async fn start(&mut self) -> Result<()> {
-        // Start the Syncronizer process
+        // Start the Syncronizer
+        //==========================================================================
+
         let syncronyzer = if let Ok(syncronizer) = Syncronizer::new() {
             syncronizer
         } else {
@@ -94,6 +96,8 @@ impl Controller {
         self.syncronizer = Some(syncronyzer);
 
         // Start the Leader Election Service
+        //==========================================================================
+
         let mut leader_election_service = LeaderElection::new(
             self.meta_store.clone(),
             LEADER_SELECTION_PATH,
@@ -102,7 +106,20 @@ impl Controller {
 
         leader_election_service.start();
 
+        // Start the Local Cache
+        //==========================================================================
+
+        let local_cache = LocalCache::new();
+        // Fetch initial data, populate cache & watch for Events to update local cache
+        let mut client = self.meta_store.get_client();
+        if let Some(client) = client {
+            let rx_event = local_cache.populate_start_local_cache(client).await?;
+            // Process the ETCD Watch events
+            tokio::spawn(async move { local_cache.process_event(rx_event).await });
+        }
+
         // Start the Load Manager Service
+        //==========================================================================
         // at this point the broker will become visible to the rest of the brokers
         // by creating the registration and also
 
@@ -114,12 +131,13 @@ impl Controller {
         let mut load_manager_cloned = self.load_manager.clone();
         let broker_id_cloned = self.broker_id;
 
-        // process the ETCD Watch events
+        // Process the ETCD Watch events
         tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id_cloned).await });
 
         let broker_service_cloned = Arc::clone(&self.broker);
         let meta_store_cloned = self.meta_store.clone();
-        // posting periodic load reports
+
+        // Publish periodic Load Reports
         tokio::spawn(
             async move { post_broker_load_report(broker_service_cloned, meta_store_cloned) },
         );

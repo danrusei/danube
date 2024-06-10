@@ -16,6 +16,8 @@ pub(crate) static BASE_CLUSTERS_PATH: &str = "/cluster";
 pub(crate) static BASE_BROKER_PATH: &str = "/cluster/broker";
 pub(crate) static BASE_NAMESPACE_PATH: &str = "/namespace";
 pub(crate) static BASE_TOPIC_PATH: &str = "/topic";
+pub(crate) static BASE_SUBSCRIPTION_PATH: &str = "/subscription";
+pub(crate) static BASE_PRODUCER_PATH: &str = "/producer";
 
 pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
 
