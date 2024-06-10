@@ -28,15 +28,15 @@ use crate::resources::{
 #[derive(Debug, Clone)]
 pub(crate) struct LocalCache {
     // holds information about the cluster and the cluster's brokers
-    pub(crate) cluster: Arc<DashMap<String, Value>>,
+    pub(crate) cluster: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the namespace policy and the namespace's topics
-    pub(crate) namespaces: Arc<DashMap<String, Value>>,
+    pub(crate) namespaces: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic policy and topic metadata, including partitioned topics
-    pub(crate) topics: Arc<DashMap<String, Value>>,
+    pub(crate) topics: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic subscriptions, including their consumers
-    pub(crate) subscriptions: Arc<DashMap<String, Value>>,
+    pub(crate) subscriptions: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the producers
-    pub(crate) producers: Arc<DashMap<String, Value>>,
+    pub(crate) producers: Arc<DashMap<String, (i64, Value)>>,
 }
 
 impl LocalCache {
@@ -50,7 +50,7 @@ impl LocalCache {
         }
     }
 
-    pub(crate) fn update_cache(&self, key: &str, value: Option<&[u8]>) {
+    pub(crate) fn update_cache(&self, key: &str, version: i64, value: Option<&[u8]>) {
         let parts: Vec<&str> = key.split('/').collect();
         if parts.len() < 2 {
             return;
@@ -65,9 +65,15 @@ impl LocalCache {
             _ => return,
         };
 
+        if cache.contains_key(key) {
+            if cache.get(key).unwrap().0 >= version {
+                return;
+            }
+        }
+
         if let Some(value) = value {
             if let Ok(json_value) = serde_json::from_slice(value) {
-                cache.insert(key.to_string(), json_value);
+                cache.insert(key.to_string(), (version, json_value));
             }
         } else {
             cache.remove(key);
@@ -89,7 +95,8 @@ impl LocalCache {
             for kv in response.kvs() {
                 let key = String::from_utf8(kv.key().to_vec()).unwrap();
                 let value = kv.value();
-                self.update_cache(&key, Some(value));
+                let version = kv.version();
+                self.update_cache(&key, version, Some(value));
             }
         }
         info!("Initial cache populated");
@@ -119,9 +126,11 @@ impl LocalCache {
         while let Some(event) = rx_event.recv().await {
             match event.event_type {
                 etcd_client::EventType::Put => {
-                    self.update_cache(&event.key, event.value.as_deref())
+                    self.update_cache(&event.key, event.version, event.value.as_deref())
                 }
-                etcd_client::EventType::Delete => self.update_cache(&event.key, None),
+                etcd_client::EventType::Delete => {
+                    self.update_cache(&event.key, event.version, None)
+                }
                 _ => {}
             }
         }

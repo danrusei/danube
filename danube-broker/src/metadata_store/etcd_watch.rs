@@ -9,6 +9,8 @@ use tracing::warn;
 pub(crate) struct ETCDWatchEvent {
     pub(crate) key: String,
     pub(crate) value: Option<Vec<u8>>,
+    pub(crate) mod_revision: i64,
+    pub(crate) version: i64,
     pub(crate) event_type: EventType,
 }
 
@@ -30,6 +32,8 @@ pub(crate) async fn etcd_watch_prefixes(
                             let watch_event = ETCDWatchEvent {
                                 key: key_value.key_str().unwrap().to_owned(),
                                 value: Some(key_value.value().to_vec()),
+                                mod_revision: key_value.mod_revision(),
+                                version: key_value.version(),
                                 event_type: event.event_type(),
                             };
                             sender.send(watch_event).await.unwrap();
