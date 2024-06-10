@@ -28,6 +28,8 @@ pub(crate) trait MetadataStore {
     //fn register_listener(listener: String) //this should be migrated to Consumer<Notification>
 }
 
+// TODO! this is not optimal if you need GetOptions::new().with_prefix()
+
 #[derive(Debug, Clone)]
 pub(crate) enum MetadataStorage {
     MemoryStore(MemoryMetadataStore),

@@ -136,9 +136,3 @@ impl LocalCache {
         }
     }
 }
-
-//TODO! Handling Conflicts:
-// The implementation should include mechanisms to handle potential conflicts, such as version checks.
-// The path/field version is already provided by ETCD
-// For example, when updating or deleting metadata, the code checks the expected version
-// to ensure that it is performing the action on the correct version of the metadata.

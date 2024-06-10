@@ -2,7 +2,7 @@ pub(crate) mod load_report;
 use load_report::{LoadReport, ResourceType, SystemLoad};
 
 use anyhow::{anyhow, Result};
-use etcd_client::{Client, EventType};
+use etcd_client::{Client, EventType, GetOptions};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task;
 use tokio::time::{self, Duration};
 
+use crate::metadata_store::MetaOptions;
 use crate::{
     metadata_store::{etcd_watch_prefixes, ETCDWatchEvent, MetadataStorage, MetadataStore},
     resources::{BASE_BROKER_PATH, LOADBALACE_DECISION_PATH},
@@ -41,14 +42,6 @@ impl LoadManager {
         broker_id: u64,
         mut store: MetadataStorage,
     ) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
-        // fetch the initial broker Load information
-        self.fetch_initial_load().await;
-
-        //calculate rankings after the initial usage fetch
-        self.calculate_rankings_simple();
-
-        let (tx_event, mut rx_event) = mpsc::channel(32);
-
         let client = if let Some(client) = store.get_client() {
             client
         } else {
@@ -56,6 +49,14 @@ impl LoadManager {
                 "The Load Manager was unable to fetch the Metadata Store client"
             ));
         };
+
+        // fetch the initial broker Load information
+        self.fetch_initial_load(client.clone()).await;
+
+        //calculate rankings after the initial load fetch
+        self.calculate_rankings_simple();
+
+        let (tx_event, mut rx_event) = mpsc::channel(32);
 
         // watch for ETCD events
         tokio::spawn(async move {
@@ -90,8 +91,42 @@ impl LoadManager {
         }
     }
 
-    async fn fetch_initial_load(&self) {
-        todo!()
+    pub(crate) async fn fetch_initial_load(&self, mut client: Client) -> Result<()> {
+        // Prepare the etcd request to get all keys under /cluster/brokers/load/
+        let options = GetOptions::new().with_prefix();
+        let response = client
+            .get("/cluster/brokers/load/", Some(options))
+            .await
+            .expect("Failed to fetch keys from etcd");
+
+        let mut brokers_usage = self.brokers_usage.lock().await;
+
+        // Iterate through the key-value pairs in the response
+        for kv in response.kvs() {
+            let key = kv.key_str().expect("Failed to parse key");
+            let value = kv.value();
+
+            // Extract broker-id from key
+            if let Some(broker_id_str) = key.strip_prefix("/cluster/brokers/load/") {
+                if let Ok(broker_id) = broker_id_str.parse::<u64>() {
+                    // Deserialize the value to LoadReport
+                    if let Ok(load_report) = serde_json::from_slice::<LoadReport>(value) {
+                        brokers_usage.insert(broker_id, load_report);
+                    } else {
+                        return Err(anyhow!(
+                            "Failed to deserialize LoadReport for broker_id: {}",
+                            broker_id
+                        ));
+                    }
+                } else {
+                    return Err(anyhow!("Invalid broker_id format in key: {}", key));
+                }
+            } else {
+                return Err(anyhow!("Key does not match expected pattern: {}", key));
+            }
+        }
+
+        Ok(())
     }
 
     async fn process_event(&self, event: ETCDWatchEvent) {
