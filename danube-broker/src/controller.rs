@@ -5,12 +5,13 @@ mod syncronizer;
 use etcd_client::PutOptions;
 pub(crate) use leader_election::{LeaderElection, LeaderElectionState};
 pub(crate) use load_manager::load_report::{generate_load_report, LoadReport};
+pub(crate) use load_manager::LoadManager;
 pub(crate) use local_cache::LocalCache;
+pub(crate) use syncronizer::Syncronizer;
 
 use anyhow::{anyhow, Result};
-use load_manager::LoadManager;
+use core::sync;
 use std::sync::Arc;
-use syncronizer::Syncronizer;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 
@@ -22,7 +23,7 @@ use crate::{
     resources::{join_path, BASE_BROKER_PATH},
 };
 
-static LEADER_SELECTION_PATH: &str = "/broker/leader";
+pub(crate) static LEADER_SELECTION_PATH: &str = "/broker/leader";
 
 // Controller has Cluster and local Broker management responsabilities
 //
@@ -57,54 +58,56 @@ static LEADER_SELECTION_PATH: &str = "/broker/leader";
 // This includes limiting the number of topics, message rates, and storage usage.
 #[derive(Debug)]
 pub(crate) struct Controller {
-    broker_id: u64,
+    broker_id: Option<u64>,
     broker: Arc<Mutex<BrokerService>>,
     meta_store: MetadataStorage,
     local_cache: LocalCache,
-    leader_election_service: Option<LeaderElection>,
-    syncronizer: Option<Syncronizer>,
+    leader_election: LeaderElection,
+    syncronizer: Syncronizer,
     load_manager: LoadManager,
 }
 
 impl Controller {
     pub(crate) fn new(
-        broker_id: u64,
         broker: Arc<Mutex<BrokerService>>,
+        meta_store: MetadataStorage,
         local_cache: LocalCache,
-        store: MetadataStorage,
+        leader_election: LeaderElection,
+        syncronizer: Syncronizer,
+        load_manager: LoadManager,
     ) -> Self {
         Controller {
-            broker_id,
+            broker_id: None,
             broker,
-            meta_store: store.clone(),
+            meta_store,
             local_cache,
-            leader_election_service: None,
-            syncronizer: None,
-            load_manager: LoadManager::new(broker_id),
+            leader_election,
+            syncronizer,
+            load_manager,
         }
     }
     pub(crate) async fn start(&mut self) -> Result<()> {
+        let broker_id = self.broker.lock().await.broker_id;
+        self.broker_id = Some(broker_id);
+
         // Start the Syncronizer
         //==========================================================================
 
-        let syncronyzer = if let Ok(syncronizer) = Syncronizer::new() {
-            syncronizer
-        } else {
-            return Err(anyhow!("Unable to instantiate the Syncronizer"));
-        };
+        // let syncronyzer = if let Ok(syncronizer) = Syncronizer::new() {
+        //     syncronizer
+        // } else {
+        //     return Err(anyhow!("Unable to instantiate the Syncronizer"));
+        // };
 
-        self.syncronizer = Some(syncronyzer);
+        // self.syncronizer = Some(syncronyzer);
 
         // Start the Leader Election Service
         //==========================================================================
 
-        let mut leader_election_service = LeaderElection::new(
-            self.meta_store.clone(),
-            LEADER_SELECTION_PATH,
-            self.broker_id,
-        );
+        // let mut leader_election_service =
+        //     LeaderElection::new(self.meta_store.clone(), LEADER_SELECTION_PATH, broker_id);
 
-        leader_election_service.start();
+        self.leader_election.start();
 
         // Start the Local Cache
         //==========================================================================
@@ -123,16 +126,18 @@ impl Controller {
         // at this point the broker will become visible to the rest of the brokers
         // by creating the registration and also
 
+        // self.load_manager = Some(LoadManager::new(broker_id));
+
         let rx_event = self
             .load_manager
-            .bootstrap(self.broker_id, self.meta_store.clone())
+            .bootstrap(broker_id, self.meta_store.clone())
             .await?;
 
         let mut load_manager_cloned = self.load_manager.clone();
-        let broker_id_cloned = self.broker_id;
+        //let broker_id_cloned = self.broker_id;
 
         // Process the ETCD Watch events
-        tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id_cloned).await });
+        tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id).await });
 
         let broker_service_cloned = Arc::clone(&self.broker);
         let meta_store_cloned = self.meta_store.clone();
@@ -147,9 +152,13 @@ impl Controller {
 
     // Checks whether the broker owns a specific topic
     pub(crate) async fn check_topic_ownership(&self, topic_name: &str) -> bool {
-        self.load_manager
-            .check_ownership(self.broker_id, topic_name)
-            .await
+        if let Some(broker_id) = self.broker_id {
+            return self
+                .load_manager
+                .check_ownership(broker_id, topic_name)
+                .await;
+        }
+        false
     }
 
     // Lookup service for resolving topic names to their corresponding broker service URLs

@@ -15,11 +15,24 @@ mod subscription;
 mod topic;
 mod utils;
 
-use crate::danube_service::DanubeService;
-use crate::service_configuration::ServiceConfiguration;
+use std::sync::Arc;
+
+use crate::{
+    broker_service::BrokerService,
+    controller::{
+        Controller, LeaderElection, LoadManager, LocalCache, Syncronizer, LEADER_SELECTION_PATH,
+    },
+    danube_service::DanubeService,
+    metadata_store::{
+        EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
+    },
+    resources::Resources,
+    service_configuration::ServiceConfiguration,
+};
 
 use anyhow::Result;
 use clap::Parser;
+use tokio::sync::Mutex;
 use tracing::info;
 use tracing_subscriber;
 
@@ -60,14 +73,52 @@ async fn main() -> Result<()> {
 
     let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
 
-    let broker_config = ServiceConfiguration {
+    let service_config = ServiceConfiguration {
         cluster_name: args.cluster_name,
         broker_addr: broker_addr,
         meta_store_addr: args.meta_store_addr,
         bootstrap_namespaces: args.namespaces,
     };
 
-    let mut danube = DanubeService::new(broker_config);
+    let store_config = MetadataStoreConfig::new();
+    let metadata_store: MetadataStorage =
+        if let Some(etcd_addr) = service_config.meta_store_addr.clone() {
+            MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr, store_config).await?)
+        } else {
+            MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
+        };
+
+    // caching metadata locally to reduce the number of remote calls to Metadata Store
+    let local_cache = LocalCache::new();
+
+    // handle the metadata and configurations required for managing namespaces, topics, etc
+    let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
+
+    let syncroniser = Syncronizer::new().expect("Unable to instantiate the Syncronizer");
+
+    let broker_service = BrokerService::new(resources.clone());
+
+    let mut leader_election_service = LeaderElection::new(
+        metadata_store.clone(),
+        LEADER_SELECTION_PATH,
+        broker_service.broker_id,
+    );
+
+    let load_manager = LoadManager::new(broker_service.broker_id);
+
+    let broker: Arc<Mutex<BrokerService>> = Arc::new(Mutex::new(broker_service));
+
+    // instantiate the controller
+    let mut controller = Controller::new(
+        Arc::clone(&broker),
+        metadata_store,
+        local_cache,
+        leader_election_service,
+        syncroniser,
+        load_manager,
+    );
+
+    let mut danube = DanubeService::new(Arc::clone(&broker), controller, service_config, resources);
 
     info!("Start the Danube Broker Service");
     danube.start().await.expect("the broker unable to start");

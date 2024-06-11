@@ -13,8 +13,9 @@ use crate::resources::{
     BASE_TOPIC_PATH,
 };
 
-// The LocalCache holds the local state of the metadata to enable quick access
-// and reduce the need for frequent queries to the central metadata store: ETCD.
+// It caches various types of metadata required by Danube brokers, such as topic and namespace data,
+// which are frequently accessed during message production and consumption.
+// This reduces the need for frequent queries to the central metadata store: ETCD.
 //
 // The resources/_resources.md document describe how the resources are organized in Metadata Store
 //

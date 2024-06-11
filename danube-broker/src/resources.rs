@@ -31,7 +31,7 @@ pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
 // and namespace configurations are neatly organized and do not get mixed up.
 // Reduced Overhead: By limiting the scope of data retrievals to a specific path,
 // the overhead of processing unnecessary data, is reduced.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Resources {
     store: MetadataStorage,
     pub(crate) cluster: ClusterResources,

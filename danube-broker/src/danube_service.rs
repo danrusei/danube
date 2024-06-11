@@ -20,88 +20,69 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct DanubeService {
-    broker_id: u64,
+    //broker_id: Option<u64>,
     broker: Arc<Mutex<BrokerService>>,
-    controller: Option<Controller>,
-    config: ServiceConfiguration,
-    resources: Option<Resources>,
+    controller: Controller,
+    service_config: ServiceConfiguration,
+    resources: Resources,
 }
 
 // DanubeService act as a a coordinator for managing clusters, including storage and brokers.
 impl DanubeService {
-    pub(crate) fn new(service_config: ServiceConfiguration) -> Self {
-        let broker_service = BrokerService::new();
-        let controller = None;
-
+    pub(crate) fn new(
+        broker: Arc<Mutex<BrokerService>>,
+        controller: Controller,
+        service_config: ServiceConfiguration,
+        resources: Resources,
+    ) -> Self {
         DanubeService {
-            broker_id: broker_service.broker_id,
-            broker: Arc::new(Mutex::new(broker_service)),
+            broker,
             controller,
-            config: service_config,
-            resources: None,
+            service_config,
+            resources,
         }
     }
 
     pub(crate) async fn start(&mut self) -> Result<()> {
-        let socket_addr = self.config.broker_addr.clone();
-
-        let store_config = MetadataStoreConfig::new();
-        let metadata_store: MetadataStorage =
-            if let Some(etcd_addr) = self.config.meta_store_addr.clone() {
-                MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr, store_config).await?)
-            } else {
-                MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
-            };
-
-        let local_cache = LocalCache::new();
-
-        let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
-
-        // instantiate the controller
-        let mut controller = Controller::new(
-            self.broker_id,
-            Arc::clone(&self.broker),
-            local_cache,
-            metadata_store,
-        );
-
         info!(
             "Setting up the cluster {} with metadata-store {}",
-            self.config.cluster_name, "etcd"
+            self.service_config.cluster_name, "etcd"
         );
-        resources.cluster.create_cluster(
-            &self.config.cluster_name,
-            self.config.broker_addr.to_string(),
+        self.resources.cluster.create_cluster(
+            &self.service_config.cluster_name,
+            self.service_config.broker_addr.to_string(),
         );
 
         //create the default Namespace
-        create_namespace_if_absent(&mut resources, DEFAULT_NAMESPACE).await?;
+        create_namespace_if_absent(&mut self.resources, DEFAULT_NAMESPACE).await?;
 
         //create system Namespace
-        create_namespace_if_absent(&mut resources, SYSTEM_NAMESPACE).await?;
+        create_namespace_if_absent(&mut self.resources, SYSTEM_NAMESPACE).await?;
 
         //create system topic
-        if !resources.topic.topic_exists(SYSTEM_TOPIC).await? {
-            resources.topic.create_topic(SYSTEM_TOPIC, 0).await?;
+        if !self.resources.topic.topic_exists(SYSTEM_TOPIC).await? {
+            self.resources.topic.create_topic(SYSTEM_TOPIC, 0).await?;
         }
 
         //cluster metadata setup completed
 
         //create bootstrap namespaces
-        for namespace in &self.config.bootstrap_namespaces {
-            create_namespace_if_absent(&mut resources, &namespace).await?;
+        for namespace in &self.service_config.bootstrap_namespaces {
+            create_namespace_if_absent(&mut self.resources, &namespace).await?;
         }
 
         // Not used yet, will be used for persistent topic storage, which is not yet implemented
         // let _storage = storage::memory_segment_storage::SegmentStore::new();
 
-        let grpc_server =
-            broker_server::DanubeServerImpl::new(self.broker.clone(), self.config.broker_addr);
+        let grpc_server = broker_server::DanubeServerImpl::new(
+            self.broker.clone(),
+            self.service_config.broker_addr,
+        );
 
         grpc_server.start().await?;
 
         // The Controller is responsible of starting the Syncronizer, LeaderElection and Load Manager Services
-        controller.start();
+        self.controller.start();
 
         Ok(())
     }

@@ -12,6 +12,7 @@ use crate::proto::{ProducerAccessMode, Schema};
 use crate::{
     consumer::Consumer,
     producer::Producer,
+    resources::Resources,
     subscription::SubscriptionOptions,
     topic::{self, Topic},
     utils::get_random_id,
@@ -23,9 +24,11 @@ use crate::{
 pub(crate) struct BrokerService {
     // the id of the broker
     pub(crate) broker_id: u64,
+    // to handle the metadata and configurations
+    pub(crate) resources: Resources,
     // a map with namespace wise topics - Namespace --> topicName --> topic
     //topics: DashMap<String, DashMap<String, Topic>>,
-    // topic_name to Topic
+    // maps topic_name to Topic
     pub(crate) topics: HashMap<String, Topic>,
     // the list of active producers, mapping producer_id to topic_name
     pub(crate) producers: HashMap<u64, String>,
@@ -34,10 +37,11 @@ pub(crate) struct BrokerService {
 }
 
 impl BrokerService {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(resources: Resources) -> Self {
         let broker_id = get_random_id();
         BrokerService {
             broker_id,
+            resources: resources,
             topics: HashMap::new(),
             producers: HashMap::new(),
             consumers: HashMap::new(),

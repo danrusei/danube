@@ -6,7 +6,7 @@ use crate::{
     resources::{join_path, BASE_TOPIC_PATH},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct TopicResources {
     local_cache: LocalCache,
     store: MetadataStorage,

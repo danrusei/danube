@@ -10,7 +10,7 @@ use crate::{
     resources::{join_path, BASE_NAMESPACE_PATH},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct NamespaceResources {
     local_cache: LocalCache,
     store: MetadataStorage,

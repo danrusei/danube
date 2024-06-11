@@ -6,7 +6,7 @@ use crate::{
     resources::{join_path, BASE_CLUSTERS_PATH},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ClusterResources {
     local_cache: LocalCache,
     store: MetadataStorage,
