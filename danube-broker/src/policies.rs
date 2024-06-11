@@ -5,16 +5,28 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Policies {
+    // Limits the maximum number of producers that can simultaneously publish messages to a specific topic.
     #[serde(default = "default_zero")]
     max_producers_per_topic: Option<u32>,
-    #[serde(default = "default_zero")]
-    max_consumers_per_topic: Option<u32>,
-    #[serde(default = "default_zero")]
-    max_consumers_per_subscription: Option<u32>,
+    // Limits the maximum number of subscriptions that can be created on the topic.
     #[serde(default = "default_zero")]
     max_subscriptions_per_topic: Option<u32>,
+    // Limits the maximum number of consumers that can simultaneously consume messages from a specific topic.
     #[serde(default = "default_zero")]
-    max_topics_per_namespace: Option<u32>,
+    max_consumers_per_topic: Option<u32>,
+    // Limits the maximum number of consumers that can simultaneously use a single subscription on a topic.
+    #[serde(default = "default_zero")]
+    max_consumers_per_subscription: Option<u32>,
+
+    // Defines the Max publish rate (number of messages and/or bytes per second) for producers publishing to the topic.
+    max_publish_rate: Option<u32>,
+    // Defines the Max dispatch rate (number of messages and/or bytes per second) for the topic.
+    max_dispatch_rate: Option<u32>,
+    // Defines the dispatch rate for each subscription on the topic.
+    max_subscription_dispatch_rate: Option<u32>,
+
+    // Limits the maximum size of a single message that can be published to the topic.
+    max_message_size: Option<u32>,
 }
 
 fn default_zero() -> Option<u32> {
@@ -39,10 +51,13 @@ impl Policies {
         let mut found_fields = HashSet::new();
         let expected_fields = [
             "max_producers_per_topic",
+            "max_subscriptions_per_topic",
             "max_consumers_per_topic",
             "max_consumers_per_subscription",
-            "max_subscriptions_per_topic",
-            "max_topics_per_namespace",
+            "max_publish_rate",
+            "max_dispatch_rate",
+            "max_subscription_dispatch_rate",
+            "max_message_size",
         ];
 
         for (key, value) in map {
@@ -79,13 +94,37 @@ impl Policies {
                     }
                     found_fields.insert("max_subscriptions_per_topic");
                 }
-                "max_topics_per_namespace" => {
+                "max_publish_rate" => {
                     if value.is_null() {
-                        policies.max_topics_per_namespace = None;
+                        policies.max_publish_rate = None;
                     } else if let Some(val) = value.as_u64() {
-                        policies.max_topics_per_namespace = Some(val as u32);
+                        policies.max_publish_rate = Some(val as u32);
                     }
-                    found_fields.insert("max_topics_per_namespace");
+                    found_fields.insert("max_publish_rate");
+                }
+                "max_dispatch_rate" => {
+                    if value.is_null() {
+                        policies.max_dispatch_rate = None;
+                    } else if let Some(val) = value.as_u64() {
+                        policies.max_dispatch_rate = Some(val as u32);
+                    }
+                    found_fields.insert("max_dispatch_rate");
+                }
+                "max_subscription_dispatch_rate" => {
+                    if value.is_null() {
+                        policies.max_subscription_dispatch_rate = None;
+                    } else if let Some(val) = value.as_u64() {
+                        policies.max_subscription_dispatch_rate = Some(val as u32);
+                    }
+                    found_fields.insert("max_subscription_dispatch_rate");
+                }
+                "max_message_size" => {
+                    if value.is_null() {
+                        policies.max_message_size = None;
+                    } else if let Some(val) = value.as_u64() {
+                        policies.max_message_size = Some(val as u32);
+                    }
+                    found_fields.insert("max_message_size");
                 }
                 _ => {} // Ignore unknown fields
             }
