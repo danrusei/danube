@@ -104,21 +104,19 @@ impl Controller {
         // Start the Leader Election Service
         //==========================================================================
 
-        // let mut leader_election_service =
-        //     LeaderElection::new(self.meta_store.clone(), LEADER_SELECTION_PATH, broker_id);
-
         self.leader_election.start();
 
         // Start the Local Cache
         //==========================================================================
 
-        let local_cache = LocalCache::new();
+        // let local_cache = LocalCache::new();
         // Fetch initial data, populate cache & watch for Events to update local cache
         let mut client = self.meta_store.get_client();
         if let Some(client) = client {
-            let rx_event = local_cache.populate_start_local_cache(client).await?;
+            let local_cache_cloned = self.local_cache.clone();
+            let rx_event = self.local_cache.populate_start_local_cache(client).await?;
             // Process the ETCD Watch events
-            tokio::spawn(async move { local_cache.process_event(rx_event).await });
+            tokio::spawn(async move { local_cache_cloned.process_event(rx_event).await });
         }
 
         // Start the Load Manager Service

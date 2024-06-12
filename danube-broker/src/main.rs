@@ -73,6 +73,9 @@ async fn main() -> Result<()> {
 
     let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
 
+    // configuration settings for a Danube broker service
+    // includes various parameters that control the behavior and performance of the broker
+    // TODO! read from a config file, like danube.conf
     let service_config = ServiceConfiguration {
         cluster_name: args.cluster_name,
         broker_addr: broker_addr,
@@ -80,6 +83,7 @@ async fn main() -> Result<()> {
         bootstrap_namespaces: args.namespaces,
     };
 
+    // initialize the storage layer for Danube Metadata
     let store_config = MetadataStoreConfig::new();
     let metadata_store: MetadataStorage =
         if let Some(etcd_addr) = service_config.meta_store_addr.clone() {
@@ -91,24 +95,30 @@ async fn main() -> Result<()> {
     // caching metadata locally to reduce the number of remote calls to Metadata Store
     let local_cache = LocalCache::new();
 
-    // handle the metadata and configurations required for managing namespaces, topics, etc
+    // convenient functions to handle the metadata and configurations required
+    // for managing the cluster, namespaces & topics
     let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
 
+    // The synchronizer ensures that metadata & configuration settings across different brokers remains consistent.
+    // using the client Producers to distribute metadata updates across brokers.
     let syncroniser = Syncronizer::new().expect("Unable to instantiate the Syncronizer");
 
+    // the broker service, is responsible to reliable deliver the messages from producers to consumers.
     let broker_service = BrokerService::new(resources.clone());
 
+    // the service selects one broker per cluster to be the leader to coordinate and take assignment decision.
     let mut leader_election_service = LeaderElection::new(
         metadata_store.clone(),
         LEADER_SELECTION_PATH,
         broker_service.broker_id,
     );
 
+    // Load Manager, monitor and distribute load across brokers.
     let load_manager = LoadManager::new(broker_service.broker_id);
 
     let broker: Arc<Mutex<BrokerService>> = Arc::new(Mutex::new(broker_service));
 
-    // instantiate the controller
+    // The controller operates all the mangement services
     let mut controller = Controller::new(
         Arc::clone(&broker),
         metadata_store,
@@ -118,6 +128,7 @@ async fn main() -> Result<()> {
         load_manager,
     );
 
+    // DanubeService coordinate and start all the services
     let mut danube = DanubeService::new(Arc::clone(&broker), controller, service_config, resources);
 
     info!("Start the Danube Broker Service");
