@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use tonic::transport::Server;
 use tracing::info;
 
+use crate::policies::Policies;
 use crate::proto::{ProducerAccessMode, Schema};
 use crate::{
     consumer::Consumer,
@@ -92,7 +93,8 @@ impl BrokerService {
                 ));
             }
 
-            let new_topic_name = self.create_new_topic(ns_name, topic_name, schema.unwrap())?;
+            let new_topic_name =
+                self.create_new_topic(ns_name, topic_name, schema.unwrap(), None)?;
             return Ok(new_topic_name);
         }
 
@@ -112,13 +114,22 @@ impl BrokerService {
         ns_name: &str,
         topic_name: &str,
         schema: Schema,
+        policies: Option<Policies>,
     ) -> Result<String> {
         // create the topic,
         let mut new_topic = Topic::new(topic_name);
 
         new_topic.add_schema(schema);
 
-        // add also the policy, inherit namespace policy
+        if let Some(with_policies) = policies {
+            new_topic.policies_update(with_policies);
+        } else {
+            // get namespace policies
+            let policies = self.resources.namespace.get_policies(ns_name)?;
+            //TODO! for now the namespace polices == topic policies, if they will be different as number of values
+            // then I shoud copy field by field
+            new_topic.policies_update(policies);
+        }
         // now save the topic...to storage, including it's Schema and Policy
 
         // load balancer should decide which broker is going to serve this topic

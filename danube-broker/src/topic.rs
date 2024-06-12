@@ -52,15 +52,6 @@ impl Topic {
         }
     }
 
-    pub(crate) fn initialize(&mut self) -> Result<()> {
-        //check for namespace policies and apply to topic using namespace resources getpolicies
-        //if found apply namespace policies at topic level
-        // if none :
-        self.topic_policies = Some(Policies::new());
-
-        Ok(())
-    }
-
     // Close all producers and subscriptions associated with this topic
     pub(crate) fn close() -> Result<()> {
         todo!()
@@ -167,8 +158,10 @@ impl Topic {
     }
 
     // Update Topic Policies
-    pub(crate) fn policies_update(&self, policies: Policies) -> Result<()> {
-        todo!()
+    pub(crate) fn policies_update(&mut self, policies: Policies) -> Result<()> {
+        self.topic_policies = Some(policies);
+
+        Ok(())
     }
 
     // Add a schema to the topic.

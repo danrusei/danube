@@ -234,7 +234,7 @@ async fn create_namespace_if_absent(resources: &mut Resources, namespace_name: &
     } else {
         info!("Namespace {} already exists.", DEFAULT_NAMESPACE);
         // ensure that the policies are in place for the Default Namespace
-        let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE).await?;
+        let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE)?;
     }
     Ok(())
 }

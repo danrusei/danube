@@ -136,4 +136,32 @@ impl LocalCache {
             }
         }
     }
+    pub fn get(&self, path: &str) -> Option<Value> {
+        // Split the path by '/' and collect the segments into a vector
+        let segments: Vec<&str> = path.split('/').collect();
+
+        // Ensure the path has at least two segments (e.g., "/cluster/{key}")
+        if segments.len() < 2 {
+            return None;
+        }
+
+        // Determine which DashMap to access based on the first segment
+        match segments[1] {
+            "cluster" => self.cluster.get(path).map(|entry| entry.value().1.clone()),
+            "namespaces" => self
+                .namespaces
+                .get(path)
+                .map(|entry| entry.value().1.clone()),
+            "topics" => self.topics.get(path).map(|entry| entry.value().1.clone()),
+            "subscriptions" => self
+                .subscriptions
+                .get(path)
+                .map(|entry| entry.value().1.clone()),
+            "producers" => self
+                .producers
+                .get(path)
+                .map(|entry| entry.value().1.clone()),
+            _ => None,
+        }
+    }
 }

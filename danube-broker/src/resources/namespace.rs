@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde_json::{from_value, Value};
 
 use crate::{
@@ -43,16 +43,18 @@ impl NamespaceResources {
         Ok(())
     }
 
-    pub(crate) async fn get_policies(&mut self, namespace_name: &str) -> Result<Policies> {
-        let path = join_path(&[BASE_NAMESPACE_PATH, namespace_name]);
-        let pols = self.store.get_childrens(&path).await?;
-        let mut map: HashMap<String, Value> = HashMap::new();
-        for pol_name in pols {
-            let path = join_path(&[BASE_NAMESPACE_PATH, namespace_name, &pol_name]);
-            let v = self.store.get(&path, MetaOptions::None).await?;
-            map.insert(pol_name, v);
-        }
-        Ok(Policies::from_hashmap(map)?)
+    pub(crate) fn get_policies(&mut self, namespace_name: &str) -> Result<Policies> {
+        let path = join_path(&[BASE_NAMESPACE_PATH, namespace_name, "policy"]);
+        let result = self.local_cache.get(&path);
+        let value = if let Some(value) = result {
+            value
+        } else {
+            return Err(anyhow!("Unable to retrive the policies for the namespace"));
+        };
+
+        let policies: Policies = serde_json::from_value(value)?;
+
+        Ok(policies)
     }
 
     pub(crate) async fn create(&mut self, path: &str, data: Value) -> Result<()> {
