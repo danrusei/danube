@@ -1,6 +1,6 @@
 use crate::{consumer::Consumer, producer::Producer};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use danube_client::{
     Consumer as ClientConsumer, DanubeClient, Producer as ClientProducer, SchemaType, SubType,
 };
@@ -17,26 +17,31 @@ pub(crate) static SUBSCRIPTION_NAME: &str = "metadata-sync";
 // The synchronizer allows for dynamic updates to configuration settings without requiring a restart of the broker service.
 #[derive(Debug)]
 pub(crate) struct Syncronizer {
-    client: DanubeClient,
+    client: Option<DanubeClient>,
     consumer: Option<ClientConsumer>,
     producer: Option<ClientProducer>,
 }
 
 impl Syncronizer {
-    pub(crate) fn new() -> Result<Self> {
-        let client = DanubeClient::builder()
-            .service_url("http://[::1]:6650")
-            .build()?;
-
-        Ok(Syncronizer {
-            client,
+    pub(crate) fn new() -> Self {
+        Syncronizer {
+            client: None,
             consumer: None,
             producer: None,
-        })
+        }
+    }
+    pub(crate) async fn with_client(&mut self, client: DanubeClient) -> Result<()> {
+        self.client = Some(client);
+        Ok(())
     }
     async fn create_producer(&mut self) -> Result<()> {
-        let mut producer = self
-            .client
+        let client = if let Some(client) = &self.client {
+            client
+        } else {
+            return Err(anyhow!("Unable to get the DanubeClient"));
+        };
+
+        let mut producer = client
             .new_producer()
             .with_topic(META_SYNC)
             .with_name("test_producer1")
@@ -52,8 +57,13 @@ impl Syncronizer {
         Ok(())
     }
     async fn create_consumer(&mut self) -> Result<()> {
-        let mut consumer = self
-            .client
+        let client = if let Some(client) = &self.client {
+            client
+        } else {
+            return Err(anyhow!("Unable to get the DanubeClient"));
+        };
+
+        let mut consumer = client
             .new_consumer()
             .with_topic(META_SYNC)
             .with_consumer_name("")

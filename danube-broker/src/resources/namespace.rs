@@ -4,10 +4,10 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::{join_path, BASE_NAMESPACE_PATH},
+    LocalCache,
 };
 
 #[derive(Debug, Clone)]

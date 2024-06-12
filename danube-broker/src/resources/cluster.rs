@@ -1,9 +1,9 @@
 use anyhow::Result;
 
 use crate::{
-    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     resources::{join_path, BASE_CLUSTERS_PATH},
+    LocalCache,
 };
 
 #[derive(Debug, Clone)]

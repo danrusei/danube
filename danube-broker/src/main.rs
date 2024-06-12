@@ -1,7 +1,6 @@
 mod broker_server;
 mod broker_service;
 mod consumer;
-mod controller;
 mod danube_service;
 mod dispatcher;
 mod metadata_store;
@@ -19,10 +18,9 @@ use std::sync::Arc;
 
 use crate::{
     broker_service::BrokerService,
-    controller::{
-        Controller, LeaderElection, LoadManager, LocalCache, Syncronizer, LEADER_SELECTION_PATH,
+    danube_service::{
+        DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer, LEADER_SELECTION_PATH,
     },
-    danube_service::DanubeService,
     metadata_store::{
         EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
     },
@@ -101,10 +99,11 @@ async fn main() -> Result<()> {
 
     // The synchronizer ensures that metadata & configuration settings across different brokers remains consistent.
     // using the client Producers to distribute metadata updates across brokers.
-    let syncroniser = Syncronizer::new().expect("Unable to instantiate the Syncronizer");
+    let syncroniser = Syncronizer::new();
 
     // the broker service, is responsible to reliable deliver the messages from producers to consumers.
     let broker_service = BrokerService::new(resources.clone());
+    let broker_id = broker_service.broker_id;
 
     // the service selects one broker per cluster to be the leader to coordinate and take assignment decision.
     let mut leader_election_service = LeaderElection::new(
@@ -118,21 +117,23 @@ async fn main() -> Result<()> {
 
     let broker: Arc<Mutex<BrokerService>> = Arc::new(Mutex::new(broker_service));
 
-    // The controller operates all the mangement services
-    let mut controller = Controller::new(
+    // DanubeService coordinate and start all the services
+    let mut danube = DanubeService::new(
+        broker_id,
         Arc::clone(&broker),
+        service_config,
         metadata_store,
         local_cache,
+        resources,
         leader_election_service,
         syncroniser,
         load_manager,
     );
 
-    // DanubeService coordinate and start all the services
-    let mut danube = DanubeService::new(Arc::clone(&broker), controller, service_config, resources);
-
-    info!("Start the Danube Broker Service");
+    info!("Start the Danube Service");
     danube.start().await.expect("the broker unable to start");
+
+    info!("The Danube Service has started succesfully");
 
     Ok(())
 }

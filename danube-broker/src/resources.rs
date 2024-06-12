@@ -1,6 +1,6 @@
 use crate::{
-    controller::LocalCache,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
+    LocalCache,
 };
 use anyhow::{Ok, Result};
 
