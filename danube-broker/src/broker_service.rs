@@ -62,8 +62,26 @@ impl BrokerService {
             ));
         }
 
+        // check if topic is served by this broker
         if self.topics.contains_key(topic_name) {
             return Ok(topic_name.into());
+        }
+
+        let ns_name = get_nsname_from_topic(topic_name)?;
+
+        // check if Topic already exist in the namespace,
+        // if exist, return a redirect request, as it is served by other broker
+        if self
+            .resources
+            .namespace
+            .check_if_topic_exist(ns_name, topic_name)
+        {
+            // TODO! should ask the user to redo the lookup
+            return Err(anyhow!(
+                "Could not create the topic: {}, as already exists on the namespace: {}",
+                topic_name,
+                ns_name
+            ));
         }
 
         // If the topic does not exist and create_if_missing is true
@@ -73,7 +91,8 @@ impl BrokerService {
                     "Unable to create a topic without specifying the Schema"
                 ));
             }
-            let new_topic_name = self.create_new_topic(topic_name, schema.unwrap())?;
+
+            let new_topic_name = self.create_new_topic(ns_name, topic_name, schema.unwrap())?;
             return Ok(new_topic_name);
         }
 
@@ -88,13 +107,23 @@ impl BrokerService {
     }
 
     // creates a new topic
-    pub(crate) fn create_new_topic(&mut self, topic_name: &str, schema: Schema) -> Result<String> {
+    pub(crate) fn create_new_topic(
+        &mut self,
+        ns_name: &str,
+        topic_name: &str,
+        schema: Schema,
+    ) -> Result<String> {
+        // create the topic,
         let mut new_topic = Topic::new(topic_name);
 
         new_topic.add_schema(schema);
-        //Todo! save Schema to metadata Store, use topic resources to get and put schema
 
-        self.topics.insert(topic_name.into(), new_topic);
+        // add also the policy, inherit namespace policy
+        // now save the topic...to storage, including it's Schema and Policy
+
+        // load balancer should decide which broker is going to serve this topic
+        // so it will not be added to local list
+        // self.topics.insert(topic_name.into(), new_topic);
 
         Ok(topic_name.into())
     }
@@ -263,4 +292,12 @@ fn validate_topic(input: &str) -> bool {
     }
 
     true
+}
+
+fn get_nsname_from_topic(topic_name: &str) -> Result<&str> {
+    // assuming that the topic name has already been validated.
+    let parts: Vec<&str> = topic_name.split('/').collect();
+    let ns_name = parts.get(1).unwrap();
+
+    Ok(ns_name)
 }

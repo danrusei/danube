@@ -12,6 +12,8 @@ This document describes how the resources are organized in the Metadata store
 
 ### Cluster Resources
 
+(read and write only by Danube Service)
+
 * /cluster/cluster-name
 * /cluster/brokers/{broker-id}/{namespace}/{topic} - topics served by the broker
 * /cluster/brokers/load/{broker-id} - this is where each broker periodically reports its load metrics
