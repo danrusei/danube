@@ -12,12 +12,13 @@ pub(crate) use cluster::ClusterResources;
 pub(crate) use namespace::NamespaceResources;
 pub(crate) use topic::TopicResources;
 
-pub(crate) static BASE_CLUSTERS_PATH: &str = "/cluster";
+pub(crate) static BASE_CLUSTER_PATH: &str = "/cluster";
 pub(crate) static BASE_BROKER_PATH: &str = "/cluster/broker";
-pub(crate) static BASE_NAMESPACE_PATH: &str = "/namespace";
-pub(crate) static BASE_TOPIC_PATH: &str = "/topic";
-pub(crate) static BASE_SUBSCRIPTION_PATH: &str = "/subscription";
-pub(crate) static BASE_PRODUCER_PATH: &str = "/producer";
+pub(crate) static BASE_NAMESPACES_PATH: &str = "/namespaces";
+pub(crate) static BASE_TOPICS_PATH: &str = "/topics";
+pub(crate) static BASE_SUBSCRIPTIONS_PATH: &str = "/subscriptions";
+
+pub(crate) static BASE_UNASSIGNED_PATH: &str = "/cluster/unassigned";
 
 pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
 

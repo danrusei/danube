@@ -1,8 +1,12 @@
 use anyhow::Result;
+use serde_json::Value;
+
+use crate::proto::Schema;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    resources::{join_path, BASE_TOPIC_PATH},
+    policies::Policies,
+    resources::{join_path, BASE_TOPICS_PATH},
     LocalCache,
 };
 
@@ -17,7 +21,7 @@ impl TopicResources {
         TopicResources { local_cache, store }
     }
     pub(crate) async fn topic_exists(&mut self, topic_name: &str) -> Result<bool> {
-        let path = join_path(&[BASE_TOPIC_PATH, topic_name]);
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name]);
         let topic = self.store.get(&path, MetaOptions::None).await?;
         if topic.is_null() {
             return Ok(false);
@@ -25,12 +29,42 @@ impl TopicResources {
 
         Ok(true)
     }
+
+    pub(crate) async fn create(&mut self, path: &str, data: Value) -> Result<()> {
+        self.store.put(path, data, MetaOptions::None).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn add_topic_policy(
+        &mut self,
+        topic_name: &str,
+        policies: Policies,
+    ) -> Result<()> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "policy"]);
+        let data = serde_json::to_value(policies).unwrap();
+        self.create(&path, data).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn add_topic_schema(
+        &mut self,
+        topic_name: &str,
+        schema: Schema,
+    ) -> Result<()> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
+        let data = Value::String(schema);
+        self.create(&path, data).await?;
+
+        Ok(())
+    }
+
     pub(crate) async fn create_topic(
         &mut self,
         topic_name: &str,
         num_partitions: usize,
     ) -> Result<()> {
-        let path = join_path(&[BASE_TOPIC_PATH, topic_name]);
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name]);
         //TODO! all the partitions I guess should be added
         self.store
             .put(&path, num_partitions.into(), MetaOptions::None);

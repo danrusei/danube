@@ -50,7 +50,7 @@ impl BrokerService {
     }
 
     // get the Topic name or create a new one if create_if_missing is true
-    pub(crate) fn get_topic(
+    pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
         schema: Option<Schema>,
@@ -93,8 +93,9 @@ impl BrokerService {
                 ));
             }
 
-            let new_topic_name =
-                self.create_new_topic(ns_name, topic_name, schema.unwrap(), None)?;
+            let new_topic_name = self
+                .create_new_topic(ns_name, topic_name, schema.unwrap(), None)
+                .await?;
             return Ok(new_topic_name);
         }
 
@@ -109,7 +110,7 @@ impl BrokerService {
     }
 
     // creates a new topic
-    pub(crate) fn create_new_topic(
+    pub(crate) async fn create_new_topic(
         &mut self,
         ns_name: &str,
         topic_name: &str,
@@ -119,7 +120,7 @@ impl BrokerService {
         // create the topic,
         let mut new_topic = Topic::new(topic_name);
 
-        new_topic.add_schema(schema);
+        new_topic.add_schema(schema.clone());
 
         if let Some(with_policies) = policies {
             new_topic.policies_update(with_policies);
@@ -130,11 +131,33 @@ impl BrokerService {
             // then I shoud copy field by field
             new_topic.policies_update(policies);
         }
-        // now save the topic...to storage, including it's Schema and Policy
 
-        // load balancer should decide which broker is going to serve this topic
-        // so it will not be added to local list
-        // self.topics.insert(topic_name.into(), new_topic);
+        // store the topic on unassigned queue for the Load Manager to assign to a broker
+        self.resources
+            .cluster
+            .new_unassigned_topic(topic_name)
+            .await?;
+
+        // store the new topic to namespace path: /namespaces/{namespace}/topics/
+        self.resources
+            .namespace
+            .create_new_topic(topic_name)
+            .await?;
+
+        // store new topic policy: /topics/{namespace}/{topic}/policy
+        self.resources
+            .topic
+            .add_topic_policy(topic_name, new_topic.topic_policies.unwrap())
+            .await?;
+
+        // store new topic schema: /topics/{namespace}/{topic}/schema
+        self.resources
+            .topic
+            .add_topic_schema(topic_name, schema)
+            .await?;
+
+        // Load Manager will decide which broker is going to serve the new created topic
+        // so it will not be added to local list, yet.
 
         Ok(topic_name.into())
     }

@@ -73,7 +73,7 @@ impl ProducerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
-        match service.get_topic(&req.topic_name, req.schema, true) {
+        match service.get_topic(&req.topic_name, req.schema, true).await {
             Ok(topic_name) => {
                 trace!(
                     "topic_name: {} was found or was successfully created",
@@ -214,7 +214,7 @@ impl ConsumerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
-        match service.get_topic(&req.topic_name, None, false) {
+        match service.get_topic(&req.topic_name, None, false).await {
             Ok(topic_name) => {
                 trace!("topic_name: {} was found ", topic_name)
             }

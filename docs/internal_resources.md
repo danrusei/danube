@@ -22,10 +22,20 @@ The **LocalCache** continuously update from 2 sources for increase consistency:
 
 Holds information about the cluster and the cluster's brokers. Mainly read and write by Danube Service.
 
-* /cluster/cluster-name
-* /cluster/brokers/{broker-id}/{namespace}/{topic} - topics served by the broker, with value ()
-* /cluster/brokers/load/{broker-id} - broker periodically reports for its load metrics
-* /cluster/load_balance - this is load_balance updated decision, posted by the Load Manager, contain a HashMAp with keys the broker_id and value the list of topic_name
+* **/cluster/cluster-name**
+  * holds a String with the name of the cluster
+* **/cluster/brokers/{broker-id}/{namespace}/{topic}**
+  * topics served by the broker, with value ()
+  * **Load Manager** updates the path, with topic assgnemnts to brokers
+  * **Brokers** should watch it's own path like (/cluster/brokers/1122334455) - and perform the neccesary actions on adding or removing a topic
+* **/cluster/unassigned/{namespace}/{topic}**
+  * New unassigned topics created by Broker
+  * Load Manager should watch this path, add assign the topic to a broker
+* **/cluster/brokers/load/{broker-id}**
+  * broker periodically reports its load metrics on this path
+  * Load Manager should watch this path, to calculate the load of each broker, and update below
+* **/cluster/load_balance**
+  * the load_balance updated decision, posted by the Load Manager, contain a HashMap with keys the broker_id and value the list of topic_name
 
 Example:
 
@@ -36,8 +46,8 @@ Example:
 
 Holds information about the namespace policy and the namespace's topics
 
-* /namespaces/{namespace}/policy
-* /namespaces/{namespace}/topics/{namespace}/{topic}
+* **/namespaces/{namespace}/policy**
+* **/namespaces/{namespace}/topics/{namespace}/{topic}**
 
 Example:
 
@@ -48,9 +58,14 @@ Example:
 
 Holds information about the topic policy and the associated producers / subscriptions, including partitioned topic.
 
-* /topics/{namespace}/{topic}/policy - holds the topic policy, the value stores a Json
-* /topics/{namespace}/{topic}/producers/{producer_id} - holds the producer config
-* /topics/{namespace}/{topic}/subscriptions/{subscription_id} - holds the subscription config
+* **/topics/{namespace}/{topic}/policy**
+  * holds the topic policy, the value stores a Json
+* **/topics/{namespace}/{topic}/schema**
+  * holds the topic schema, the value stores the schema
+* **/topics/{namespace}/{topic}/producers/{producer_id}**
+  * holds the producer config
+* **/topics/{namespace}/{topic}/subscriptions/{subscription_id}**
+  * holds the subscription config
 
 Example:
 
@@ -62,7 +77,8 @@ Example:
 
 Holds information about the topic subscriptions, including associated consumers
 
-* /subscriptions/{subscription_name}/{consumer_id} - holds the consumer metadata
+* **/subscriptions/{subscription_name}/{consumer_id}**
+  * holds the consumer metadata
 
 Example:
 
