@@ -1,0 +1,69 @@
+# Resources mapping
+
+This document describes how the resources are organized in the Metadata store
+
+## MetadataStore and LocalCache
+
+Basically the entire configuration and the metadata for all the cluster's objects (topics, namespaces, etc) are stored in **MetadataStorage (ETCD)** and in the **LocalCache** to ensure fast retrieval for the local broker and to reduce the number of request to the metadata database.
+
+The pattern:
+
+* **Put / Delete** requests should use MetadataStore (ETCD), to ensure consistency across cluster
+* **Get** requests should be served from the Local Cache
+
+The **LocalCache** continuously update from 2 sources for increase consistency:
+
+* the Watch operation on ETCD
+* the Syncronizer topic, where all **Put / Delete** requests are published and read by the brokers.
+
+## Resources Types
+
+### Cluster Resources
+
+Holds information about the cluster and the cluster's brokers. Mainly read and write by Danube Service.
+
+* /cluster/cluster-name
+* /cluster/brokers/{broker-id}/{namespace}/{topic} - topics served by the broker, with value ()
+* /cluster/brokers/load/{broker-id} - broker periodically reports for its load metrics
+* /cluster/load_balance - this is load_balance updated decision, posted by the Load Manager, contain a HashMAp with keys the broker_id and value the list of topic_name
+
+Example:
+
+* /cluster/brokers/1122334455/markets/trade-events - value is ()
+* /cluster/brokers/1122334455/markets/trade-events - value is ()
+
+### Namespace Resources
+
+Holds information about the namespace policy and the namespace's topics
+
+* /namespaces/{namespace}/policy
+* /namespaces/{namespace}/topics/{namespace}/{topic}
+
+Example:
+
+* /namespaces/markets/policy - the value stores a Json like { "retentionTimeInMinutes": 1440 }
+* /namespaces/markets/topics/markets/trade-events - topics part of the namespace, value is ()
+
+### Topic Resources
+
+Holds information about the topic policy and the associated producers / subscriptions, including partitioned topic.
+
+* /topics/{namespace}/{topic}/policy - holds the topic policy, the value stores a Json
+* /topics/{namespace}/{topic}/producers/{producer_id} - holds the producer config
+* /topics/{namespace}/{topic}/subscriptions/{subscription_id} - holds the subscription config
+
+Example:
+
+* /topics/markets/trade-events/producers/1122334455 - with value Producer Metadata
+* /topics/markets/trade-events/subscriptions/5544332211 - with value Subscription Metadata
+* /topics/markets/trade-events-part-1/policy - where */markets/trade-events-part-1* is the partitioned topic that stores partition policy
+
+### Subscriptions Resources
+
+Holds information about the topic subscriptions, including associated consumers
+
+* /subscriptions/{subscription_name}/{consumer_id} - holds the consumer metadata
+
+Example:
+
+* /subscriptions/my_new_subscription/23232323

@@ -23,7 +23,7 @@ pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
 
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 //
-// The resources/_resources.md document describe how the resources are organized in Metadata Store
+// The docs/internal_resources.md document describe how the resources are organized in Metadata Store
 //
 // Different starting paths create a clear hierarchical structure
 // that reflects the logical organization of the Danube messaging system.

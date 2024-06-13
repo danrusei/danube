@@ -21,7 +21,7 @@ use crate::resources::{
 // which are frequently accessed during message production and consumption.
 // This reduces the need for frequent queries to the central metadata store: ETCD.
 //
-// The resources/_resources.md document describe how the resources are organized in Metadata Store
+// The docs/internal_resources.md document describe how the resources are organized in Metadata Store
 //
 // By updating the local cache based on the events,
 // brokers ensure they have the latest metadata without repeatedly querying the central store.
@@ -37,12 +37,11 @@ pub(crate) struct LocalCache {
     cluster: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the namespace policy and the namespace's topics
     namespaces: Arc<DashMap<String, (i64, Value)>>,
-    // holds information about the topic policy and topic metadata, including partitioned topics
+    // holds information about the topic policy and the associated producers and subscriptions,
+    // including partitioned topics.
     topics: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic subscriptions, including their consumers
     subscriptions: Arc<DashMap<String, (i64, Value)>>,
-    // holds information about the producers
-    producers: Arc<DashMap<String, (i64, Value)>>,
 }
 
 impl LocalCache {
@@ -53,7 +52,6 @@ impl LocalCache {
             namespaces: Arc::new(DashMap::new()),
             topics: Arc::new(DashMap::new()),
             subscriptions: Arc::new(DashMap::new()),
-            producers: Arc::new(DashMap::new()),
         }
     }
 
@@ -69,10 +67,9 @@ impl LocalCache {
         let category = parts[1];
         let cache = match category {
             "cluster" => &self.cluster,
-            "namespace" => &self.namespaces,
-            "topic" => &self.topics,
-            "consumer" => &self.subscriptions,
-            "producer" => &self.producers,
+            "namespaces" => &self.namespaces,
+            "topics" => &self.topics,
+            "consumers" => &self.subscriptions,
             _ => return,
         };
 
@@ -100,7 +97,7 @@ impl LocalCache {
         &self,
         mut client: Client,
     ) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
-        let prefixes = vec!["/namespace", "/topic", "/consumer", "/producer"];
+        let prefixes = vec!["/cluster", "/namespaces", "/topics", "/subscriptions"];
 
         for prefix in prefixes {
             let response = client
@@ -179,10 +176,6 @@ impl LocalCache {
                 .subscriptions
                 .get(path)
                 .map(|entry| entry.value().1.clone()),
-            "producers" => self
-                .producers
-                .get(path)
-                .map(|entry| entry.value().1.clone()),
             _ => None,
         }
     }
@@ -197,10 +190,10 @@ impl LocalCache {
 
             let category = parts[1];
             let cache = match category {
-                "namespace" => &self.namespaces,
-                "topic" => &self.topics,
-                "consumer" => &self.subscriptions,
-                "producer" => &self.producers,
+                "cluster" => &self.cluster,
+                "namespaces" => &self.namespaces,
+                "topics" => &self.topics,
+                "consumers" => &self.subscriptions,
                 _ => continue,
             };
 
