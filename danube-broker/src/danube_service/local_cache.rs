@@ -1,3 +1,7 @@
+mod trie;
+
+pub(crate) use trie::Trie;
+
 use anyhow::Result;
 use dashmap::DashMap;
 use etcd_client::{Client, WatchOptions};
@@ -5,7 +9,7 @@ use futures::StreamExt;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::metadata_store::{etcd_watch_prefixes, ETCDWatchEvent};
 use crate::resources::{
@@ -28,21 +32,23 @@ use crate::resources::{
 // allowing the LocalCache struct to be cloned without deep copying the underlying data.
 #[derive(Debug, Clone)]
 pub(crate) struct LocalCache {
+    keys: Arc<Mutex<Trie>>,
     // holds information about the cluster and the cluster's brokers
-    pub(crate) cluster: Arc<DashMap<String, (i64, Value)>>,
+    cluster: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the namespace policy and the namespace's topics
-    pub(crate) namespaces: Arc<DashMap<String, (i64, Value)>>,
+    namespaces: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic policy and topic metadata, including partitioned topics
-    pub(crate) topics: Arc<DashMap<String, (i64, Value)>>,
+    topics: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic subscriptions, including their consumers
-    pub(crate) subscriptions: Arc<DashMap<String, (i64, Value)>>,
+    subscriptions: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the producers
-    pub(crate) producers: Arc<DashMap<String, (i64, Value)>>,
+    producers: Arc<DashMap<String, (i64, Value)>>,
 }
 
 impl LocalCache {
     pub(crate) fn new() -> Self {
         LocalCache {
+            keys: Arc::new(Mutex::new(Trie::new())),
             cluster: Arc::new(DashMap::new()),
             namespaces: Arc::new(DashMap::new()),
             topics: Arc::new(DashMap::new()),
@@ -51,7 +57,10 @@ impl LocalCache {
         }
     }
 
-    pub(crate) fn update_cache(&self, key: &str, version: i64, value: Option<&[u8]>) {
+    // updates the LocalCache
+    // if the value is present, then it is a put operation and the new value is added
+    // if the value it is not present, then it is a delete operation and the path & value are deleted
+    pub(crate) async fn update_cache(&self, key: &str, version: i64, value: Option<&[u8]>) {
         let parts: Vec<&str> = key.split('/').collect();
         if parts.len() < 2 {
             return;
@@ -59,6 +68,7 @@ impl LocalCache {
 
         let category = parts[1];
         let cache = match category {
+            "cluster" => &self.cluster,
             "namespace" => &self.namespaces,
             "topic" => &self.topics,
             "consumer" => &self.subscriptions,
@@ -75,9 +85,13 @@ impl LocalCache {
         if let Some(value) = value {
             if let Ok(json_value) = serde_json::from_slice(value) {
                 cache.insert(key.to_string(), (version, json_value));
+                let mut keys = self.keys.lock().await;
+                keys.insert(key);
             }
         } else {
             cache.remove(key);
+            let mut keys = self.keys.lock().await;
+            keys.remove(key);
         }
     }
 
@@ -123,19 +137,27 @@ impl LocalCache {
         Ok(rx_event)
     }
 
+    // updates the LocalCache with the received WAtch events
     pub(crate) async fn process_event(&self, mut rx_event: mpsc::Receiver<ETCDWatchEvent>) {
         while let Some(event) = rx_event.recv().await {
+            trace!(
+                "{}",
+                format!("A new Watch event has been received {:?}", event)
+            );
             match event.event_type {
                 etcd_client::EventType::Put => {
                     self.update_cache(&event.key, event.version, event.value.as_deref())
+                        .await
                 }
                 etcd_client::EventType::Delete => {
-                    self.update_cache(&event.key, event.version, None)
+                    self.update_cache(&event.key, event.version, None).await
                 }
                 _ => {}
             }
         }
     }
+
+    // get the Value from Cache for the requested path
     pub fn get(&self, path: &str) -> Option<Value> {
         // Split the path by '/' and collect the segments into a vector
         let segments: Vec<&str> = path.split('/').collect();
@@ -163,5 +185,34 @@ impl LocalCache {
                 .map(|entry| entry.value().1.clone()),
             _ => None,
         }
+    }
+
+    // remove the list of keys from both the DashMap and the Trie.
+    pub(crate) async fn remove_keys(&self, keys_to_remove: Vec<&str>) {
+        for key in keys_to_remove {
+            let parts: Vec<&str> = key.split('/').collect();
+            if parts.len() < 2 {
+                continue;
+            }
+
+            let category = parts[1];
+            let cache = match category {
+                "namespace" => &self.namespaces,
+                "topic" => &self.topics,
+                "consumer" => &self.subscriptions,
+                "producer" => &self.producers,
+                _ => continue,
+            };
+
+            cache.remove(key);
+            let mut keys = self.keys.lock().await;
+            keys.remove(key);
+        }
+    }
+
+    // retrieve keys with a specific prefix from the Trie.
+    pub(crate) async fn get_keys_with_prefix(&self, prefix: &str) -> Vec<String> {
+        let keys = self.keys.lock().await;
+        keys.search(prefix)
     }
 }

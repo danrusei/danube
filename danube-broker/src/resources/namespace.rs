@@ -65,11 +65,11 @@ impl NamespaceResources {
     pub(crate) fn check_if_topic_exist(&self, ns_name: &str, topic_name: &str) -> bool {
         let path = join_path(&[BASE_NAMESPACE_PATH, ns_name, "topics"]);
 
-        match self.local_cache.namespaces.get(&path) {
+        match self.local_cache.get(&path) {
             Some(value) => {
                 // Attempt to deserialize the Value into a Vec<String>.
                 let topics_name: Vec<String> =
-                    from_value(value.1.clone()).expect(&format!("Unable to deserialize {}", path));
+                    from_value(value.clone()).expect(&format!("Unable to deserialize {}", path));
                 if topics_name.contains(&topic_name.to_owned()) {
                     return true;
                 }
