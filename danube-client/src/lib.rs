@@ -18,7 +18,7 @@ mod consumer;
 pub use consumer::{Consumer, ConsumerBuilder, ConsumerOptions, SubType};
 
 mod schema;
-pub use schema::SchemaType;
+pub use schema::{Schema, SchemaType};
 
 mod message;
 

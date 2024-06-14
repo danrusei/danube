@@ -5,13 +5,12 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{info, trace};
 
-use crate::proto::Schema;
-
 use crate::{
     broker_service::{self, BrokerService},
     consumer::Consumer,
     policies::Policies,
     producer::Producer,
+    schema::Schema,
     subscription::{Subscription, SubscriptionOptions},
     utils::get_random_id,
 };

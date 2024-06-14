@@ -75,7 +75,7 @@ impl Producer {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
             producer_name: self.producer_name.clone(),
             topic_name: self.topic.clone(),
-            schema: Some((&schema).into()),
+            schema: Some(schema.into()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
         };
 

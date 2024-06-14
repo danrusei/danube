@@ -8,8 +8,9 @@ use tokio::sync::Mutex;
 use tonic::transport::Server;
 use tracing::info;
 
-use crate::policies::Policies;
 use crate::proto::{ProducerAccessMode, Schema};
+
+use crate::policies::Policies;
 use crate::{
     consumer::Consumer,
     producer::Producer,
@@ -120,7 +121,7 @@ impl BrokerService {
         // create the topic,
         let mut new_topic = Topic::new(topic_name);
 
-        new_topic.add_schema(schema.clone());
+        new_topic.add_schema(schema.clone().into());
 
         if let Some(with_policies) = policies {
             new_topic.policies_update(with_policies);
@@ -153,7 +154,7 @@ impl BrokerService {
         // store new topic schema: /topics/{namespace}/{topic}/schema
         self.resources
             .topic
-            .add_topic_schema(topic_name, schema)
+            .add_topic_schema(topic_name, schema.into())
             .await?;
 
         // Load Manager will decide which broker is going to serve the new created topic

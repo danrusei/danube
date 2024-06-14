@@ -8,6 +8,7 @@ mod namespace;
 mod policies;
 mod producer;
 mod resources;
+mod schema;
 mod service_configuration;
 mod storage;
 mod subscription;

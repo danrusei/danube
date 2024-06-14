@@ -1,12 +1,11 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::proto::Schema;
-
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::{join_path, BASE_TOPICS_PATH},
+    schema::Schema,
     LocalCache,
 };
 
@@ -53,7 +52,7 @@ impl TopicResources {
         schema: Schema,
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
-        let data = Value::String(schema);
+        let data = serde_json::to_value(&schema).unwrap();
         self.create(&path, data).await?;
 
         Ok(())
