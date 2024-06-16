@@ -20,8 +20,9 @@ use crate::{
     utils::get_random_id,
 };
 
-// BrokerService - owns the topics and  and manage their lifecycle.
-// adn facilitate the creation of producers and subscriptions.
+// BrokerService - owns the topics and manages their lifecycle.
+// It also facilitates the creation of producers, subscriptions, and consumers,
+// ensuring that producers can publish messages to topics and consumers can consume messages from topics.
 #[derive(Debug)]
 pub(crate) struct BrokerService {
     // the id of the broker

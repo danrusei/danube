@@ -14,11 +14,12 @@ use tokio::time::{self, Duration};
 use crate::metadata_store::MetaOptions;
 use crate::{
     metadata_store::{etcd_watch_prefixes, ETCDWatchEvent, MetadataStorage, MetadataStore},
-    resources::{BASE_BROKER_PATH, LOADBALACE_DECISION_PATH},
+    resources::{BASE_BROKER_PATH, LOADBALANCE_DECISION_PATH},
 };
 
-// Load Manager, monitor and distribute load across brokers
-// by managing topic and partitions assignments to brokers
+// The Load Manager monitors and distributes load across brokers by managing topic and partition assignments.
+// It implements rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster
+// and is responsible for failover mechanisms to handle broker failures.
 #[derive(Debug, Clone)]
 pub(crate) struct LoadManager {
     // broker_id to LoadReport

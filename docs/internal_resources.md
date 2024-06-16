@@ -36,6 +36,8 @@ Holds information about the cluster and the cluster's brokers. Mainly read and w
   * Load Manager should watch this path, to calculate the load of each broker, and update below
 * **/cluster/load_balance**
   * the load_balance updated decision, posted by the Load Manager, contain a HashMap with keys the broker_id and value the list of topic_name
+* **/cluster/leader**
+  * the value posted by Leader Election service, it holds broker_id of the current Leader of the CLuster
 
 Example:
 

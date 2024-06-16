@@ -13,14 +13,19 @@ pub(crate) use namespace::NamespaceResources;
 pub(crate) use topic::TopicResources;
 
 pub(crate) static BASE_CLUSTER_PATH: &str = "/cluster";
-pub(crate) static BASE_BROKER_PATH: &str = "/cluster/broker";
+pub(crate) static BASE_BROKER_PATH: &str = "/cluster/brokers";
 pub(crate) static BASE_NAMESPACES_PATH: &str = "/namespaces";
 pub(crate) static BASE_TOPICS_PATH: &str = "/topics";
 pub(crate) static BASE_SUBSCRIPTIONS_PATH: &str = "/subscriptions";
 
+// Once new topic is created, it is posted to unassigned path in order to be alocated by Load Manager to a broker
 pub(crate) static BASE_UNASSIGNED_PATH: &str = "/cluster/unassigned";
 
-pub(crate) static LOADBALACE_DECISION_PATH: &str = "/cluster/load_balance";
+// The Load Balance decision posted by leader Broker's Load Manager
+pub(crate) static LOADBALANCE_DECISION_PATH: &str = "/cluster/load_balance";
+
+// Cluster Leader broker_id, posted by Leader Election Service
+pub(crate) static LEADER_SELECTION_PATH: &str = "/cluster/leader";
 
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 //

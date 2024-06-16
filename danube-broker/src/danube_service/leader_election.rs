@@ -15,7 +15,8 @@ pub(crate) enum LeaderElectionState {
     Following,
 }
 
-// Leader Election service is needed for critical tasks such as topic assignment to brokers or partitioning.
+// Leader Election service is needed for critical tasks such as topic assignment to brokers and partitioning.
+// Load Manager is using this service, as only one broker is selected to make the load usage calculations and post the results.
 // Should be selected one broker leader per cluster, who takes the decissions.
 #[derive(Debug)]
 pub(crate) struct LeaderElection {

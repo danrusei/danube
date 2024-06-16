@@ -32,14 +32,7 @@ use crate::{
     topic::SYSTEM_TOPIC,
 };
 
-pub(crate) static LEADER_SELECTION_PATH: &str = "/broker/leader";
-
 // Danube Service has cluster and local Broker management & coordination responsabilities
-//
-// Cluster Coordination & Metadata Management:
-// Implements a heartbeat mechanism for brokers to signal their health status to the cluster
-// Interact with the underlying metadata store (such as ETCD)
-// to persist metadata information within the local_cache and ensure consistency across the cluster.
 //
 // Namespace Creation and Management:
 // Allow users to create & delete namespaces within the cluster.
@@ -51,12 +44,20 @@ pub(crate) static LEADER_SELECTION_PATH: &str = "/broker/leader";
 // Handle client redirections if the broker ownership of a topic or partition changes.
 //
 // Leader Election:
-// Leader Election service is needed for critical tasks such as topic assignment to brokers or partitioning.
+// Leader Election service is needed for critical tasks such as topic assignment to brokers and partitioning.
+// Load Manager is using this service, as only one broker is selected to make the load usage calculations and post the results.
+// Should be selected one broker leader per cluster, who takes the decissions.
 //
-// Load Manager/Balance:
-// Monitor and distribute load across brokers by managing topic and partitions assignments to brokers
-// Implement rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster.
-// Responsible of the failover mechanisms to handle broker failures
+// Load Manager:
+// The Load Manager monitors and distributes load across brokers by managing topic and partition assignments.
+// It implements rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster
+// and is responsible for failover mechanisms to handle broker failures.
+//
+// Syncronizer
+// The synchronizer ensures that metadata and configuration settings across different brokers remain consistent.
+// It propagates changes to metadata and configuration settings using client Producers and Consumers.
+// This is in addition to Metadata Storage watch events, allowing brokers to process metadata updates
+// even if there was a communication glitch or the broker was unavailable for a short period, potentially missing the Store Watch events.
 //
 // Monitoring and Metrics:
 // Collect and provide metrics related to namespace usage, such as message rates, storage usage, and throughput.
@@ -205,6 +206,7 @@ impl DanubeService {
         info!("Started the Load Manager service.");
 
         // Publish periodic Load Reports
+        // This enable the broker to register with Load Manager
         tokio::spawn(
             async move { post_broker_load_report(broker_service_cloned, meta_store_cloned) },
         );
@@ -256,7 +258,7 @@ async fn post_broker_load_report(
         let topics_len = topics.len();
         let load_repot: LoadReport = generate_load_report(topics_len, topics);
         if let Ok(value) = serde_json::to_value(load_repot) {
-            let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
+            let path = join_path(&[BASE_BROKER_PATH, "load", &broker_id.to_string()]);
             meta_store.put(&path, value, MetaOptions::None);
         }
     }

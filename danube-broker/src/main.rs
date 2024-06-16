@@ -19,13 +19,11 @@ use std::sync::Arc;
 
 use crate::{
     broker_service::BrokerService,
-    danube_service::{
-        DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer, LEADER_SELECTION_PATH,
-    },
+    danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
     metadata_store::{
         EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
     },
-    resources::Resources,
+    resources::{Resources, LEADER_SELECTION_PATH},
     service_configuration::ServiceConfiguration,
 };
 

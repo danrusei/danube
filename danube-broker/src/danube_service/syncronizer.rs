@@ -10,11 +10,11 @@ use tracing::info;
 pub(crate) static META_SYNC: &str = "/system/meta-sync";
 pub(crate) static SUBSCRIPTION_NAME: &str = "metadata-sync";
 
-// The synchronizer ensures that metadata & configuration settings across different brokers remains consistent.
-// It helps in propagating changes to metadata & configuration settings, using the client Producers and Consumers.
-// This is in addition to Metadata Storage watch events, allowing brokers to process metadata updates,
-// even if there was a communication glitch or the broker was unavailable for a short period, so potentially missed the Store Watch events.
-// The synchronizer allows for dynamic updates to configuration settings without requiring a restart of the broker service.
+// The synchronizer ensures that metadata and configuration settings across different brokers remain consistent.
+// It propagates changes to metadata and configuration settings using client Producers and Consumers.
+// This is in addition to Metadata Storage watch events, allowing brokers to process metadata updates
+// even if there was a communication glitch or the broker was unavailable for a short period, potentially missing the Store Watch events.
+// The synchronizer allows for dynamic updates to configuration settings without requiring a broker service restart.
 #[derive(Debug)]
 pub(crate) struct Syncronizer {
     client: Option<DanubeClient>,
