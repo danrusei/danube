@@ -13,8 +13,13 @@ use tokio::time::{self, Duration};
 
 use crate::metadata_store::MetaOptions;
 use crate::{
-    metadata_store::{etcd_watch_prefixes, ETCDWatchEvent, MetadataStorage, MetadataStore},
-    resources::{BASE_BROKER_PATH, LOADBALANCE_DECISION_PATH},
+    metadata_store::{
+        etcd_watch_prefixes, ETCDWatchEvent, EtcdMetadataStore, MetadataStorage, MetadataStore,
+        MetadataStoreConfig,
+    },
+    resources::{
+        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH, LOADBALANCE_DECISION_PATH,
+    },
 };
 
 // The Load Manager monitors and distributes load across brokers by managing topic and partition assignments.
@@ -28,22 +33,20 @@ pub(crate) struct LoadManager {
     rankings: Arc<Mutex<Vec<(u64, usize)>>>,
     // the broker_id to be served to the caller on function get_next_broker
     next_broker: Arc<AtomicU64>,
+    meta_store: MetadataStorage,
 }
 
 impl LoadManager {
-    pub fn new(broker_id: u64) -> Self {
+    pub fn new(broker_id: u64, meta_store: MetadataStorage) -> Self {
         LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(broker_id)),
+            meta_store,
         }
     }
-    pub async fn bootstrap(
-        &self,
-        broker_id: u64,
-        mut store: MetadataStorage,
-    ) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
-        let client = if let Some(client) = store.get_client() {
+    pub async fn bootstrap(&mut self, broker_id: u64) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
+        let client = if let Some(client) = self.meta_store.get_client() {
             client
         } else {
             return Err(anyhow!(
@@ -59,44 +62,30 @@ impl LoadManager {
 
         let (tx_event, mut rx_event) = mpsc::channel(32);
 
-        // watch for ETCD events
+        // Watch for Metadata Store events (ETCD), interested of :
+        //
+        // "/cluster/load" to retrieve the load data for each broker from the cluster
+        // with the data it calculates the rankings and post the informations on "/cluster/load_balance"
+        //
+        //
+        // "/cluster/unassigned" for new created topics that due to be allocated to brokers
+        // it using the calculated rankings to decide which broker will host the new topic
+        // and inform the broker by posting the topic on it's path "/cluster/brokers/{broker-id}/{namespace}/{topic}"
         tokio::spawn(async move {
             let mut prefixes = Vec::new();
-            prefixes.push(BASE_BROKER_PATH);
+            prefixes.push(BASE_BROKER_LOAD_PATH);
+            prefixes.push(BASE_UNASSIGNED_PATH);
             etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
         Ok(rx_event)
     }
 
-    pub(crate) async fn start(
-        &mut self,
-        mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
-        broker_id: u64,
-    ) {
-        while let Some(event) = rx_event.recv().await {
-            self.process_event(event);
-            self.calculate_rankings_simple();
-            let next_broker = self
-                .rankings
-                .lock()
-                .await
-                .get(0)
-                .get_or_insert(&(broker_id, 0))
-                .0;
-            let _ = self
-                .next_broker
-                .fetch_add(next_broker, std::sync::atomic::Ordering::SeqCst);
-
-            // need to post it's decision on the Metadata Store
-        }
-    }
-
     pub(crate) async fn fetch_initial_load(&self, mut client: Client) -> Result<()> {
         // Prepare the etcd request to get all keys under /cluster/brokers/load/
         let options = GetOptions::new().with_prefix();
         let response = client
-            .get("/cluster/brokers/load/", Some(options))
+            .get(BASE_BROKER_LOAD_PATH, Some(options))
             .await
             .expect("Failed to fetch keys from etcd");
 
@@ -108,7 +97,7 @@ impl LoadManager {
             let value = kv.value();
 
             // Extract broker-id from key
-            if let Some(broker_id_str) = key.strip_prefix("/cluster/brokers/load/") {
+            if let Some(broker_id_str) = key.strip_prefix(BASE_BROKER_LOAD_PATH) {
                 if let Ok(broker_id) = broker_id_str.parse::<u64>() {
                     // Deserialize the value to LoadReport
                     if let Ok(load_report) = serde_json::from_slice::<LoadReport>(value) {
@@ -128,6 +117,38 @@ impl LoadManager {
         }
 
         Ok(())
+    }
+
+    pub(crate) async fn start(
+        &mut self,
+        mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
+        broker_id: u64,
+    ) {
+        while let Some(event) = rx_event.recv().await {
+            if event.key.starts_with(BASE_UNASSIGNED_PATH) {
+                self.assign_topic_to_broker(event);
+                continue;
+            }
+            self.process_event(event);
+            self.calculate_rankings_simple();
+            let next_broker = self
+                .rankings
+                .lock()
+                .await
+                .get(0)
+                .get_or_insert(&(broker_id, 0))
+                .0;
+            let _ = self
+                .next_broker
+                .fetch_add(next_broker, std::sync::atomic::Ordering::SeqCst);
+
+            // need to post it's decision on the Metadata Store
+        }
+    }
+
+    async fn assign_topic_to_broker(&self, event: ETCDWatchEvent) {
+        // TODO! post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
+        todo!()
     }
 
     async fn process_event(&self, event: ETCDWatchEvent) {
@@ -225,6 +246,8 @@ fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
 
 #[cfg(test)]
 mod tests {
+    use crate::metadata_store::MemoryMetadataStore;
+
     use super::*;
 
     fn create_load_report(cpu_usage: usize, memory_usage: usize, topics_len: usize) -> LoadReport {
@@ -246,10 +269,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_broker() {
+        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
+            meta_store: MetadataStorage::MemoryStore(
+                MemoryMetadataStore::new(store_config)
+                    .await
+                    .expect("use for testing"),
+            ),
         };
 
         load_manager
@@ -267,10 +296,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_brokers() {
+        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
+            meta_store: MetadataStorage::MemoryStore(
+                MemoryMetadataStore::new(store_config)
+                    .await
+                    .expect("use for testing"),
+            ),
         };
 
         load_manager
@@ -300,10 +335,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_brokers_usage() {
+        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
+            meta_store: MetadataStorage::MemoryStore(
+                MemoryMetadataStore::new(store_config)
+                    .await
+                    .expect("use for testing"),
+            ),
         };
 
         load_manager.calculate_rankings_composite().await;
@@ -314,10 +355,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_same_load_brokers() {
+        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
+            meta_store: MetadataStorage::MemoryStore(
+                MemoryMetadataStore::new(store_config)
+                    .await
+                    .expect("use for testing"),
+            ),
         };
 
         load_manager

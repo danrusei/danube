@@ -31,9 +31,9 @@ Holds information about the cluster and the cluster's brokers. Mainly read and w
 * **/cluster/unassigned/{namespace}/{topic}**
   * New unassigned topics created by Broker
   * Load Manager should watch this path, add assign the topic to a broker
-* **/cluster/brokers/load/{broker-id}**
+* **/cluster/load/{broker-id}**
   * broker periodically reports its load metrics on this path
-  * Load Manager should watch this path, to calculate the load of each broker, and update below
+  * Load Manager watch this path to calculate broker load rankings for the cluster
 * **/cluster/load_balance**
   * the load_balance updated decision, posted by the Load Manager, contain a HashMap with keys the broker_id and value the list of topic_name
 * **/cluster/leader**

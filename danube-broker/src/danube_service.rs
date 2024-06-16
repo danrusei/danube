@@ -26,7 +26,7 @@ use crate::{
     },
     namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
     policies::Policies,
-    resources::{self, join_path, Resources, BASE_BROKER_PATH},
+    resources::{self, join_path, Resources, BASE_BROKER_LOAD_PATH},
     service_configuration::ServiceConfiguration,
     storage,
     topic::SYSTEM_TOPIC,
@@ -189,10 +189,7 @@ impl DanubeService {
         // at this point the broker will become visible to the rest of the brokers
         // by creating the registration and also
 
-        let rx_event = self
-            .load_manager
-            .bootstrap(self.broker_id, self.meta_store.clone())
-            .await?;
+        let rx_event = self.load_manager.bootstrap(self.broker_id).await?;
 
         let mut load_manager_cloned = self.load_manager.clone();
 
@@ -258,7 +255,7 @@ async fn post_broker_load_report(
         let topics_len = topics.len();
         let load_repot: LoadReport = generate_load_report(topics_len, topics);
         if let Ok(value) = serde_json::to_value(load_repot) {
-            let path = join_path(&[BASE_BROKER_PATH, "load", &broker_id.to_string()]);
+            let path = join_path(&[BASE_BROKER_LOAD_PATH, &broker_id.to_string()]);
             meta_store.put(&path, value, MetaOptions::None);
         }
     }

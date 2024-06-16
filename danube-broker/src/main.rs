@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
     );
 
     // Load Manager, monitor and distribute load across brokers.
-    let load_manager = LoadManager::new(broker_service.broker_id);
+    let load_manager = LoadManager::new(broker_service.broker_id, metadata_store.clone());
 
     let broker: Arc<Mutex<BrokerService>> = Arc::new(Mutex::new(broker_service));
 

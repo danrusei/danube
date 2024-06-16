@@ -21,7 +21,11 @@ pub(crate) static BASE_SUBSCRIPTIONS_PATH: &str = "/subscriptions";
 // Once new topic is created, it is posted to unassigned path in order to be alocated by Load Manager to a broker
 pub(crate) static BASE_UNASSIGNED_PATH: &str = "/cluster/unassigned";
 
-// The Load Balance decision posted by leader Broker's Load Manager
+// Brokers post load reports on "/cluster/load/{broker_id}"
+// Load Manager watch this path to calculate broker load rankings for the cluster
+pub(crate) static BASE_BROKER_LOAD_PATH: &str = "/cluster/load";
+
+// The Load Manager post it's decision and the calculated load metrics on this path
 pub(crate) static LOADBALANCE_DECISION_PATH: &str = "/cluster/load_balance";
 
 // Cluster Leader broker_id, posted by Leader Election Service
