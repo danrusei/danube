@@ -29,7 +29,7 @@ Load Manager Flow:
 Creation of a New Topic:
 
 * A broker registers the Topic on the "/cluster/unassigned" path.
-* The Leader Broker watches this path and assigns the broker with the least load to host the new topic by posting the topic to the "/cluster/brokers/{broker-id}/{topic_name}" path.
+* The Load Manager of the leader Broker watches this path and assigns the broker with the least load to host the new topic by posting the topic to the "/cluster/brokers/{broker-id}/{topic_name}" path.
 * Each broker watches its own path: "/cluster/brokers/{broker-id}". For any event on that path, such as the addition or deletion of topics, it acts accordingly by creating a new topic locally or deleting the topic it owned and all related resources.
 * On topic creation, the broker checks if the topic already exists locally. If not, it retrieves all data about the topic, including subscriptions and producers, from the Local Metadata Cache.
 * On topic removal, the broker handles the disconnections of producers and consumers and removes the locally allocated resources.

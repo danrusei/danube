@@ -1,11 +1,11 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    policies::Policies,
+    policies::{self, Policies},
     resources::{join_path, BASE_TOPICS_PATH},
-    schema::Schema,
+    schema::{self, Schema},
     LocalCache,
 };
 
@@ -69,5 +69,25 @@ impl TopicResources {
             .put(&path, num_partitions.into(), MetaOptions::None);
 
         Ok(())
+    }
+
+    pub(crate) fn get_schema(&self, topic_name: &str) -> Option<Schema> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
+        let result = self.local_cache.get(&path);
+        if let Some(value) = result {
+            let schema: Option<Schema> = serde_json::from_value(value).ok();
+            return schema;
+        }
+        None
+    }
+
+    pub(crate) fn get_policies(&self, topic_name: &str) -> Option<Policies> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "policy"]);
+        let result = self.local_cache.get(&path);
+        if let Some(value) = result {
+            let policies: Option<Policies> = serde_json::from_value(value).ok();
+            return policies;
+        }
+        None
     }
 }

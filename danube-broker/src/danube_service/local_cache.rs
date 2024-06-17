@@ -147,7 +147,6 @@ impl LocalCache {
                 etcd_client::EventType::Delete => {
                     self.update_cache(&event.key, event.version, None).await
                 }
-                _ => {}
             }
         }
     }

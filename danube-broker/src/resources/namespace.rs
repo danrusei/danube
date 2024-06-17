@@ -43,7 +43,7 @@ impl NamespaceResources {
         Ok(())
     }
 
-    pub(crate) fn get_policies(&mut self, namespace_name: &str) -> Result<Policies> {
+    pub(crate) fn get_policies(&self, namespace_name: &str) -> Result<Policies> {
         let path = join_path(&[BASE_NAMESPACES_PATH, namespace_name, "policy"]);
         let result = self.local_cache.get(&path);
         let value = if let Some(value) = result {

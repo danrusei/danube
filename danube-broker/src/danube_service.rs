@@ -12,17 +12,19 @@ pub(crate) use syncronizer::Syncronizer;
 use anyhow::Result;
 use danube_client::DanubeClient;
 use etcd_client::PutOptions;
+use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
-use tracing::info;
+use tracing::{info, warn};
 
+use crate::resources::BASE_BROKER_PATH;
 use crate::{
     broker_server,
     broker_service::{self, BrokerService},
     metadata_store::{
-        EtcdMetadataStore, MemoryMetadataStore, MetaOptions, MetadataStorage, MetadataStore,
-        MetadataStoreConfig,
+        etcd_watch_prefixes, EtcdMetadataStore, MemoryMetadataStore, MetaOptions, MetadataStorage,
+        MetadataStore, MetadataStoreConfig,
     },
     namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
     policies::Policies,
@@ -175,7 +177,7 @@ impl DanubeService {
 
         // Fetch initial data, populate cache & watch for Events to update local cache
         let mut client = self.meta_store.get_client();
-        if let Some(client) = client {
+        if let Some(client) = client.clone() {
             let local_cache_cloned = self.local_cache.clone();
             let rx_event = self.local_cache.populate_start_local_cache(client).await?;
             // Process the ETCD Watch events
@@ -208,7 +210,72 @@ impl DanubeService {
             async move { post_broker_load_report(broker_service_cloned, meta_store_cloned) },
         );
 
+        // Watch for events of Broker's interest
+        let broker_service_cloned = Arc::clone(&self.broker);
+        if let Some(client) = client {
+            self.watch_events_for_broker(client, broker_service_cloned);
+        }
+
         Ok(())
+    }
+
+    async fn watch_events_for_broker(
+        &self,
+        client: Client,
+        broker_service: Arc<Mutex<BrokerService>>,
+    ) {
+        let (tx_event, mut rx_event) = tokio::sync::mpsc::channel(32);
+        let broker_id = self.broker_id;
+
+        // watch for ETCD events
+        tokio::spawn(async move {
+            let mut prefixes = Vec::new();
+            let topic_assignment_path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
+            prefixes.extend([topic_assignment_path.as_str()].iter());
+            etcd_watch_prefixes(client, prefixes, tx_event).await;
+        });
+
+        //process the events
+        tokio::spawn(async move {
+            while let Some(event) = rx_event.recv().await {
+                info!(
+                    "{}",
+                    format!("A new Watch event has been received {:?}", event)
+                );
+
+                let mut parts: Vec<_> = event.key.split('/').collect();
+                if parts.len() < 3 {
+                    warn!("Invalid key format {}", event.key);
+                    return;
+                }
+
+                let prefix = format!("/{}/{}", parts[1], parts[2]);
+
+                match prefix.as_str() {
+                    path if path == BASE_BROKER_PATH => {
+                        if parts.len() < 6 {
+                            warn!("Invalid key format: {}", event.key);
+                            return;
+                        }
+
+                        let topic_name = format!("/{}/{}", parts[5], parts[6]);
+                        match event.event_type {
+                            etcd_client::EventType::Put => {
+                                let mut broker_service = broker_service.lock().await;
+                                broker_service.create_topic(&topic_name);
+                            }
+                            etcd_client::EventType::Delete => {
+                                let mut broker_service = broker_service.lock().await;
+                                broker_service.delete_topic(topic_name);
+                            }
+                        }
+                    }
+                    _ => {
+                        warn!("Shouldn't reach this arm, the prefix is {}", prefix)
+                    }
+                }
+            }
+        });
     }
 
     // Checks whether the broker owns a specific topic

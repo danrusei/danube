@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::Server;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::proto::{ProducerAccessMode, Schema};
 
@@ -57,7 +57,7 @@ impl BrokerService {
         topic_name: &str,
         schema: Option<Schema>,
         create_if_missing: bool,
-    ) -> Result<String> {
+    ) -> Result<()> {
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic(topic_name) {
             return Err(anyhow!(
@@ -67,7 +67,7 @@ impl BrokerService {
 
         // check if topic is served by this broker
         if self.topics.contains_key(topic_name) {
-            return Ok(topic_name.into());
+            return Ok(());
         }
 
         let ns_name = get_nsname_from_topic(topic_name)?;
@@ -96,7 +96,7 @@ impl BrokerService {
             }
 
             let new_topic_name = self
-                .create_new_topic(ns_name, topic_name, schema.unwrap(), None)
+                .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
                 .await?;
             return Ok(new_topic_name);
         }
@@ -111,30 +111,17 @@ impl BrokerService {
         topics
     }
 
-    // creates a new topic
-    pub(crate) async fn create_new_topic(
+    // post the Topic resources to Metadata Store
+    pub(crate) async fn post_new_topic(
         &mut self,
         ns_name: &str,
         topic_name: &str,
         schema: Schema,
         policies: Option<Policies>,
-    ) -> Result<String> {
-        // create the topic,
-        let mut new_topic = Topic::new(topic_name);
-
-        new_topic.add_schema(schema.clone().into());
-
-        if let Some(with_policies) = policies {
-            new_topic.policies_update(with_policies);
-        } else {
-            // get namespace policies
-            let policies = self.resources.namespace.get_policies(ns_name)?;
-            //TODO! for now the namespace polices == topic policies, if they will be different as number of values
-            // then I shoud copy field by field
-            new_topic.policies_update(policies);
-        }
-
-        // store the topic on unassigned queue for the Load Manager to assign to a broker
+    ) -> Result<()> {
+        // store the topic to unassigned queue for the Load Manager to assign to a broker
+        // Load Manager will decide which broker is going to serve the new created topic
+        // so it will not be added to local list, yet.
         self.resources
             .cluster
             .new_unassigned_topic(topic_name)
@@ -147,10 +134,12 @@ impl BrokerService {
             .await?;
 
         // store new topic policy: /topics/{namespace}/{topic}/policy
-        self.resources
-            .topic
-            .add_topic_policy(topic_name, new_topic.topic_policies.unwrap())
-            .await?;
+        if let Some(policies) = policies {
+            self.resources
+                .topic
+                .add_topic_policy(topic_name, policies)
+                .await?;
+        }
 
         // store new topic schema: /topics/{namespace}/{topic}/schema
         self.resources
@@ -158,10 +147,40 @@ impl BrokerService {
             .add_topic_schema(topic_name, schema.into())
             .await?;
 
-        // Load Manager will decide which broker is going to serve the new created topic
-        // so it will not be added to local list, yet.
+        Ok(())
+    }
 
-        Ok(topic_name.into())
+    pub(crate) async fn create_topic(&mut self, topic_name: &str) -> Result<()> {
+        // create the topic,
+        let mut new_topic = Topic::new(topic_name);
+
+        // get schema from local_cache
+        let schema = self.resources.topic.get_schema(topic_name);
+        if schema.is_none() {
+            warn!("Unable to create topic without a valid schema");
+            return Err(anyhow!("Unable to create topic without a valid schema"));
+        }
+        new_topic.add_schema(schema.unwrap());
+
+        // get policies from local_cache
+        let policies = self.resources.topic.get_policies(topic_name);
+
+        if let Some(with_policies) = policies {
+            new_topic.policies_update(with_policies);
+        } else {
+            // get namespace policies
+            let parts: Vec<_> = topic_name.split('/').collect();
+            let ns_name = format!("/{}", parts[1]);
+
+            let policies = self.resources.namespace.get_policies(&ns_name)?;
+            //TODO! for now the namespace polices == topic policies, if they will be different as number of values
+            // then I shoud copy field by field
+            new_topic.policies_update(policies);
+        }
+
+        self.topics.insert(topic_name.to_string(), new_topic);
+
+        Ok(())
     }
 
     // deletes the topic

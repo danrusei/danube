@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
 use tokio::time::{self, Duration};
+use tracing::info;
 
 use crate::metadata_store::MetaOptions;
 use crate::{
@@ -18,7 +19,8 @@ use crate::{
         MetadataStoreConfig,
     },
     resources::{
-        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH, LOADBALANCE_DECISION_PATH,
+        join_path, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH,
+        LOADBALANCE_DECISION_PATH,
     },
 };
 
@@ -126,7 +128,7 @@ impl LoadManager {
     ) {
         while let Some(event) = rx_event.recv().await {
             if event.key.starts_with(BASE_UNASSIGNED_PATH) {
-                self.assign_topic_to_broker(event);
+                self.assign_topic_to_broker(event).await;
                 continue;
             }
             self.process_event(event);
@@ -146,9 +148,33 @@ impl LoadManager {
         }
     }
 
-    async fn assign_topic_to_broker(&self, event: ETCDWatchEvent) {
-        // TODO! post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
-        todo!()
+    // Post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
+    // to be further read and processed by the selected broker
+    async fn assign_topic_to_broker(&mut self, event: ETCDWatchEvent) {
+        // TODO!
+        if event.event_type != EventType::Put {
+            return;
+        }
+        let parts: Vec<_> = event.key.split(BASE_UNASSIGNED_PATH).collect();
+        let topic_name = parts[1];
+
+        let broker_id = self.get_next_broker().await;
+        let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string(), topic_name]);
+
+        match self
+            .meta_store
+            .put(&path, serde_json::Value::Null, MetaOptions::None)
+            .await
+        {
+            Ok(_) => info!(
+                "The topic {} was successfully assign to broker {}",
+                topic_name, broker_id
+            ),
+            Err(err) => info!(
+                "Unable to assign topic {} to the broker {}, due to error: {}",
+                topic_name, broker_id, err
+            ),
+        }
     }
 
     async fn process_event(&self, event: ETCDWatchEvent) {

@@ -74,10 +74,10 @@ impl ProducerService for DanubeServerImpl {
         let mut service = self.service.lock().await;
 
         match service.get_topic(&req.topic_name, req.schema, true).await {
-            Ok(topic_name) => {
+            Ok(_) => {
                 trace!(
                     "topic_name: {} was found or was successfully created",
-                    topic_name
+                    &req.topic_name
                 )
             }
             Err(err) => {
@@ -215,8 +215,8 @@ impl ConsumerService for DanubeServerImpl {
         let mut service = self.service.lock().await;
 
         match service.get_topic(&req.topic_name, None, false).await {
-            Ok(topic_name) => {
-                trace!("topic_name: {} was found ", topic_name)
+            Ok(_) => {
+                trace!("topic_name: {} was found ", &req.topic_name)
             }
             Err(err) => {
                 let status = Status::invalid_argument(err.to_string());
