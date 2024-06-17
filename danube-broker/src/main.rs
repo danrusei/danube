@@ -27,7 +27,7 @@ use crate::{
     service_configuration::ServiceConfiguration,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
@@ -87,7 +87,9 @@ async fn main() -> Result<()> {
         if let Some(etcd_addr) = service_config.meta_store_addr.clone() {
             MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr, store_config).await?)
         } else {
-            MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
+            return Err(anyhow!("ETCD meta store address is required"));
+            // MemoryStore is not yet supported
+            // MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
         };
 
     // caching metadata locally to reduce the number of remote calls to Metadata Store
