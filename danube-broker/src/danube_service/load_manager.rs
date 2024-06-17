@@ -7,7 +7,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio::time::{self, Duration};
 use tracing::info;
@@ -23,6 +23,8 @@ use crate::{
         LOADBALANCE_DECISION_PATH,
     },
 };
+
+use super::{leader_election, LeaderElection, LeaderElectionState};
 
 // The Load Manager monitors and distributes load across brokers by managing topic and partition assignments.
 // It implements rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster
@@ -125,13 +127,23 @@ impl LoadManager {
         &mut self,
         mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
         broker_id: u64,
+        leader_election: Arc<RwLock<LeaderElection>>,
     ) {
         while let Some(event) = rx_event.recv().await {
+            // only the Leader Broker should assign the topic
             if event.key.starts_with(BASE_UNASSIGNED_PATH) {
+                if leader_election.read().await.get_state() == LeaderElectionState::Following {
+                    continue;
+                }
                 self.assign_topic_to_broker(event).await;
                 continue;
             }
+            // the event is processed and added localy,
+            // but only the Leader Broker does the calculations on the loads
             self.process_event(event);
+            if leader_election.read().await.get_state() == LeaderElectionState::Following {
+                continue;
+            }
             self.calculate_rankings_simple();
             let next_broker = self
                 .rankings

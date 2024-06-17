@@ -14,7 +14,7 @@ use danube_client::DanubeClient;
 use etcd_client::PutOptions;
 use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{self, Duration};
 use tracing::{info, warn};
 
@@ -76,7 +76,7 @@ pub(crate) struct DanubeService {
     meta_store: MetadataStorage,
     local_cache: LocalCache,
     resources: Resources,
-    leader_election: LeaderElection,
+    leader_election: Arc<RwLock<LeaderElection>>,
     syncronizer: Syncronizer,
     load_manager: LoadManager,
 }
@@ -90,7 +90,7 @@ impl DanubeService {
         meta_store: MetadataStorage,
         local_cache: LocalCache,
         resources: Resources,
-        leader_election: LeaderElection,
+        leader_election: Arc<RwLock<LeaderElection>>,
         syncronizer: Syncronizer,
         load_manager: LoadManager,
     ) -> Self {
@@ -168,7 +168,7 @@ impl DanubeService {
         // Start the Leader Election Service
         //==========================================================================
 
-        self.leader_election.start();
+        self.leader_election.write().await.start();
 
         info!("Started the Leader Election service");
 
@@ -196,8 +196,13 @@ impl DanubeService {
         let mut load_manager_cloned = self.load_manager.clone();
 
         let broker_id_cloned = self.broker_id;
+        let leader_election = Arc::clone(&self.leader_election);
         // Process the ETCD Watch events
-        tokio::spawn(async move { load_manager_cloned.start(rx_event, broker_id_cloned).await });
+        tokio::spawn(async move {
+            load_manager_cloned
+                .start(rx_event, broker_id_cloned, leader_election)
+                .await
+        });
 
         let broker_service_cloned = Arc::clone(&self.broker);
         let meta_store_cloned = self.meta_store.clone();

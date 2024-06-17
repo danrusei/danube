@@ -30,6 +30,7 @@ use crate::{
 use anyhow::Result;
 use clap::Parser;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tracing::info;
 use tracing_subscriber;
 
@@ -110,6 +111,8 @@ async fn main() -> Result<()> {
         LEADER_SELECTION_PATH,
         broker_service.broker_id,
     );
+
+    let leader_election_service = Arc::new(RwLock::new(leader_election_service));
 
     // Load Manager, monitor and distribute load across brokers.
     let load_manager = LoadManager::new(broker_service.broker_id, metadata_store.clone());
