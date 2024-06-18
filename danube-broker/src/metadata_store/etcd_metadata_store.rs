@@ -1,5 +1,5 @@
-use anyhow::Result;
-use etcd_client::{Client, GetOptions, PutOptions};
+use anyhow::{anyhow, Result};
+use etcd_client::{Client, DeleteOptions, GetOptions, PutOptions};
 use serde_json::Value;
 use std::error::Error;
 
@@ -20,27 +20,29 @@ impl EtcdMetadataStore {
 }
 
 impl MetadataStore for EtcdMetadataStore {
-    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Value> {
-        let mut value: Value = serde_json::from_str("")?;
+    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Option<Value>> {
+        // Extract ETCD options if provided
         let options = if let MetaOptions::EtcdGet(etcd_options) = get_options {
             Some(etcd_options)
         } else {
             None
         };
 
+        // Fetch the data from ETCD
         let resp = self.client.get(path, options).await?;
 
-        // Parse response into Value
         if let Some(kv) = resp.kvs().first() {
-            value = serde_json::from_str(kv.value_str()?)?;
+            // Deserialize the byte array into a serde_json::Value
+            let value = serde_json::from_slice(kv.value())?;
+            Ok(Some(value))
+        } else {
+            // Return None if no key-value pair was found
+            Ok(None)
         }
-        Ok(value)
     }
 
     async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>> {
         let mut kv_client = self.client.kv_client();
-
-        //let kv_client_prefix = KvClientPrefix::new(kv_client.clone(), path.into());
 
         // Retrieve all keys with the specified prefix
         let range_resp = kv_client
@@ -50,7 +52,9 @@ impl MetadataStore for EtcdMetadataStore {
         let mut child_paths: Vec<String> = Vec::new();
 
         for kv in range_resp.kvs() {
-            child_paths.push(kv.key_str()?.to_owned())
+            // Deserialize the byte array (value) into a serde_json::Value
+            let value = kv.key_str()?.to_owned();
+            child_paths.push(value);
         }
 
         Ok(child_paths)
@@ -64,8 +68,9 @@ impl MetadataStore for EtcdMetadataStore {
             None
         };
 
-        let value_str = serde_json::to_string(&value)?;
-        kv_client.put(path, value_str, options).await?;
+        // Serialize serde_json::Value to a byte array
+        let value_bytes = serde_json::to_vec(&value)?;
+        kv_client.put(path, value_bytes, options).await?;
 
         Ok(())
     }
@@ -73,22 +78,36 @@ impl MetadataStore for EtcdMetadataStore {
     async fn delete(&mut self, path: &str) -> Result<Option<Value>> {
         let mut kv_client = self.client.kv_client();
 
-        let response = kv_client.delete(path, None).await?;
+        // Set the DeleteOptions to return previous key-value pairs
+        let delete_options = DeleteOptions::new().with_prev_key();
 
-        let value: Value = serde_json::from_str(response.deleted().to_string().as_str())?;
+        let response = kv_client.delete(path, Some(delete_options)).await?;
 
-        Ok(Some(value))
+        // Check if previous key-value pairs exist
+        let value = if let Some(kv) = response.prev_kvs().first() {
+            // Deserialize the byte array into a serde_json::Value
+            Some(serde_json::from_slice(kv.value())?)
+        } else {
+            None
+        };
+
+        Ok(value)
     }
 
+    // Deletes all keys that are prefixed with the specified path.
+    // For example, if path is /foo, it will delete keys like /foo/bar, /foo/baz
     async fn delete_recursive(&mut self, path: &str) -> Result<()> {
         let mut kv_client = self.client.kv_client();
 
-        let response = kv_client.delete(path, None).await?;
+        // Set DeleteOptions to delete all keys with the specified prefix
+        let delete_options = DeleteOptions::new().with_prefix();
 
-        let _: Value = serde_json::from_str(response.deleted().to_string().as_str())?;
+        // Perform the delete operation
+        kv_client.delete(path, Some(delete_options)).await?;
 
         Ok(())
     }
+
     fn get_client(&mut self) -> Option<etcd_client::Client> {
         Some(self.client.clone())
     }

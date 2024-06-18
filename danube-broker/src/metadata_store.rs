@@ -13,7 +13,7 @@ use std::error::Error;
 // MetadataStore is the storage layer for Danube Metadata
 pub(crate) trait MetadataStore {
     // Read the value of one key, identified by the path
-    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Value>;
+    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Option<Value>>;
     // Return all the paths that are children to the specific path.
     async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>>;
     // Put a new value for a given key
@@ -44,7 +44,7 @@ pub(crate) enum MetaOptions {
 }
 
 impl MetadataStore for MetadataStorage {
-    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Value> {
+    async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Option<Value>> {
         match self {
             MetadataStorage::MemoryStore(store) => store.get(path, MetaOptions::None).await,
             MetadataStorage::EtcdStore(store) => store.get(path, get_options).await,

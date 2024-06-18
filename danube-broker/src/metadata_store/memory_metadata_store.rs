@@ -35,15 +35,15 @@ impl MemoryMetadataStore {
 
 impl MetadataStore for MemoryMetadataStore {
     // Read the value of one key, identified by the path
-    async fn get(&mut self, path: &str, _get_options: MetaOptions) -> Result<Value> {
+    async fn get(&mut self, path: &str, _get_options: MetaOptions) -> Result<Option<Value>> {
         let bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
         match bmap.get(&key) {
-            Some(value) => Ok(value.clone()),
-            None => Err(anyhow!("Key not found")),
+            Some(value) => Ok(Some(value.clone())),
+            None => Ok(None),
         }
     }
 
@@ -146,13 +146,14 @@ mod tests {
 
         // Get the value
         let retrieved_value = store.get(&path, MetaOptions::None).await?;
-        assert_eq!(retrieved_value, value);
+        assert_eq!(retrieved_value, Some(value));
 
         // Delete the key
         store.delete(&path).await?;
 
-        // Try to get the value again and assert it's an error (key not found)
-        assert!(store.get(&path, MetaOptions::None).await.is_err());
+        // Try to get the value again and assert it's None (key not found)
+        let result = store.get(&path, MetaOptions::None).await;
+        assert!(matches!(result, Ok(None)));
 
         Ok(())
     }
@@ -170,8 +171,21 @@ mod tests {
                 MetaOptions::None,
             )
             .await;
-        assert!(result.is_err());
-        assert_eq!(result.err().unwrap().to_string(), "Key not found");
+        // Assert that the result is None (key not found)
+        match result {
+            Ok(Some(_)) => {
+                // If some value was found, fail the test
+                panic!("Expected None (key not found), but got Some(value)");
+            }
+            Ok(None) => {
+                // This is the expected case: key not found
+                assert_eq!(result.unwrap(), None);
+            }
+            Err(err) => {
+                // If there's an unexpected error, fail the test
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
         Ok(())
     }
 
@@ -224,17 +238,20 @@ mod tests {
         assert!(store
             .get("/danube/topics/topic_1/key1", MetaOptions::None)
             .await
-            .is_err());
+            .unwrap()
+            .is_none());
         assert!(store
             .get("/danube/topics/topic_1/key2", MetaOptions::None)
             .await
-            .is_err());
+            .unwrap()
+            .is_none());
 
         // Assert that other directory and its key remain
         assert!(store
             .get("/danube/topics/topic_2/key3", MetaOptions::None)
             .await
-            .is_ok());
+            .unwrap()
+            .is_some());
 
         Ok(())
     }

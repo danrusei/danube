@@ -125,11 +125,13 @@ impl LeaderElection {
     async fn check_leader(&mut self) -> Result<()> {
         match self.store.get(self.path.as_str(), MetaOptions::None).await {
             Ok(response) => {
-                if response.is_null() {
+                if response.is_none() {
                     self.elect().await;
                 } else {
-                    let leader_id: u64 =
-                        response.as_u64().expect("Broker Id should be a valid u64");
+                    let leader_id: u64 = response
+                        .expect("checked aboved that the value is present")
+                        .as_u64()
+                        .expect("Broker Id should be a valid u64");
                     if leader_id == self.broker_id {
                         self.set_state(LeaderElectionState::Leading);
                     } else {

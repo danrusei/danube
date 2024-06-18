@@ -24,7 +24,7 @@ impl NamespaceResources {
     pub(crate) async fn namespace_exist(&mut self, namespace_name: &str) -> Result<bool> {
         let path = join_path(&[BASE_NAMESPACES_PATH, namespace_name]);
         let value = self.store.get(&path, MetaOptions::None).await?;
-        if value.is_null() {
+        if value.is_none() {
             return Ok(false);
         }
         Ok(true)
