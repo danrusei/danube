@@ -42,19 +42,19 @@ pub(crate) mod proto {
 #[command(version, about, long_about = None)]
 struct Args {
     /// Cluster Name
-    #[arg(short, long)]
+    #[arg(short = 'x', long)]
     cluster_name: String,
 
     /// Path to config file
-    #[arg(short, long)]
+    #[arg(short = 'c', long)]
     config_file: Option<String>,
 
     /// Danube Broker advertised address
-    #[arg(short, long, default_value = "[::1]:6650")]
+    #[arg(short = 'b', long, default_value = "[::1]:6650")]
     broker_addr: String,
 
     /// Metadata store address
-    #[arg(short, long)]
+    #[arg(short = 'm', long)]
     meta_store_addr: Option<String>,
 
     /// List of namespaces (comma-separated)
@@ -85,6 +85,7 @@ async fn main() -> Result<()> {
     let store_config = MetadataStoreConfig::new();
     let metadata_store: MetadataStorage =
         if let Some(etcd_addr) = service_config.meta_store_addr.clone() {
+            info!("Use ETCD storage as metadata persistent store");
             MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr, store_config).await?)
         } else {
             return Err(anyhow!("ETCD meta store address is required"));

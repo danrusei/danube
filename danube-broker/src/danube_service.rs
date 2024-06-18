@@ -109,8 +109,8 @@ impl DanubeService {
 
     pub(crate) async fn start(&mut self) -> Result<()> {
         info!(
-            "Setting up the cluster {} with metadata-store {}",
-            self.service_config.cluster_name, "etcd"
+            "Setting up the cluster {}",
+            self.service_config.cluster_name
         );
 
         // Cluster metadata setup
@@ -136,7 +136,7 @@ impl DanubeService {
             create_namespace_if_absent(&mut self.resources, &namespace).await?;
         }
 
-        //cluster metadata setup completed
+        info!("cluster metadata setup completed");
 
         // Not used yet, will be used for persistent topic storage, which is not yet implemented
         // let _storage = storage::memory_segment_storage::SegmentStore::new();
@@ -149,12 +149,18 @@ impl DanubeService {
             self.service_config.broker_addr,
         );
 
-        grpc_server.start().await?;
+        // Create a oneshot channel for readiness signaling
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+
+        let server_handle = grpc_server.start(ready_tx).await;
 
         info!(" Started the Broker GRPC server");
 
         // Start the Syncronizer
         //==========================================================================
+
+        // Wait for the server to signal that it has started
+        ready_rx.await?;
 
         // it is needed by syncronizer in order to publish messages on meta_topic
         let client = DanubeClient::builder()
@@ -168,7 +174,7 @@ impl DanubeService {
         // Start the Leader Election Service
         //==========================================================================
 
-        self.leader_election.write().await.start();
+        self.leader_election.write().await.start().await;
 
         info!("Started the Leader Election service");
 
@@ -211,15 +217,19 @@ impl DanubeService {
 
         // Publish periodic Load Reports
         // This enable the broker to register with Load Manager
-        tokio::spawn(
-            async move { post_broker_load_report(broker_service_cloned, meta_store_cloned) },
-        );
+        tokio::spawn(async move {
+            post_broker_load_report(broker_service_cloned, meta_store_cloned).await
+        });
 
         // Watch for events of Broker's interest
         let broker_service_cloned = Arc::clone(&self.broker);
         if let Some(client) = client {
-            self.watch_events_for_broker(client, broker_service_cloned);
+            self.watch_events_for_broker(client, broker_service_cloned)
+                .await;
         }
+
+        // Wait for the server task to complete
+        server_handle.await?;
 
         Ok(())
     }

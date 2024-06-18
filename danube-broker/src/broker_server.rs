@@ -16,7 +16,8 @@ use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
@@ -36,21 +37,27 @@ impl DanubeServerImpl {
             broker_addr,
         }
     }
-    pub(crate) async fn start(self) -> anyhow::Result<()> {
+    pub(crate) async fn start(self, ready_tx: oneshot::Sender<()>) -> JoinHandle<()> {
         //TODO! start other backgroud services like PublishRateLimiter, DispatchRateLimiter,
         // compaction, innactivity monitor
 
         let socket_addr = self.broker_addr.clone();
 
-        Server::builder()
+        let server = Server::builder()
             .add_service(ProducerServiceServer::new(self.clone()))
             .add_service(ConsumerServiceServer::new(self))
-            .serve(socket_addr)
-            .await?;
+            .serve(socket_addr);
 
-        info!("Server is listening on address: {socket_addr}");
+        // Server has started
+        let handle = tokio::spawn(async move {
+            info!("Server is listening on address: {}", socket_addr);
+            let _ = ready_tx.send(()); // Signal readiness
+            if let Err(e) = server.await {
+                anyhow::anyhow!("Server error: {:?}", e);
+            }
+        });
 
-        Ok(())
+        handle
     }
 }
 

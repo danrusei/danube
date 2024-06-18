@@ -30,7 +30,7 @@ impl Syncronizer {
             producer: None,
         }
     }
-    pub(crate) async fn with_client(&mut self, client: DanubeClient) -> Result<()> {
+    pub(crate) fn with_client(&mut self, client: DanubeClient) -> Result<()> {
         self.client = Some(client);
         Ok(())
     }
