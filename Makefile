@@ -59,7 +59,7 @@ brokers:
 
 brokers-clean:
 	@echo "Cleaning up Brokers instances..."
-	@pids=$$(ps aux | grep '[d]anube-broker --server-addr \[::1\]:'); \
+	@pids=$$(ps aux | grep '[d]anube-broker --broker-addr \[::1\]:'); \
 	if [ -n "$$pids" ]; then \
 		echo "$$pids" | awk '{print $$2}' | xargs -r kill; \
 		echo "Danube brokers cleaned up."; \
