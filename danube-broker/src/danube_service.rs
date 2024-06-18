@@ -16,7 +16,7 @@ use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{self, Duration};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 use crate::resources::BASE_BROKER_PATH;
 use crate::{
@@ -174,8 +174,11 @@ impl DanubeService {
         // Start the Leader Election Service
         //==========================================================================
 
-        self.leader_election.write().await.start().await;
+        let leader_election = Arc::clone(&self.leader_election);
 
+        tokio::spawn(async move {
+            leader_election.write().await.start().await;
+        });
         info!("Started the Leader Election service");
 
         // Start the Local Cache
@@ -335,10 +338,21 @@ async fn post_broker_load_report(
             broker_id = broker_service.broker_id;
         }
         let topics_len = topics.len();
-        let load_repot: LoadReport = generate_load_report(topics_len, topics);
-        if let Ok(value) = serde_json::to_value(load_repot) {
+        let load_report: LoadReport = generate_load_report(topics_len, topics);
+        if let Ok(value) = serde_json::to_value(&load_report) {
             let path = join_path(&[BASE_BROKER_LOAD_PATH, &broker_id.to_string()]);
-            meta_store.put(&path, value, MetaOptions::None);
+            match meta_store.put(&path, value, MetaOptions::None).await {
+                Ok(_) => trace!(
+                    "Broker {} posted a new Load Report {:?}",
+                    broker_id,
+                    &load_report
+                ),
+                Err(err) => trace!(
+                    "Broker {} unable to post Load Report dues to this issue {}",
+                    broker_id,
+                    err
+                ),
+            }
         }
     }
 }

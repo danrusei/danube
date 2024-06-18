@@ -6,7 +6,7 @@ use etcd_client::{
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::time::{self, error::Elapsed, Duration, Interval};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LeaderElectionState {
@@ -29,7 +29,7 @@ pub(crate) struct LeaderElection {
 
 impl LeaderElection {
     pub fn new(store: MetadataStorage, path: &str, broker_id: u64) -> Self {
-        let leader_check_interval = time::interval(Duration::from_secs(5));
+        let leader_check_interval = time::interval(Duration::from_secs(10));
 
         Self {
             path: path.to_owned(),
@@ -42,7 +42,6 @@ impl LeaderElection {
 
     pub async fn start(&mut self) {
         self.elect().await;
-        //maybe I want ot tokio spawn this loop to run on it's own task
         loop {
             self.check_leader().await;
             self.leader_check_interval.tick().await;
@@ -89,7 +88,7 @@ impl LeaderElection {
         let lease_id = client.lease_grant(60, None).await?.id();
         let put_opts = EtcdPutOptions::new().with_lease(lease_id);
 
-        let payload = serde_json::Value::String(serde_json::to_string(&payload)?);
+        let payload = serde_json::Value::Number(serde_json::Number::from(payload));
 
         match self
             .store

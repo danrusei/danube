@@ -65,7 +65,9 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     // install global collector configured based on RUST_LOG env var.
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let args = Args::parse();
 
