@@ -103,34 +103,59 @@ impl BrokerService {
             return Ok((false, Some(status)));
         }
 
-        // If the topic does not exist and create_if_missing is true
-        if create_if_missing {
-            if schema.is_none() {
-                let error_string = "Unable to create a topic without specifying the Schema";
-                let status = create_error_status(
-                    Code::InvalidArgument,
-                    ErrorType::UnknownError,
-                    error_string,
-                    None,
-                );
-                return Ok((false, Some(status)));
-            }
-
-            let new_topic_name = self
-                .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
-                .await?;
-            let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
+        // If the topic does not exist and create_if_missing is false
+        if !create_if_missing {
+            let error_string = &format!("Unable to find the topic: {}", topic_name);
             let status = create_error_status(
-                Code::Unavailable,
-                ErrorType::ServiceNotReady,
+                Code::InvalidArgument,
+                ErrorType::UnknownError,
+                error_string,
+                None,
+            );
+            return Ok((false, Some(status)));
+        };
+
+        if schema.is_none() {
+            let error_string = "Unable to create a topic without specifying the Schema";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::UnknownError,
                 error_string,
                 None,
             );
             return Ok((false, Some(status)));
         }
 
-        // If the topic does not exist and create_if_missing is false, return an error
-        Err(anyhow!("Unable to find the topic: {}", topic_name))
+        let status = match self
+            .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
+            .await
+        {
+            Ok(()) => {
+                let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
+                let status = create_error_status(
+                    Code::Unavailable,
+                    ErrorType::ServiceNotReady,
+                    error_string,
+                    None,
+                );
+                status
+            }
+            Err(err) => {
+                let error_string = &format!(
+                    "The broker unable to post the topic to metadata store, due to error: {}",
+                    err
+                );
+                let status = create_error_status(
+                    Code::Internal,
+                    ErrorType::UnknownError,
+                    error_string,
+                    None,
+                );
+                status
+            }
+        };
+
+        return Ok((false, Some(status)));
     }
 
     // get all the topics currently served by the Broker

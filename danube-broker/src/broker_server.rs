@@ -81,13 +81,13 @@ impl ProducerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
-        match service.get_topic(&req.topic_name, req.schema, true).await {
-            Ok(_) => {
-                trace!(
-                    "topic_name: {} was found or was successfully created",
-                    &req.topic_name
-                )
-            }
+        match service
+            .check_if_topic_exist(&req.topic_name, req.schema, true)
+            .await
+        {
+            Ok((true, None)) => info!("topic_name: {} was found", &req.topic_name),
+            Ok((false, Some(status))) => return Err(status),
+            Ok(_) => unreachable!("Unexpected value in match arm"),
             Err(err) => {
                 let status = Status::invalid_argument(err.to_string());
                 return Err(status);
