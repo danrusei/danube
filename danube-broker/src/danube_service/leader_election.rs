@@ -41,7 +41,7 @@ impl LeaderElection {
     }
 
     pub async fn start(&mut self) {
-        self.elect().await;
+        //      self.elect().await;
         loop {
             self.check_leader().await;
             self.leader_check_interval.tick().await;
@@ -61,14 +61,13 @@ impl LeaderElection {
     }
 
     async fn elect(&mut self) {
+        info!("Broker {} attempting to become the leader", self.broker_id);
         match self.try_to_become_leader().await {
             Ok(is_leader) => {
                 if is_leader {
                     self.set_state(LeaderElectionState::Leading);
-                    info!("Broker {} is the leader", self.broker_id);
                 } else {
                     self.set_state(LeaderElectionState::Following);
-                    info!("Broker {} is not the leader", self.broker_id);
                 }
             }
             Err(e) => {
@@ -133,8 +132,10 @@ impl LeaderElection {
                         .expect("Broker Id should be a valid u64");
                     if leader_id == self.broker_id {
                         self.set_state(LeaderElectionState::Leading);
+                        info!("Broker {} is the leader", self.broker_id);
                     } else {
                         self.set_state(LeaderElectionState::Following);
+                        info!("Broker {} is a follower", self.broker_id);
                     }
                 }
             }
