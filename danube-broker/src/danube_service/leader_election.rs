@@ -84,7 +84,7 @@ impl LeaderElection {
         };
 
         let payload = self.broker_id.clone();
-        let lease_id = client.lease_grant(60, None).await?.id();
+        let lease_id = client.lease_grant(55, None).await?.id();
         let put_opts = EtcdPutOptions::new().with_lease(lease_id);
 
         let payload = serde_json::Value::Number(serde_json::Number::from(payload));

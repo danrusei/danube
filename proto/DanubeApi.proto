@@ -155,3 +155,21 @@ message Schema {
     bytes schema_data = 3;
     TypeSchema type_schema = 4;
 }
+
+// ============================================================================================
+// Define the possible error types
+
+enum ErrorType {
+    UNKNOWN_Error = 0;
+    INVALID_TOPIC_NAME = 1; // The topic name is not valid
+    SERVICE_NOT_READY = 2; // Any error that requires client retry operation with a fresh lookup
+    PRODUCER_ALREADY_EXISTS = 3;
+    SUBSCRIBE_PERMISSION_DENIED = 4;
+}
+
+// A message that encapsulate the error details
+message ErrorMessage {
+    ErrorType error_type = 1;
+    string error_message = 2;
+    string redirect_to = 3; // Optional: for redirection information
+}

@@ -5,8 +5,9 @@ use crate::proto::{
     producer_service_server::{ProducerService, ProducerServiceServer},
 };
 use crate::proto::{
-    AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, MessageRequest, MessageResponse,
-    ProducerRequest, ProducerResponse, ReceiveRequest, StreamMessage,
+    AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, ErrorMessage, ErrorType,
+    MessageRequest, MessageResponse, ProducerRequest, ProducerResponse, ReceiveRequest,
+    StreamMessage,
 };
 use crate::subscription::SubscriptionOptions;
 use crate::topic::Topic;
@@ -20,7 +21,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
-use tonic::{Code, Request, Response, Status};
+use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 use tonic_types::{ErrorDetails, FieldViolation, StatusExt};
 use tracing::{info, trace, Level};
 

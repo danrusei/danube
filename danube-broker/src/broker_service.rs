@@ -5,14 +5,15 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::transport::Server;
+use tonic::{transport::Server, Code, Status};
 use tracing::{info, warn};
 
-use crate::proto::{ProducerAccessMode, Schema};
+use crate::proto::{ErrorType, ProducerAccessMode, Schema};
 
-use crate::policies::Policies;
 use crate::{
     consumer::Consumer,
+    error_message::create_error_status,
+    policies::Policies,
     producer::Producer,
     resources::Resources,
     subscription::SubscriptionOptions,
@@ -51,54 +52,81 @@ impl BrokerService {
         }
     }
 
-    // get the Topic name or create a new one if create_if_missing is true
-    pub(crate) async fn get_topic(
+    // The broker checks if it is the owner of the topic.
+    //
+    // If it is not, the broker responds to the client with a redirection message
+    // containing the address of the correct broker that owns the topic.
+    //  ?????? or is better to ask the client to redo the lookup request????
+    //
+    // If the topic doesn't exist in the cluster, and auto-topic creation is enabled,
+    // the broker creates new topic to the metadata store, that will be assigned by Load Manager to a broker
+    // it respond to the client with Service_not_ready, to retry the lookup
+    pub(crate) async fn check_if_topic_exist(
         &mut self,
         topic_name: &str,
         schema: Option<Schema>,
         create_if_missing: bool,
-    ) -> Result<()> {
+    ) -> Result<(bool, Option<Status>)> {
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic(topic_name) {
-            return Err(anyhow!(
-                "The topic has an invalid format, should be: /namespace_name/topic_name"
-            ));
+            let error_string =
+                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
+            return Ok((false, Some(status)));
         }
 
         // check if topic is served by this broker
         if self.topics.contains_key(topic_name) {
-            return Ok(());
+            return Ok((true, None));
         }
 
         let ns_name = get_nsname_from_topic(topic_name)?;
 
-        // check if Topic already exist in the namespace,
-        // if exist, return a redirect request, as it is served by other broker
+        // check if Topic already exist in the namespace, if exist, inform the client to redo the Lookup request
         if self
             .resources
             .namespace
             .check_if_topic_exist(ns_name, topic_name)
         {
-            // TODO! should ask the user to redo the lookup
-            return Err(anyhow!(
-                "Could not create the topic: {}, as already exists on the namespace: {}",
-                topic_name,
-                ns_name
-            ));
+            let error_string = "The topic exist on the namespace but it is served by another broker, redo the Lookup request";
+            let status = create_error_status(
+                Code::Unavailable,
+                ErrorType::ServiceNotReady,
+                error_string,
+                None,
+            );
+            return Ok((false, Some(status)));
         }
 
         // If the topic does not exist and create_if_missing is true
         if create_if_missing {
             if schema.is_none() {
-                return Err(anyhow!(
-                    "Unable to create a topic without specifying the Schema"
-                ));
+                let error_string = "Unable to create a topic without specifying the Schema";
+                let status = create_error_status(
+                    Code::InvalidArgument,
+                    ErrorType::UnknownError,
+                    error_string,
+                    None,
+                );
+                return Ok((false, Some(status)));
             }
 
             let new_topic_name = self
                 .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
                 .await?;
-            return Ok(new_topic_name);
+            let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
+            let status = create_error_status(
+                Code::Unavailable,
+                ErrorType::ServiceNotReady,
+                error_string,
+                None,
+            );
+            return Ok((false, Some(status)));
         }
 
         // If the topic does not exist and create_if_missing is false, return an error
