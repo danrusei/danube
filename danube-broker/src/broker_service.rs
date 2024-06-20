@@ -3,10 +3,12 @@ use dashmap::DashMap;
 use std::any;
 use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
+use std::str::from_boxed_utf8_unchecked;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Code, Status};
 use tracing::{info, warn};
+use tracing_subscriber::fmt::format;
 
 use crate::proto::{ErrorType, ProducerAccessMode, Schema};
 
@@ -61,12 +63,12 @@ impl BrokerService {
     // If the topic doesn't exist in the cluster, and auto-topic creation is enabled,
     // the broker creates new topic to the metadata store, that will be assigned by Load Manager to a broker
     // it respond to the client with Service_not_ready, to retry the lookup
-    pub(crate) async fn check_if_topic_exist(
+    pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
         schema: Option<Schema>,
         create_if_missing: bool,
-    ) -> Result<(bool, Option<Status>)> {
+    ) -> Result<bool, Status> {
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic(topic_name) {
             let error_string =
@@ -77,15 +79,15 @@ impl BrokerService {
                 error_string,
                 None,
             );
-            return Ok((false, Some(status)));
+            return Err(status);
         }
 
         // check if topic is served by this broker
         if self.topics.contains_key(topic_name) {
-            return Ok((true, None));
+            return Ok(true);
         }
 
-        let ns_name = get_nsname_from_topic(topic_name)?;
+        let ns_name = get_nsname_from_topic(topic_name);
 
         // check if Topic already exist in the namespace, if exist, inform the client to redo the Lookup request
         if self
@@ -100,7 +102,7 @@ impl BrokerService {
                 error_string,
                 None,
             );
-            return Ok((false, Some(status)));
+            return Err(status);
         }
 
         // If the topic does not exist and create_if_missing is false
@@ -108,11 +110,11 @@ impl BrokerService {
             let error_string = &format!("Unable to find the topic: {}", topic_name);
             let status = create_error_status(
                 Code::InvalidArgument,
-                ErrorType::UnknownError,
+                ErrorType::TopicNotFound,
                 error_string,
                 None,
             );
-            return Ok((false, Some(status)));
+            return Err(status);
         };
 
         if schema.is_none() {
@@ -123,7 +125,7 @@ impl BrokerService {
                 error_string,
                 None,
             );
-            return Ok((false, Some(status)));
+            return Err(status);
         }
 
         let status = match self
@@ -141,21 +143,15 @@ impl BrokerService {
                 status
             }
             Err(err) => {
-                let error_string = &format!(
+                let status = Status::internal(&format!(
                     "The broker unable to post the topic to metadata store, due to error: {}",
-                    err
-                );
-                let status = create_error_status(
-                    Code::Internal,
-                    ErrorType::UnknownError,
-                    error_string,
-                    None,
-                );
+                    err,
+                ));
                 status
             }
         };
 
-        return Ok((false, Some(status)));
+        return Err(status);
     }
 
     // get all the topics currently served by the Broker
@@ -402,10 +398,10 @@ fn validate_topic(input: &str) -> bool {
     true
 }
 
-fn get_nsname_from_topic(topic_name: &str) -> Result<&str> {
+fn get_nsname_from_topic(topic_name: &str) -> &str {
     // assuming that the topic name has already been validated.
     let parts: Vec<&str> = topic_name.split('/').collect();
     let ns_name = parts.get(1).unwrap();
 
-    Ok(ns_name)
+    ns_name
 }
