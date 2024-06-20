@@ -129,7 +129,7 @@ message TopicLookupResponse {
         Failed   = 2;
     }
     uint64 request_id = 3;
-    LookupType response = 4;
+    LookupType response_type = 4;
     string brokerServiceUrl = 5;
 }
 

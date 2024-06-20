@@ -174,7 +174,7 @@ pub struct TopicLookupResponse {
     #[prost(uint64, tag = "3")]
     pub request_id: u64,
     #[prost(enumeration = "topic_lookup_response::LookupType", tag = "4")]
-    pub response: i32,
+    pub response_type: i32,
     #[prost(string, tag = "5")]
     pub broker_service_url: ::prost::alloc::string::String,
 }

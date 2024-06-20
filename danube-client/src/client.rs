@@ -47,8 +47,8 @@ impl DanubeClient {
     }
 
     /// gets the address of a broker handling the topic
-    pub async fn lookup_topic(&self, topic: impl Into<String>) -> Result<LookupResult> {
-        self.lookup_service.lookup_topic(topic).await
+    pub async fn lookup_topic(&self, addr: &Uri, topic: impl Into<String>) -> Result<LookupResult> {
+        self.lookup_service.lookup_topic(addr, topic).await
     }
 }
 
