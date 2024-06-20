@@ -13,7 +13,7 @@ use bytes::Bytes;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tonic::{Response, Status};
+use tonic::{transport::Uri, Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
 
@@ -62,7 +62,7 @@ impl Producer {
     }
     pub async fn create(&mut self) -> Result<u64> {
         // Initialize the gRPC client connection
-        self.connect().await?;
+        self.connect(&self.client.uri.clone()).await?;
 
         // default schema is Bytes if not specified
         let mut schema = Schema::new("bytes_schema".into(), SchemaType::Bytes);
@@ -79,21 +79,47 @@ impl Producer {
             producer_access_mode: ProducerAccessMode::Shared.into(),
         };
 
-        let request = tonic::Request::new(req);
+        let max_retries = 4;
+        let mut attempts = 0;
 
-        let mut client = self.stream_client.as_mut().unwrap().clone();
-        let response: std::result::Result<Response<ProducerResponse>, Status> =
-            client.create_producer(request).await;
+        let mut broker_addr = self.client.uri.clone();
 
-        match response {
-            Ok(resp) => {
-                let response = resp.into_inner();
-                self.producer_id = Some(response.producer_id);
-                return Ok(response.producer_id);
-            }
-            // maybe some checks on the status, if anything can be handled by server
-            Err(status) => return Err(DanubeError::FromStatus(status)),
-        };
+        // The loop construct continues to try the create_producer call
+        // until it either succeeds in less max retries or fails with a different error.
+        loop {
+            let request = tonic::Request::new(req.clone());
+
+            let mut client = self.stream_client.as_mut().unwrap().clone();
+            let response: std::result::Result<Response<ProducerResponse>, Status> =
+                client.create_producer(request).await;
+
+            match response {
+                Ok(resp) => {
+                    let response = resp.into_inner();
+                    self.producer_id = Some(response.producer_id);
+                    return Ok(response.producer_id);
+                }
+                Err(status) => {
+                    attempts += 1;
+                    if attempts >= max_retries {
+                        return Err(DanubeError::FromStatus(status));
+                    }
+
+                    match self
+                        .client
+                        .lookup_service
+                        .handle_lookup_and_retries(&broker_addr, &status, &self.topic)
+                        .await
+                    {
+                        Ok(addr) => {
+                            broker_addr = addr.clone();
+                            self.connect(&addr).await?;
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+            };
+        }
     }
 
     // the Producer sends messages to the topic
@@ -133,12 +159,8 @@ impl Producer {
             Err(status) => return Err(DanubeError::FromStatus(status)),
         }
     }
-    async fn connect(&mut self) -> Result<()> {
-        let grpc_cnx = self
-            .client
-            .cnx_manager
-            .get_connection(&self.client.uri, &self.client.uri)
-            .await?;
+    async fn connect(&mut self, addr: &Uri) -> Result<()> {
+        let grpc_cnx = self.client.cnx_manager.get_connection(addr, addr).await?;
         let client = ProducerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())

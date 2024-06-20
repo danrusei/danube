@@ -64,9 +64,12 @@ impl LookupService {
 
         Ok(lookup_result)
     }
-    async fn handle_lookup_and_retries(
+
+    // for SERVICE_NOT_READY error received from broker retry the topic_lookup request
+    // as the topic may be in process to be assigned to a broker in cluster
+    pub(crate) async fn handle_lookup_and_retries(
         &self,
-        addr: Uri,
+        addr: &Uri,
         status: &Status,
         topic: &str,
     ) -> Result<Uri> {
@@ -76,7 +79,7 @@ impl LookupService {
                 match self.lookup_topic(&addr, topic).await {
                     Ok(lookup_result) => match lookup_type_from_i32(lookup_result.response_type) {
                         Some(LookupType::Redirect) => Ok(lookup_result.addr),
-                        Some(LookupType::Connect) => Ok(addr),
+                        Some(LookupType::Connect) => Ok(addr.to_owned()),
                         Some(LookupType::Failed) => Err(DanubeError::Unrecoverable(format!(
                             "Lookup failed for topic: {}",
                             topic
