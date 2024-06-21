@@ -169,6 +169,11 @@ impl Topic {
         Ok(())
     }
 
+    // get topic's schema
+    pub(crate) fn get_schema(&self) -> Option<Schema> {
+        self.schema.clone()
+    }
+
     // Add a schema to the topic.
     pub(crate) fn delete_schema(&self, schema: Schema) -> Result<()> {
         todo!()

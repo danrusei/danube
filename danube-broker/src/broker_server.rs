@@ -411,6 +411,35 @@ impl Discovery for DanubeServerImpl {
         &self,
         request: Request<SchemaRequest>,
     ) -> std::result::Result<Response<SchemaResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!("Schema Lookup for the topic: {}", req.topic);
+
+        // The topic format is /{namespace_name}/{topic_name}
+        if !validate_topic(&req.topic) {
+            let error_string =
+                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
+            return Err(status);
+        }
+
+        let mut service = self.service.lock().await;
+
+        let proto_schema = service.get_schema(&req.topic);
+
+        // should I inform the client that the topic is not served by this broker ?
+        // as the get_schema is local to this broker
+
+        let response = SchemaResponse {
+            request_id: req.request_id,
+            schema: proto_schema,
+        };
+
+        Ok(tonic::Response::new(response))
     }
 }

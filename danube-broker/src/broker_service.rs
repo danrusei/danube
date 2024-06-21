@@ -10,7 +10,7 @@ use tonic::{transport::Server, Code, Status};
 use tracing::{info, warn};
 use tracing_subscriber::fmt::format;
 
-use crate::proto::{ErrorType, ProducerAccessMode, Schema};
+use crate::proto::{ErrorType, ProducerAccessMode, Schema as ProtoSchema};
 
 use crate::{
     consumer::Consumer,
@@ -66,7 +66,7 @@ impl BrokerService {
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
-        schema: Option<Schema>,
+        schema: Option<ProtoSchema>,
         create_if_missing: bool,
     ) -> Result<bool, Status> {
         // The topic format is /{namespace_name}/{topic_name}
@@ -165,7 +165,7 @@ impl BrokerService {
         &mut self,
         ns_name: &str,
         topic_name: &str,
-        schema: Schema,
+        schema: ProtoSchema,
         policies: Option<Policies>,
     ) -> Result<()> {
         // store the topic to unassigned queue for the Load Manager to assign to a broker
@@ -257,6 +257,17 @@ impl BrokerService {
             return Some((false, broker_addr));
         }
 
+        None
+    }
+
+    pub(crate) fn get_schema(&self, topic_name: &str) -> Option<ProtoSchema> {
+        let topic = self.topics.get(topic_name);
+        if let Some(topic) = topic {
+            let schema = topic.get_schema();
+            if let Some(schema) = schema {
+                return Some(ProtoSchema::from(schema));
+            }
+        }
         None
     }
 
