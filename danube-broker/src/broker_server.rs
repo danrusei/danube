@@ -1,16 +1,21 @@
-use crate::broker_service::BrokerService;
-use crate::producer::{self, Producer};
 use crate::proto::{
     consumer_service_server::{ConsumerService, ConsumerServiceServer},
+    discovery_server::{Discovery, DiscoveryServer},
     producer_service_server::{ProducerService, ProducerServiceServer},
+    topic_lookup_response::LookupType,
 };
 use crate::proto::{
     AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, ErrorMessage, ErrorType,
     MessageRequest, MessageResponse, ProducerRequest, ProducerResponse, ReceiveRequest,
-    StreamMessage,
+    SchemaRequest, SchemaResponse, StreamMessage, TopicLookupRequest, TopicLookupResponse,
 };
-use crate::subscription::SubscriptionOptions;
-use crate::topic::Topic;
+use crate::{
+    broker_service::{validate_topic, BrokerService},
+    error_message::create_error_status,
+    producer::{self, Producer},
+    subscription::SubscriptionOptions,
+    topic::Topic,
+};
 
 //use prost::Message;
 use bytes::Bytes;
@@ -346,6 +351,66 @@ impl ConsumerService for DanubeServerImpl {
         &self,
         request: tonic::Request<AckRequest>,
     ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
+        todo!()
+    }
+}
+
+#[tonic::async_trait]
+impl Discovery for DanubeServerImpl {
+    // finds topic to broker assignment
+    #[tracing::instrument(level = Level::INFO, skip_all)]
+    async fn topic_lookup(
+        &self,
+        request: Request<TopicLookupRequest>,
+    ) -> std::result::Result<Response<TopicLookupResponse>, tonic::Status> {
+        let req = request.into_inner();
+
+        trace!("Topic Lookup request for topic: {}", req.topic);
+
+        // The topic format is /{namespace_name}/{topic_name}
+        if !validate_topic(&req.topic) {
+            let error_string =
+                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
+            return Err(status);
+        }
+
+        let mut service = self.service.lock().await;
+
+        let result = match service.lookup_topic(&req.topic).await {
+            Some((true, _)) => (self.broker_addr.to_string(), LookupType::Connect),
+            Some((false, addr)) => (addr, LookupType::Redirect),
+            None => {
+                let error_string = &format!("Unable to find the requested topic: {}", &req.topic);
+                let status = create_error_status(
+                    Code::InvalidArgument,
+                    ErrorType::TopicNotFound,
+                    error_string,
+                    None,
+                );
+                return Err(status);
+            }
+        };
+
+        let response = TopicLookupResponse {
+            request_id: req.request_id,
+            response_type: result.1.into(),
+            broker_service_url: result.0,
+        };
+
+        Ok(tonic::Response::new(response))
+    }
+    // Retrieve message schema from Metadata Store
+    #[tracing::instrument(level = Level::INFO, skip_all)]
+    async fn get_schema(
+        &self,
+        request: Request<SchemaRequest>,
+    ) -> std::result::Result<Response<SchemaResponse>, tonic::Status> {
         todo!()
     }
 }

@@ -24,6 +24,8 @@ Holds information about the cluster and the cluster's brokers. Mainly read and w
 
 * **/cluster/cluster-name**
   * holds a String with the name of the cluster
+* **/cluster/register/{broker-id}**
+  * the broker register once it join the cluster, contain the broker metadata (broker id & socket addr)  
 * **/cluster/brokers/{broker-id}/{namespace}/{topic}**
   * topics served by the broker, with value ()
   * **Load Manager** updates the path, with topic assgnemnts to brokers

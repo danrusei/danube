@@ -13,6 +13,7 @@ pub(crate) use namespace::NamespaceResources;
 pub(crate) use topic::TopicResources;
 
 pub(crate) static BASE_CLUSTER_PATH: &str = "/cluster";
+pub(crate) static BASE_REGISTER_PATH: &str = "/cluster/register";
 pub(crate) static BASE_BROKER_PATH: &str = "/cluster/brokers";
 pub(crate) static BASE_NAMESPACES_PATH: &str = "/namespaces";
 pub(crate) static BASE_TOPICS_PATH: &str = "/topics";

@@ -237,6 +237,29 @@ impl BrokerService {
         todo!()
     }
 
+    // search if it's served by local broker
+    // if not search in Local Metadata for the broker that owns the topic,
+    // returns the broker's socket address
+    pub(crate) async fn lookup_topic(&self, topic_name: &str) -> Option<(bool, String)> {
+        if self.topics.contains_key(topic_name) {
+            return Some((true, "".to_string()));
+        }
+        let broker_id = match self
+            .resources
+            .cluster
+            .get_broker_for_topic(topic_name)
+            .await
+        {
+            Some(broker_id) => broker_id,
+            None => return None,
+        };
+        if let Some(broker_addr) = self.resources.cluster.get_broker_addr(&broker_id) {
+            return Some((false, broker_addr));
+        }
+
+        None
+    }
+
     pub(crate) fn check_if_producer_exist(
         &self,
         topic_name: String,
@@ -379,7 +402,7 @@ impl BrokerService {
 }
 
 // Topics string representation:  /{namespace}/{topic-name}
-fn validate_topic(input: &str) -> bool {
+pub(crate) fn validate_topic(input: &str) -> bool {
     let parts: Vec<&str> = input.split('/').collect();
 
     if parts.len() != 3 {

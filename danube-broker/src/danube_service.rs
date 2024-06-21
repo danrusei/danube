@@ -18,7 +18,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::{self, Duration};
 use tracing::{info, trace, warn};
 
-use crate::resources::BASE_BROKER_PATH;
+use crate::resources::{BASE_BROKER_PATH, BASE_REGISTER_PATH};
 use crate::{
     broker_server,
     broker_service::{self, BrokerService},
@@ -118,6 +118,12 @@ impl DanubeService {
         self.resources.cluster.create_cluster(
             &self.service_config.cluster_name,
             self.service_config.broker_addr.to_string(),
+        );
+
+        // register new broker to cluster
+        self.resources.cluster.register(
+            &self.broker_id.to_string(),
+            &self.service_config.broker_addr.to_string(),
         );
 
         //create the default Namespace
