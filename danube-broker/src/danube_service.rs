@@ -16,7 +16,7 @@ use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{self, Duration};
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::resources::{BASE_BROKER_PATH, BASE_REGISTER_PATH};
 use crate::{
@@ -349,7 +349,7 @@ async fn post_broker_load_report(
             let path = join_path(&[BASE_BROKER_LOAD_PATH, &broker_id.to_string()]);
             match meta_store.put(&path, value, MetaOptions::None).await {
                 Ok(_) => trace!(
-                    "Broker {} posted a new Load Report {:?}",
+                    "Broker {} posted a new Load Report: {:?}",
                     broker_id,
                     &load_report
                 ),

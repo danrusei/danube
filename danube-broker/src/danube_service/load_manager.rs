@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio::time::{self, Duration};
-use tracing::info;
+use tracing::{info, trace, warn};
 
 use crate::metadata_store::MetaOptions;
 use crate::{
@@ -135,11 +135,16 @@ impl LoadManager {
                 if leader_election.read().await.get_state() == LeaderElectionState::Following {
                     continue;
                 }
+                info!(
+                    "Attempting to assign the new topic {} to a broker",
+                    &event.key
+                );
                 self.assign_topic_to_broker(event).await;
                 continue;
             }
             // the event is processed and added localy,
             // but only the Leader Broker does the calculations on the loads
+            trace!("A new load report has been received from: {}", &event.key);
             self.process_event(event);
             if leader_election.read().await.get_state() == LeaderElectionState::Following {
                 continue;
@@ -163,7 +168,6 @@ impl LoadManager {
     // Post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
     // to be further read and processed by the selected broker
     async fn assign_topic_to_broker(&mut self, event: ETCDWatchEvent) {
-        // TODO!
         if event.event_type != EventType::Put {
             return;
         }
@@ -182,7 +186,7 @@ impl LoadManager {
                 "The topic {} was successfully assign to broker {}",
                 topic_name, broker_id
             ),
-            Err(err) => info!(
+            Err(err) => warn!(
                 "Unable to assign topic {} to the broker {}, due to error: {}",
                 topic_name, broker_id, err
             ),

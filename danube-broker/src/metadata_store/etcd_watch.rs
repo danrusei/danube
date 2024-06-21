@@ -2,7 +2,7 @@ use anyhow::Result;
 use etcd_client::{Client, EventType, WatchOptions};
 use futures::StreamExt;
 use tokio::sync::mpsc;
-use tracing::warn;
+use tracing::{debug, warn};
 
 // Represent an event of interest
 #[derive(Debug)]
@@ -19,6 +19,10 @@ pub(crate) async fn etcd_watch_prefixes(
     prefixes: Vec<&str>,
     sender: mpsc::Sender<ETCDWatchEvent>,
 ) -> Result<()> {
+    debug!(
+        "A new watch request has beed received for prefixes: {:?}",
+        prefixes
+    );
     for prefix in prefixes {
         let (watcher, mut watch_stream) = client
             .watch(prefix, Some(WatchOptions::new().with_prefix()))

@@ -6,7 +6,7 @@ use etcd_client::{
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::time::{self, error::Elapsed, Duration, Interval};
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LeaderElectionState {
@@ -61,7 +61,7 @@ impl LeaderElection {
     }
 
     async fn elect(&mut self) {
-        info!("Broker {} attempting to become the leader", self.broker_id);
+        debug!("Broker {} attempting to become the leader", self.broker_id);
         match self.try_to_become_leader().await {
             Ok(is_leader) => {
                 if is_leader {
@@ -112,7 +112,7 @@ impl LeaderElection {
 
         tokio::spawn(async move {
             while let Some(_) = stream.message().await.unwrap_or(None) {
-                info!("Lease {} renewed", lease_id);
+                debug!("Lease {} renewed", lease_id);
             }
         });
 
@@ -132,10 +132,10 @@ impl LeaderElection {
                         .expect("Broker Id should be a valid u64");
                     if leader_id == self.broker_id {
                         self.set_state(LeaderElectionState::Leading);
-                        info!("Broker {} is the leader", self.broker_id);
+                        debug!("Broker {} is the leader", self.broker_id);
                     } else {
                         self.set_state(LeaderElectionState::Following);
-                        info!("Broker {} is a follower", self.broker_id);
+                        debug!("Broker {} is a follower", self.broker_id);
                     }
                 }
             }
