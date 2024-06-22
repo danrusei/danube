@@ -77,8 +77,8 @@ impl LoadManager {
         // and inform the broker by posting the topic on it's path "/cluster/brokers/{broker-id}/{namespace}/{topic}"
         tokio::spawn(async move {
             let mut prefixes = Vec::new();
-            prefixes.push(BASE_BROKER_LOAD_PATH);
-            prefixes.push(BASE_UNASSIGNED_PATH);
+            prefixes.push(BASE_BROKER_LOAD_PATH.to_string());
+            prefixes.push(BASE_UNASSIGNED_PATH.to_string());
             etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 

@@ -258,7 +258,7 @@ impl DanubeService {
         tokio::spawn(async move {
             let mut prefixes = Vec::new();
             let topic_assignment_path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
-            prefixes.extend([topic_assignment_path.as_str()].iter());
+            prefixes.extend([topic_assignment_path].into_iter());
             etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 

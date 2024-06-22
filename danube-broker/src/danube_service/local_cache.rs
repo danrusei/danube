@@ -119,12 +119,12 @@ impl LocalCache {
             let mut prefixes = Vec::new();
             prefixes.extend(
                 [
-                    BASE_CLUSTER_PATH,
-                    BASE_NAMESPACES_PATH,
-                    BASE_TOPICS_PATH,
-                    BASE_SUBSCRIPTIONS_PATH,
+                    BASE_CLUSTER_PATH.to_string(),
+                    BASE_NAMESPACES_PATH.to_string(),
+                    BASE_TOPICS_PATH.to_string(),
+                    BASE_SUBSCRIPTIONS_PATH.to_string(),
                 ]
-                .iter(),
+                .into_iter(),
             );
             etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
