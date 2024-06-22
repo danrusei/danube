@@ -130,11 +130,17 @@ impl LoadManager {
         leader_election: Arc<RwLock<LeaderElection>>,
     ) {
         while let Some(event) = rx_event.recv().await {
+            let state = {
+                let leader_election = leader_election.read().await;
+                leader_election.get_state().await
+            };
+
             // only the Leader Broker should assign the topic
             if event.key.starts_with(BASE_UNASSIGNED_PATH) {
-                if leader_election.read().await.get_state() == LeaderElectionState::Following {
+                if state == LeaderElectionState::Following {
                     continue;
                 }
+
                 info!(
                     "Attempting to assign the new topic {} to a broker",
                     &event.key
@@ -145,11 +151,12 @@ impl LoadManager {
             // the event is processed and added localy,
             // but only the Leader Broker does the calculations on the loads
             trace!("A new load report has been received from: {}", &event.key);
-            self.process_event(event);
-            if leader_election.read().await.get_state() == LeaderElectionState::Following {
+            self.process_event(event).await;
+
+            if state == LeaderElectionState::Following {
                 continue;
             }
-            self.calculate_rankings_simple();
+            self.calculate_rankings_simple().await;
             let next_broker = self
                 .rankings
                 .lock()

@@ -4,7 +4,8 @@ use etcd_client::{
     Client, Error, GetOptions as EtcdGetOptions, LeaseKeepAliveStream, PutOptions as EtcdPutOptions,
 };
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::{self, error::Elapsed, Duration, Interval};
 use tracing::{debug, info, trace, warn};
 
@@ -48,13 +49,13 @@ impl LeaderElection {
         }
     }
 
-    pub fn get_state(&self) -> LeaderElectionState {
-        let state = self.state.lock().unwrap();
+    pub async fn get_state(&self) -> LeaderElectionState {
+        let state = self.state.lock().await;
         state.clone()
     }
 
-    fn set_state(&self, new_state: LeaderElectionState) {
-        let mut state = self.state.lock().unwrap();
+    async fn set_state(&self, new_state: LeaderElectionState) {
+        let mut state = self.state.lock().await;
         if *state != new_state {
             *state = new_state;
         }
