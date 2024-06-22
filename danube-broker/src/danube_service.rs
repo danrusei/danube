@@ -76,7 +76,7 @@ pub(crate) struct DanubeService {
     meta_store: MetadataStorage,
     local_cache: LocalCache,
     resources: Resources,
-    leader_election: Arc<RwLock<LeaderElection>>,
+    leader_election: LeaderElection,
     syncronizer: Syncronizer,
     load_manager: LoadManager,
 }
@@ -90,7 +90,7 @@ impl DanubeService {
         meta_store: MetadataStorage,
         local_cache: LocalCache,
         resources: Resources,
-        leader_election: Arc<RwLock<LeaderElection>>,
+        leader_election: LeaderElection,
         syncronizer: Syncronizer,
         load_manager: LoadManager,
     ) -> Self {
@@ -180,10 +180,13 @@ impl DanubeService {
         // Start the Leader Election Service
         //==========================================================================
 
-        let leader_election = Arc::clone(&self.leader_election);
+        // to be configurable
+        let mut leader_check_interval = time::interval(Duration::from_secs(10));
+
+        let mut leader_election_cloned = self.leader_election.clone();
 
         tokio::spawn(async move {
-            leader_election.write().await.start().await;
+            leader_election_cloned.start(leader_check_interval).await;
         });
         info!("Started the Leader Election service");
 
@@ -211,11 +214,11 @@ impl DanubeService {
         let mut load_manager_cloned = self.load_manager.clone();
 
         let broker_id_cloned = self.broker_id;
-        let leader_election = Arc::clone(&self.leader_election);
+        let leader_election_cloned = self.leader_election.clone();
         // Process the ETCD Watch events
         tokio::spawn(async move {
             load_manager_cloned
-                .start(rx_event, broker_id_cloned, leader_election)
+                .start(rx_event, broker_id_cloned, leader_election_cloned)
                 .await
         });
 

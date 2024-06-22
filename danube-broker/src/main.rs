@@ -120,8 +120,6 @@ async fn main() -> Result<()> {
         broker_service.broker_id,
     );
 
-    let leader_election_service = Arc::new(RwLock::new(leader_election_service));
-
     // Load Manager, monitor and distribute load across brokers.
     let load_manager = LoadManager::new(broker_service.broker_id, metadata_store.clone());
 

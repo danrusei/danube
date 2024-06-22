@@ -19,33 +19,29 @@ pub(crate) enum LeaderElectionState {
 // Leader Election service is needed for critical tasks such as topic assignment to brokers and partitioning.
 // Load Manager is using this service, as only one broker is selected to make the load usage calculations and post the results.
 // Should be selected one broker leader per cluster, who takes the decissions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct LeaderElection {
     path: String,
     broker_id: u64,
     store: MetadataStorage,
-    leader_check_interval: Interval,
     state: Arc<Mutex<LeaderElectionState>>,
 }
 
 impl LeaderElection {
     pub fn new(store: MetadataStorage, path: &str, broker_id: u64) -> Self {
-        let leader_check_interval = time::interval(Duration::from_secs(10));
-
         Self {
             path: path.to_owned(),
             broker_id,
             store,
-            leader_check_interval,
             state: Arc::new(Mutex::new(LeaderElectionState::NoLeader)),
         }
     }
 
-    pub async fn start(&mut self) {
+    pub async fn start(&mut self, mut leader_check_interval: Interval) {
         //      self.elect().await;
         loop {
             self.check_leader().await;
-            self.leader_check_interval.tick().await;
+            leader_check_interval.tick().await;
         }
     }
 

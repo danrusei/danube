@@ -127,13 +127,10 @@ impl LoadManager {
         &mut self,
         mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
         broker_id: u64,
-        leader_election: Arc<RwLock<LeaderElection>>,
+        leader_election: LeaderElection,
     ) {
         while let Some(event) = rx_event.recv().await {
-            let state = {
-                let leader_election = leader_election.read().await;
-                leader_election.get_state().await
-            };
+            let state = leader_election.get_state().await;
 
             // only the Leader Broker should assign the topic
             if event.key.starts_with(BASE_UNASSIGNED_PATH) {
