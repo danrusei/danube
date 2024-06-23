@@ -63,7 +63,3 @@ impl Resources {
         }
     }
 }
-
-pub(crate) fn join_path(parts: &[&str]) -> String {
-    parts.join("/")
-}

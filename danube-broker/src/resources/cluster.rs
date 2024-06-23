@@ -3,7 +3,8 @@ use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    resources::{join_path, BASE_BROKER_PATH, BASE_CLUSTER_PATH},
+    resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH},
+    utils::join_path,
     LocalCache,
 };
 

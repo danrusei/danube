@@ -4,8 +4,9 @@ use serde_json::Value;
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::{self, Policies},
-    resources::{join_path, BASE_TOPICS_PATH},
+    resources::BASE_TOPICS_PATH,
     schema::{self, Schema},
+    utils::join_path,
     LocalCache,
 };
 

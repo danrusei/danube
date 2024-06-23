@@ -28,10 +28,11 @@ use crate::{
     },
     namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
     policies::Policies,
-    resources::{self, join_path, Resources, BASE_BROKER_LOAD_PATH},
+    resources::{self, Resources, BASE_BROKER_LOAD_PATH},
     service_configuration::ServiceConfiguration,
     storage,
     topic::SYSTEM_TOPIC,
+    utils::join_path,
 };
 
 // Danube Service has cluster and local Broker management & coordination responsabilities

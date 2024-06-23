@@ -6,7 +6,8 @@ use serde_json::{from_value, Value};
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
-    resources::{join_path, BASE_NAMESPACES_PATH},
+    resources::BASE_NAMESPACES_PATH,
+    utils::join_path,
     LocalCache,
 };
 

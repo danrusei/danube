@@ -19,9 +19,9 @@ use crate::{
         MetadataStoreConfig,
     },
     resources::{
-        join_path, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH,
-        LOADBALANCE_DECISION_PATH,
+        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH, LOADBALANCE_DECISION_PATH,
     },
+    utils::join_path,
 };
 
 use super::{leader_election, LeaderElection, LeaderElectionState};
