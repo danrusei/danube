@@ -163,7 +163,7 @@ impl LoadManager {
                 .0;
             let _ = self
                 .next_broker
-                .fetch_add(next_broker, std::sync::atomic::Ordering::SeqCst);
+                .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
 
             // need to post it's decision on the Metadata Store
         }
@@ -217,11 +217,12 @@ impl LoadManager {
     }
 
     pub async fn get_next_broker(&mut self) -> u64 {
-        let first_in_list = self.rankings.lock().await.get(0).unwrap().0;
+        let rankings = self.rankings.lock().await;
+        let first_in_list = rankings.get(0).unwrap().0;
 
         let next_broker = self
             .next_broker
-            .fetch_add(first_in_list, std::sync::atomic::Ordering::SeqCst);
+            .swap(first_in_list, std::sync::atomic::Ordering::SeqCst);
 
         next_broker
     }
