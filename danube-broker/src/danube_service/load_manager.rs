@@ -62,7 +62,7 @@ impl LoadManager {
         self.fetch_initial_load(client.clone()).await;
 
         //calculate rankings after the initial load fetch
-        self.calculate_rankings_simple();
+        self.calculate_rankings_simple().await;
 
         let (tx_event, mut rx_event) = mpsc::channel(32);
 
@@ -282,7 +282,9 @@ impl LoadManager {
 }
 
 fn extract_broker_id(key: &str) -> Option<u64> {
-    key.strip_prefix("/cluster/brokers/load/")?.parse().ok()
+    key.strip_prefix(format!("{}/", BASE_BROKER_LOAD_PATH).as_str())?
+        .parse()
+        .ok()
 }
 
 fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
