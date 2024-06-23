@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use prost::Message;
 use thiserror::Error;
 use tonic::{codegen::http::uri, metadata::MetadataValue, Status};
@@ -11,8 +12,8 @@ pub enum DanubeError {
     #[error("transport error: {0}")]
     TonicTransportError(#[from] tonic::transport::Error),
 
-    #[error("from status error: {0}")]
-    FromStatus(#[from] tonic::Status),
+    #[error("from status error: {0}, with message: {1:?}")]
+    FromStatus(tonic::Status, Option<ErrorMessage>),
 
     #[error("unable to parse the address: {0}")]
     UrlParseError(#[from] uri::InvalidUri),
@@ -25,11 +26,19 @@ pub enum DanubeError {
 }
 
 pub(crate) fn decode_error_details(status: &Status) -> Option<ErrorMessage> {
-    if let Some(metadata_value) = status.metadata().get_bin("error-details-bin") {
+    if let Some(metadata_value) = status.metadata().get_bin("error-message-bin") {
+        let base64_buffer = metadata_value.as_encoded_bytes();
+
+        // Decode the base64 string to get the original bytes
+        let buffer = BASE64_STANDARD_NO_PAD.decode(base64_buffer).unwrap();
+
         // Decode the protobuf message directly from the metadata bytes
-        match ErrorMessage::decode(metadata_value.as_encoded_bytes()) {
-            Ok(error_details) => Some(error_details),
-            Err(_) => None,
+        match ErrorMessage::decode(&buffer[..]) {
+            Ok(error_message) => Some(error_message),
+            Err(err) => {
+                eprintln!("Error decoding error message: {}", err);
+                None
+            }
         }
     } else {
         None

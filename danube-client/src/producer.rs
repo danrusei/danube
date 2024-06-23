@@ -3,7 +3,7 @@ use crate::proto::{
     ProducerAccessMode, ProducerRequest, ProducerResponse,
 };
 use crate::{
-    errors::{DanubeError, Result},
+    errors::{decode_error_details, DanubeError, Result},
     message::{MessageMetadata, SendMessage},
     schema::{Schema, SchemaType},
     DanubeClient,
@@ -102,7 +102,8 @@ impl Producer {
                 Err(status) => {
                     attempts += 1;
                     if attempts >= max_retries {
-                        return Err(DanubeError::FromStatus(status));
+                        let decoded_message = decode_error_details(&status);
+                        return Err(DanubeError::FromStatus(status, decoded_message));
                     }
 
                     match self
@@ -156,7 +157,10 @@ impl Producer {
                 return Ok(response.sequence_id);
             }
             // maybe some checks on the status, if anything can be handled by server
-            Err(status) => return Err(DanubeError::FromStatus(status)),
+            Err(status) => {
+                let decoded_message = decode_error_details(&status);
+                return Err(DanubeError::FromStatus(status, decoded_message));
+            }
         }
     }
     async fn connect(&mut self, addr: &Uri) -> Result<()> {

@@ -59,7 +59,10 @@ impl LookupService {
                 lookup_result.addr = addr_to_uri;
             }
             // maybe some checks on the status, if anything can be handled by server
-            Err(status) => return Err(DanubeError::FromStatus(status)),
+            Err(status) => {
+                let decoded_message = decode_error_details(&status);
+                return Err(DanubeError::FromStatus(status, decoded_message));
+            }
         };
 
         Ok(lookup_result)
@@ -94,10 +97,11 @@ impl LookupService {
                     ))),
                 }
             } else {
-                Err(DanubeError::FromStatus(status.clone()))
+                //  let decoded_message = decode_error_details(&status);
+                Err(DanubeError::FromStatus(status.clone(), Some(error_details)))
             }
         } else {
-            Err(DanubeError::FromStatus(status.clone()))
+            Err(DanubeError::FromStatus(status.clone(), None))
         }
     }
 }

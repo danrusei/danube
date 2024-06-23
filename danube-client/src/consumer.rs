@@ -1,5 +1,5 @@
 use crate::{
-    errors::{DanubeError, Result},
+    errors::{decode_error_details, DanubeError, Result},
     DanubeClient,
 };
 
@@ -98,7 +98,10 @@ impl Consumer {
                 return Ok(r.consumer_id);
             }
             // maybe some checks on the status, if anything can be handled by server
-            Err(status) => return Err(DanubeError::FromStatus(status)),
+            Err(status) => {
+                let decoded_message = decode_error_details(&status);
+                return Err(DanubeError::FromStatus(status, decoded_message));
+            }
         };
     }
 
@@ -113,7 +116,13 @@ impl Consumer {
 
         let mut stream_client = self.stream_client.as_mut().unwrap();
 
-        let response = stream_client.receive_messages(receive_request).await?;
+        let response = match stream_client.receive_messages(receive_request).await {
+            Ok(response) => response,
+            Err(status) => {
+                let decoded_message = decode_error_details(&status);
+                return Err(DanubeError::FromStatus(status, decoded_message));
+            }
+        };
         Ok(response.into_inner())
     }
 

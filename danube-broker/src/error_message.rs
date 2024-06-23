@@ -21,6 +21,7 @@ pub(crate) fn create_error_status(
 
     // Attach serialized error details as metadata
     let metadata_value = MetadataValue::from_bytes(&buffer);
+
     let mut status = Status::new(code, error_string);
     status
         .metadata_mut()
