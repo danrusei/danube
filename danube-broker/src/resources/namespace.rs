@@ -50,7 +50,7 @@ impl NamespaceResources {
         let value = if let Some(value) = result {
             value
         } else {
-            return Err(anyhow!("Unable to retrive the policies for the namespace"));
+            return Err(anyhow!("Unable to retrieve the policies for the namespace"));
         };
 
         let policies: Policies = serde_json::from_value(value)?;

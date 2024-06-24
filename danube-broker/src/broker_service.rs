@@ -233,17 +233,18 @@ impl BrokerService {
     }
 
     // deletes the topic
-    pub(crate) async fn delete_topic(&mut self, topic: String) -> Result<Topic> {
+    pub(crate) async fn delete_topic(&mut self, topic: &str) -> Result<Topic> {
         todo!()
     }
 
-    // search if it's served by local broker
-    // if not search in Local Metadata for the broker that owns the topic,
-    // returns the broker's socket address
+    // search for the broker socket address that serve this topic
     pub(crate) async fn lookup_topic(&self, topic_name: &str) -> Option<(bool, String)> {
+        // check if it is served by the this broker
         if self.topics.contains_key(topic_name) {
             return Some((true, "".to_string()));
         }
+
+        // if not search in Local Metadata for the broker that serve the topic
         let broker_id = match self
             .resources
             .cluster
@@ -253,6 +254,7 @@ impl BrokerService {
             Some(broker_id) => broker_id,
             None => return None,
         };
+
         if let Some(broker_addr) = self.resources.cluster.get_broker_addr(&broker_id) {
             return Some((false, broker_addr));
         }
@@ -277,10 +279,10 @@ impl BrokerService {
         producer_name: String,
     ) -> bool {
         // the topic is already checked
-        let topic = self
-            .topics
-            .get(&topic_name)
-            .expect("The topic should be validated before calling this function");
+        let topic = match self.topics.get(&topic_name) {
+            None => return false,
+            Some(topic) => topic,
+        };
         for producer in topic.producers.values() {
             if producer.producer_name == producer_name {
                 return true;

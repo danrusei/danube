@@ -16,7 +16,7 @@ use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{self, Duration};
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::resources::{BASE_BROKER_PATH, BASE_REGISTER_PATH};
 use crate::{
@@ -281,20 +281,38 @@ impl DanubeService {
 
                 match prefix.as_str() {
                     path if path == BASE_BROKER_PATH => {
-                        if parts.len() < 6 {
+                        // the key format should be (BASE_BROKER_PATH, broker_id, topic_name)
+                        // like: /cluster/brokers/1685432450824113596/default/my_topic
+                        if parts.len() != 6 {
                             warn!("Invalid key format: {}", event.key);
                             return;
                         }
 
-                        let topic_name = format!("/{}/{}", parts[5], parts[6]);
+                        let topic_name = format!("/{}/{}", parts[4], parts[5]);
                         match event.event_type {
                             etcd_client::EventType::Put => {
                                 let mut broker_service = broker_service.lock().await;
-                                broker_service.create_topic(&topic_name);
+                                match broker_service.create_topic(&topic_name).await {
+                                    Ok(()) => info!(
+                                        "The topic {} , was successfully created on broker {}",
+                                        topic_name, broker_id
+                                    ),
+                                    Err(err) => {
+                                        error!("Unable to create the topic due to error: {}", err)
+                                    }
+                                }
                             }
                             etcd_client::EventType::Delete => {
                                 let mut broker_service = broker_service.lock().await;
-                                broker_service.delete_topic(topic_name);
+                                match broker_service.delete_topic(&topic_name).await {
+                                    Ok(_) => info!(
+                                        "The topic {} , was successfully deleted from the broker {}",
+                                        topic_name, broker_id
+                                    ),
+                                    Err(err) => {
+                                        error!("Unable to delete the topic due to error: {}", err)
+                                    }
+                                }
                             }
                         }
                     }

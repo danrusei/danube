@@ -91,9 +91,9 @@ impl LookupService {
                             todo!()
                         }
                     },
-                    Err(_) => Err(DanubeError::Unrecoverable(format!(
-                        "Lookup failed for topic: {}",
-                        topic
+                    Err(err) => Err(DanubeError::Unrecoverable(format!(
+                        "Lookup failed for topic: {}, with error: {}",
+                        topic, err
                     ))),
                 }
             } else {
