@@ -36,11 +36,9 @@ impl NamespaceResources {
         namespace_name: &str,
         policies: Policies,
     ) -> Result<()> {
-        let policies_map = policies.get_fields_as_map();
-        for (key, value) in policies_map {
-            let path = join_path(&[BASE_NAMESPACES_PATH, namespace_name, &key]);
-            self.create(&path, value).await?;
-        }
+        let path = join_path(&[BASE_NAMESPACES_PATH, namespace_name, "policy"]);
+        let value = serde_json::to_value(policies)?;
+        self.create(&path, value).await?;
         Ok(())
     }
 
@@ -86,8 +84,7 @@ impl NamespaceResources {
         let ns_name = parts[1];
         let path = join_path(&[BASE_NAMESPACES_PATH, ns_name, "topics", topic_name]);
 
-        self.create(&path, serde_json::Value::String("".to_string()))
-            .await?;
+        self.create(&path, serde_json::Value::Null).await?;
 
         Ok(())
     }

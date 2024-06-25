@@ -17,3 +17,30 @@ Allows single or multiple Producers to publish on the Topic and multiple Subscri
 You can combine the [Subscription Type mechanisms](docs/04-Queuing_PubSub_messaging.md) in order to obtain message queueing or fan-out pub-sub messaging systems.
 
 Check-out [the examples](danube-client/examples/) on how to create and use Producers and Consumers.  The client is written in Rust, a GO client will be available once the Danube system reach the alpha stage.
+
+## Development environment
+
+Create the etcd instance:
+
+```bash
+make etcd
+```
+
+Use `etcdctl` to inspect metadata in ETCD instance. Export environment variables:
+
+```bash
+export ETCDCTL_API=3
+export ETCDCTL_ENDPOINTS=http://localhost:2379
+```
+
+Run one single Broker instance:
+
+```bash
+RUST_LOG=danube_broker=trace target/debug/danube-broker --cluster-name MY_cluster --meta-store-addr 127.0.0.1:2379
+```
+
+Run multiple Broker instances:
+
+```bash
+make brokers RUST_LOG=danube_broker=trace
+```

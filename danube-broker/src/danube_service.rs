@@ -116,10 +116,9 @@ impl DanubeService {
 
         // Cluster metadata setup
         //==========================================================================
-        self.resources.cluster.create_cluster(
-            &self.service_config.cluster_name,
-            self.service_config.broker_addr.to_string(),
-        );
+        self.resources
+            .cluster
+            .create_cluster(&self.service_config.cluster_name);
 
         // register new broker to cluster
         self.resources.cluster.register(

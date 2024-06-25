@@ -107,7 +107,7 @@ impl LocalCache {
                 let key = String::from_utf8(kv.key().to_vec()).unwrap();
                 let value = kv.value();
                 let version = kv.version();
-                self.update_cache(&key, version, Some(value));
+                self.update_cache(&key, version, Some(value)).await;
             }
         }
         info!("Initial cache populated");

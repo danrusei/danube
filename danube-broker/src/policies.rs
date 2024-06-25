@@ -6,16 +6,12 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Policies {
     // Limits the maximum number of producers that can simultaneously publish messages to a specific topic.
-    #[serde(default = "default_zero")]
     max_producers_per_topic: Option<u32>,
     // Limits the maximum number of subscriptions that can be created on the topic.
-    #[serde(default = "default_zero")]
     max_subscriptions_per_topic: Option<u32>,
     // Limits the maximum number of consumers that can simultaneously consume messages from a specific topic.
-    #[serde(default = "default_zero")]
     max_consumers_per_topic: Option<u32>,
     // Limits the maximum number of consumers that can simultaneously use a single subscription on a topic.
-    #[serde(default = "default_zero")]
     max_consumers_per_subscription: Option<u32>,
 
     // Defines the Max publish rate (number of messages and/or bytes per second) for producers publishing to the topic.
@@ -27,10 +23,6 @@ pub struct Policies {
 
     // Limits the maximum size of a single message that can be published to the topic.
     max_message_size: Option<u32>,
-}
-
-fn default_zero() -> Option<u32> {
-    Some(0)
 }
 
 impl Policies {

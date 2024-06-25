@@ -26,9 +26,9 @@ impl ClusterResources {
         Ok(())
     }
 
-    pub(crate) async fn create_cluster(&mut self, path: &str, data: String) -> Result<()> {
+    pub(crate) async fn create_cluster(&mut self, path: &str) -> Result<()> {
         let path = join_path(&[BASE_CLUSTER_PATH, path]);
-        self.create(&path, serde_json::Value::String(data)).await?;
+        self.create(&path, serde_json::Value::Null).await?;
         Ok(())
     }
 
@@ -41,8 +41,7 @@ impl ClusterResources {
 
     pub(crate) async fn new_unassigned_topic(&mut self, topic_name: &str) -> Result<()> {
         let path = join_path(&[BASE_UNASSIGNED_PATH, topic_name]);
-        self.create(&path, serde_json::Value::String("".to_string()))
-            .await?;
+        self.create(&path, serde_json::Value::Null).await?;
         Ok(())
     }
 

@@ -45,7 +45,7 @@ etcd:
 etcd-clean:
 	@echo "Cleaning up ETCD instance..."
 	docker rm -f $(ETCD_NAME)
-# rm -rf $(ETCD_DATA_DIR)
+	sudo rm -rf $(ETCD_DATA_DIR)
 	@echo "ETCD instance and data removed"
 
 # Set log level based on RUST_LOG value (if provided)
