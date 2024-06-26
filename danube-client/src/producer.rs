@@ -127,6 +127,7 @@ impl Producer {
                         .await
                     {
                         Ok(addr) => {
+                            dbg!(&addr);
                             broker_addr = addr.clone();
                             self.connect(&addr).await?;
                         }

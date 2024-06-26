@@ -51,7 +51,8 @@ impl DanubeServerImpl {
 
         let server = Server::builder()
             .add_service(ProducerServiceServer::new(self.clone()))
-            .add_service(ConsumerServiceServer::new(self))
+            .add_service(ConsumerServiceServer::new(self.clone()))
+            .add_service(DiscoveryServer::new(self))
             .serve(socket_addr);
 
         // Server has started
@@ -88,7 +89,10 @@ impl ProducerService for DanubeServerImpl {
 
         match service.get_topic(&req.topic_name, req.schema, true).await {
             Ok(_) => info!("topic_name: {} was found", &req.topic_name),
-            Err(status) => return Err(status),
+            Err(status) => {
+                info!("Error topic request: {}", status.message());
+                return Err(status);
+            }
         }
 
         //Todo! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
