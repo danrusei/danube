@@ -121,10 +121,13 @@ impl DanubeService {
             .create_cluster(&self.service_config.cluster_name);
 
         // register new broker to cluster
-        self.resources.cluster.register(
-            &self.broker_id.to_string(),
-            &self.service_config.broker_addr.to_string(),
-        );
+        self.resources
+            .cluster
+            .register(
+                &self.broker_id.to_string(),
+                &self.service_config.broker_addr.to_string(),
+            )
+            .await;
 
         //create the default Namespace
         create_namespace_if_absent(&mut self.resources, DEFAULT_NAMESPACE).await?;

@@ -97,9 +97,16 @@ impl ProducerService for DanubeServerImpl {
 
         //Todo! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
 
+        // this check is on the local broker as the producer should be already connected to the correct broker
         if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
-            let status =
-                Status::already_exists("This producer is already present on the connection");
+            let error_string = "This producer is already present on the connection,\
+             a new producer with the same name is not allowed";
+            let status = create_error_status(
+                Code::AlreadyExists,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
             return Err(status);
         }
 

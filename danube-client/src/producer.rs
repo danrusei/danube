@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
-use tonic::{transport::Uri, Response, Status};
+use tonic::{transport::Uri, Code, Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
 use tracing::{info, warn};
@@ -104,6 +104,12 @@ impl Producer {
                 Err(status) => {
                     let error_message = decode_error_details(&status);
 
+                    if status.code() == Code::AlreadyExists {
+                        // meaning that the producer is already present on the connection
+                        // creating a producer with the same name is not allowed
+                        return Err(DanubeError::FromStatus(status, error_message));
+                    }
+
                     attempts += 1;
                     if attempts >= max_retries {
                         return Err(DanubeError::FromStatus(status, error_message));
@@ -127,7 +133,6 @@ impl Producer {
                         .await
                     {
                         Ok(addr) => {
-                            dbg!(&addr);
                             broker_addr = addr.clone();
                             self.connect(&addr).await?;
                         }

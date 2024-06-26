@@ -45,9 +45,9 @@ impl ClusterResources {
         Ok(())
     }
 
-    // search all the paths for the topic name adn return broker_id
-    // like search for  /{namespace}/{topic}, in all childrens that start with /cluster/brokers
-    // an example /cluster/brokers/{broker_id}/{namespace}/{topic})
+    // search all the paths for the topic name and return broker_id
+    // search for /{namespace}/{topic} as part of the  /cluster/brokers/*
+    // example /cluster/brokers/{broker_id}/{namespace}/{topic})
     pub(crate) async fn get_broker_for_topic(&self, topic_name: &str) -> Option<String> {
         let keys = self
             .local_cache
@@ -71,6 +71,7 @@ impl ClusterResources {
         if let Some(value) = value {
             match value {
                 Value::String(broker_addr) => return Some(broker_addr),
+
                 _ => return None,
             }
         }
