@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
         .build();
 
     let prod_id = producer.create().await?;
-    println!("The Producer was created with ID: {:?}", prod_id);
+    info!("The Producer was created with ID: {:?}", prod_id);
 
     let mut i = 0;
 

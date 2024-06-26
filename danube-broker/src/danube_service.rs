@@ -15,7 +15,7 @@ use etcd_client::PutOptions;
 use etcd_client::{Client, WatchOptions};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{self, Duration};
+use tokio::time::{self, sleep, Duration};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::resources::{BASE_BROKER_PATH, BASE_REGISTER_PATH};
@@ -290,6 +290,8 @@ impl DanubeService {
                         let topic_name = format!("/{}/{}", parts[4], parts[5]);
                         match event.event_type {
                             etcd_client::EventType::Put => {
+                                // wait a sec so the LocalCache receive the updates from the persistent metadata
+                                sleep(Duration::from_secs(2)).await;
                                 let mut broker_service = broker_service.lock().await;
                                 match broker_service.create_topic(&topic_name).await {
                                     Ok(()) => info!(

@@ -13,9 +13,11 @@ use bytes::Bytes;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::time::{sleep, Duration};
 use tonic::{transport::Uri, Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
+use tracing::{info, warn};
 
 /// Represents a Producer
 #[derive(Debug)]
@@ -100,23 +102,53 @@ impl Producer {
                     return Ok(response.producer_id);
                 }
                 Err(status) => {
+                    let error_message = decode_error_details(&status);
+
                     attempts += 1;
                     if attempts >= max_retries {
-                        let decoded_message = decode_error_details(&status);
-                        return Err(DanubeError::FromStatus(status, decoded_message));
+                        return Err(DanubeError::FromStatus(status, error_message));
                     }
+
+                    // if not a SERVICE_NOT_READY error received from broker returns
+                    // else continue to loop as the topic may be in process to be assigned to a broker
+                    if let Some(error_m) = &error_message {
+                        if error_m.error_type != 3 {
+                            return Err(DanubeError::FromStatus(status, error_message));
+                        }
+                    }
+
+                    // as we are in SERVICE_NOT_READY case, let give some space to the broker to assign the topic
+                    sleep(Duration::from_secs(2)).await;
 
                     match self
                         .client
                         .lookup_service
-                        .handle_lookup_and_retries(&broker_addr, &status, &self.topic)
+                        .handle_lookup(&broker_addr, &self.topic)
                         .await
                     {
                         Ok(addr) => {
                             broker_addr = addr.clone();
                             self.connect(&addr).await?;
                         }
-                        Err(err) => return Err(err),
+
+                        Err(err) => {
+                            if let Some(status) = err.extract_status() {
+                                if let Some(error_message) = decode_error_details(status) {
+                                    if error_message.error_type != 3 {
+                                        return Err(DanubeError::FromStatus(
+                                            status.to_owned(),
+                                            Some(error_message),
+                                        ));
+                                    }
+                                }
+                            } else {
+                                warn!("Lookup request failed with error:  {}", err);
+                                return Err(DanubeError::Unrecoverable(format!(
+                                    "Lookup failed with error: {}",
+                                    err
+                                )));
+                            }
+                        }
                     }
                 }
             };

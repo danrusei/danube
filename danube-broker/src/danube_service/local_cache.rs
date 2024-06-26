@@ -137,7 +137,7 @@ impl LocalCache {
         while let Some(event) = rx_event.recv().await {
             trace!(
                 "{}",
-                format!("A new Watch event has been received {:?}", event)
+                format!("A new Watch event has been received {:?}", event.key)
             );
             match event.event_type {
                 etcd_client::EventType::Put => {

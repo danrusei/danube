@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tonic::transport::Uri;
 use tonic::{Response, Status};
+use tracing::warn;
 use url::Url;
 
 #[derive(Debug, Default)]
@@ -33,7 +34,11 @@ impl LookupService {
             request_id: Arc::new(AtomicU64::new(0)),
         }
     }
-    pub async fn lookup_topic(&self, addr: &Uri, topic: impl Into<String>) -> Result<LookupResult> {
+    pub(crate) async fn lookup_topic(
+        &self,
+        addr: &Uri,
+        topic: impl Into<String>,
+    ) -> Result<LookupResult> {
         let grpc_cnx = self.cnx_manager.get_connection(addr, addr).await?;
 
         let mut client = DiscoveryClient::new(grpc_cnx.grpc_cnx.clone());
@@ -60,8 +65,7 @@ impl LookupService {
             }
             // maybe some checks on the status, if anything can be handled by server
             Err(status) => {
-                let decoded_message = decode_error_details(&status);
-                return Err(DanubeError::FromStatus(status, decoded_message));
+                return Err(DanubeError::FromStatus(status, None));
             }
         };
 
@@ -70,38 +74,23 @@ impl LookupService {
 
     // for SERVICE_NOT_READY error received from broker retry the topic_lookup request
     // as the topic may be in process to be assigned to a broker in cluster
-    pub(crate) async fn handle_lookup_and_retries(
-        &self,
-        addr: &Uri,
-        status: &Status,
-        topic: &str,
-    ) -> Result<Uri> {
-        if let Some(error_details) = decode_error_details(&status) {
-            if error_details.error_type == 3 {
-                //ServiceNotReady
-                match self.lookup_topic(&addr, topic).await {
-                    Ok(lookup_result) => match lookup_type_from_i32(lookup_result.response_type) {
-                        Some(LookupType::Redirect) => Ok(lookup_result.addr),
-                        Some(LookupType::Connect) => Ok(addr.to_owned()),
-                        Some(LookupType::Failed) => Err(DanubeError::Unrecoverable(format!(
-                            "Lookup failed for topic: {}",
-                            topic
-                        ))),
-                        None => {
-                            todo!()
-                        }
-                    },
-                    Err(err) => Err(DanubeError::Unrecoverable(format!(
-                        "Lookup failed for topic: {}, with error: {}",
-                        topic, err
-                    ))),
+    pub(crate) async fn handle_lookup(&self, addr: &Uri, topic: &str) -> Result<Uri> {
+        match self.lookup_topic(&addr, topic).await {
+            Ok(lookup_result) => match lookup_type_from_i32(lookup_result.response_type) {
+                Some(LookupType::Redirect) => Ok(lookup_result.addr),
+                Some(LookupType::Connect) => Ok(addr.to_owned()),
+                Some(LookupType::Failed) => {
+                    todo!()
                 }
-            } else {
-                //  let decoded_message = decode_error_details(&status);
-                Err(DanubeError::FromStatus(status.clone(), Some(error_details)))
-            }
-        } else {
-            Err(DanubeError::FromStatus(status.clone(), None))
+
+                None => {
+                    warn!("we shouldn't get to this lookup option");
+                    Err(DanubeError::Unrecoverable(
+                        "we shouldn't get to this lookup option".to_string(),
+                    ))
+                }
+            },
+            Err(err) => Err(err),
         }
     }
 }

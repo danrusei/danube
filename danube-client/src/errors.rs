@@ -25,6 +25,15 @@ pub enum DanubeError {
     Unrecoverable(String),
 }
 
+impl DanubeError {
+    pub fn extract_status(&self) -> Option<&tonic::Status> {
+        match self {
+            DanubeError::FromStatus(status, _) => Some(status),
+            _ => None,
+        }
+    }
+}
+
 pub(crate) fn decode_error_details(status: &Status) -> Option<ErrorMessage> {
     if let Some(metadata_value) = status.metadata().get_bin("error-message-bin") {
         let base64_buffer = metadata_value.as_encoded_bytes();
