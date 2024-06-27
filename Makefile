@@ -58,6 +58,7 @@ brokers:
 		echo "Starting broker on port $$port, logging to $$log_file"; \
 		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 cargo build --release --package danube-broker --bin danube-broker && \
 		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 ./target/release/danube-broker --broker-addr "[::1]:$$port" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379" > temp/$$log_file 2>&1 & \
+		sleep 2; \
 	done
 	@echo "Danube brokers started on ports: $(BROKER_PORTS)"
 

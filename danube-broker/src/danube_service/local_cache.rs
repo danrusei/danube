@@ -135,13 +135,13 @@ impl LocalCache {
     // updates the LocalCache with the received WAtch events
     pub(crate) async fn process_event(&self, mut rx_event: mpsc::Receiver<ETCDWatchEvent>) {
         while let Some(event) = rx_event.recv().await {
-            trace!(
-                "{}",
-                format!(
-                    "A new Watch event {:?} has been received for {:?}",
-                    event.event_type, event.key
-                )
-            );
+            // trace!(
+            //     "{}",
+            //     format!(
+            //         "A new Watch event {:?} has been received for {:?}",
+            //         event.event_type, event.key
+            //     )
+            // );
             match event.event_type {
                 etcd_client::EventType::Put => {
                     self.update_cache(&event.key, event.version, event.value.as_deref())

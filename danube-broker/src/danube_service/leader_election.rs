@@ -6,8 +6,8 @@ use etcd_client::{
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{self, error::Elapsed, Duration, Interval};
-use tracing::{debug, info, trace, warn};
+use tokio::time::{self, error::Elapsed, sleep, Duration, Interval};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LeaderElectionState {
@@ -80,8 +80,11 @@ impl LeaderElection {
             return Err(anyhow!("unable to get the etcd_client"));
         };
 
+        // should be user configurable
+        let ttl = 54;
+
         let payload = self.broker_id.clone();
-        let lease_id = client.lease_grant(55, None).await?.id();
+        let lease_id = client.lease_grant(ttl, None).await?.id();
         let put_opts = EtcdPutOptions::new().with_lease(lease_id);
 
         let payload = serde_json::Value::Number(serde_json::Number::from(payload));
@@ -92,14 +95,14 @@ impl LeaderElection {
             .await
         {
             Ok(_) => {
-                self.keep_alive_lease(lease_id).await?;
+                self.keep_alive_lease(lease_id, ttl).await?;
                 Ok(true)
             }
             Err(e) => Err(e.into()),
         }
     }
 
-    async fn keep_alive_lease(&mut self, lease_id: i64) -> Result<()> {
+    async fn keep_alive_lease(&mut self, lease_id: i64, ttl: i64) -> Result<()> {
         let mut client = if let Some(client) = self.store.get_client() {
             client
         } else {
@@ -107,15 +110,51 @@ impl LeaderElection {
         };
         let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
 
-        // TODO! - food for thoughts, do we want to review the cluster Leader after every 55 seconds ??
-        // or keep the lease_id to renew until the broker is not responsive ?
         tokio::spawn(async move {
-            while let Some(_) = stream.message().await.unwrap_or(None) {
-                debug!("Leader Election lease {} renewed", lease_id);
+            loop {
+                // Attempt to send a keep-alive request
+                match keeper.keep_alive().await {
+                    Ok(_) => debug!(
+                        "Leader Election, keep-alive request sent for lease {}",
+                        lease_id
+                    ),
+                    Err(e) => {
+                        error!(
+                            "Leader Election, failed to send keep-alive request for lease {}: {}",
+                            lease_id, e
+                        );
+                        break;
+                    }
+                }
+
+                // Check for responses from etcd to confirm the lease is still alive
+                match stream.message().await {
+                    Ok(Some(response)) => {
+                        debug!(
+                            "Leader Election, received keep-alive response for lease {}",
+                            lease_id
+                        );
+                    }
+                    Ok(None) => {
+                        error!(
+                            "Leader Election, keep-alive response stream ended unexpectedly for lease {}",
+                            lease_id
+                        );
+                        break;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Leader Election, failed to receive keep-alive response for lease {}: {}",
+                            lease_id, e
+                        );
+                        break;
+                    }
+                }
+
+                // Sleep for a period shorter than the lease TTL to ensure continuous renewal
+                sleep(Duration::from_secs(ttl as u64 / 2)).await;
             }
         });
-
-        keeper.keep_alive().await?;
         Ok(())
     }
 
