@@ -10,9 +10,10 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio::time::{self, Duration};
-use tracing::{info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use crate::metadata_store::MetaOptions;
+use crate::resources::BASE_REGISTER_PATH;
 use crate::{
     metadata_store::{
         etcd_watch_prefixes, ETCDWatchEvent, EtcdMetadataStore, MetadataStorage, MetadataStore,
@@ -79,6 +80,7 @@ impl LoadManager {
             let mut prefixes = Vec::new();
             prefixes.push(BASE_BROKER_LOAD_PATH.to_string());
             prefixes.push(BASE_UNASSIGNED_PATH.to_string());
+            prefixes.push(BASE_REGISTER_PATH.to_string());
             etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
@@ -132,40 +134,58 @@ impl LoadManager {
         while let Some(event) = rx_event.recv().await {
             let state = leader_election.get_state().await;
 
-            // only the Leader Broker should assign the topic
-            if event.key.starts_with(BASE_UNASSIGNED_PATH) {
-                if state == LeaderElectionState::Following {
-                    continue;
+            match event.key.as_str() {
+                key if key.starts_with(BASE_UNASSIGNED_PATH) => {
+                    // only the Leader Broker should assign the topic
+                    if state == LeaderElectionState::Following {
+                        continue;
+                    }
+                    info!(
+                        "Attempting to assign the new topic {} to a broker",
+                        &event.key
+                    );
+                    self.assign_topic_to_broker(event).await;
+                }
+                key if key.starts_with(BASE_REGISTER_PATH) => {
+                    // only the Leader Broker should realocate the cluster resources
+                    if state == LeaderElectionState::Following {
+                        continue;
+                    }
+
+                    if event.event_type == EventType::Delete {
+                        info!("Broker {} is no longer alive", broker_id);
+                        // BIG TODO! - reallocate the resources to another broker
+                    }
                 }
 
-                info!(
-                    "Attempting to assign the new topic {} to a broker",
-                    &event.key
-                );
-                self.assign_topic_to_broker(event).await;
-                continue;
-            }
-            // the event is processed and added localy,
-            // but only the Leader Broker does the calculations on the loads
-            trace!("A new load report has been received from: {}", &event.key);
-            self.process_event(event).await;
+                key if key.starts_with(BASE_BROKER_LOAD_PATH) => {
+                    // the event is processed and added localy,
+                    // but only the Leader Broker does the calculations on the loads
+                    trace!("A new load report has been received from: {}", &event.key);
+                    self.process_event(event).await;
 
-            if state == LeaderElectionState::Following {
-                continue;
-            }
-            self.calculate_rankings_simple().await;
-            let next_broker = self
-                .rankings
-                .lock()
-                .await
-                .get(0)
-                .get_or_insert(&(broker_id, 0))
-                .0;
-            let _ = self
-                .next_broker
-                .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
+                    if state == LeaderElectionState::Following {
+                        continue;
+                    }
+                    self.calculate_rankings_simple().await;
+                    let next_broker = self
+                        .rankings
+                        .lock()
+                        .await
+                        .get(0)
+                        .get_or_insert(&(broker_id, 0))
+                        .0;
+                    let _ = self
+                        .next_broker
+                        .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
 
-            // need to post it's decision on the Metadata Store
+                    // need to post it's decision on the Metadata Store
+                }
+                _ => {
+                    // Handle unexpected events if needed
+                    error!("Received an unexpected event: {}", &event.key);
+                }
+            }
         }
     }
 

@@ -1,8 +1,10 @@
+mod broker_register;
 mod leader_election;
 mod load_manager;
 mod local_cache;
 mod syncronizer;
 
+pub(crate) use broker_register::register_broker;
 pub(crate) use leader_election::{LeaderElection, LeaderElectionState};
 pub(crate) use load_manager::load_report::{generate_load_report, LoadReport};
 pub(crate) use load_manager::LoadManager;
@@ -120,14 +122,15 @@ impl DanubeService {
             .cluster
             .create_cluster(&self.service_config.cluster_name);
 
-        // register new broker to cluster
-        self.resources
-            .cluster
-            .register(
-                &self.broker_id.to_string(),
-                &self.service_config.broker_addr.to_string(),
-            )
-            .await;
+        // register the local broker to cluster
+        let ttl = 40; // Time to live for the lease in seconds
+        register_broker(
+            self.meta_store.clone(),
+            &self.broker_id.to_string(),
+            &self.service_config.broker_addr.to_string(),
+            ttl,
+        )
+        .await?;
 
         //create the default Namespace
         create_namespace_if_absent(&mut self.resources, DEFAULT_NAMESPACE).await?;

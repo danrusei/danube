@@ -107,9 +107,11 @@ impl LeaderElection {
         };
         let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
 
+        // TODO! - food for thoughts, do we want to review the cluster Leader after every 55 seconds ??
+        // or keep the lease_id to renew until the broker is not responsive ?
         tokio::spawn(async move {
             while let Some(_) = stream.message().await.unwrap_or(None) {
-                debug!("Lease {} renewed", lease_id);
+                debug!("Leader Election lease {} renewed", lease_id);
             }
         });
 
