@@ -153,7 +153,23 @@ impl LoadManager {
                     }
 
                     if event.event_type == EventType::Delete {
-                        info!("Broker {} is no longer alive", broker_id);
+                        let remove_broker = match key.split('/').last().unwrap().parse::<u64>() {
+                            Ok(id) => id,
+                            Err(err) => {
+                                error!("Unable to parse the broker id: {}", err);
+                                continue;
+                            }
+                        };
+                        info!("Broker {} is no longer alive", remove_broker);
+                        {
+                            let mut brokers_usage_lock = self.brokers_usage.lock().await;
+                            brokers_usage_lock.remove(&remove_broker);
+                        }
+
+                        {
+                            let mut rankings_lock = self.rankings.lock().await;
+                            rankings_lock.retain(|&(entry_id, _)| entry_id != remove_broker);
+                        }
                         // BIG TODO! - reallocate the resources to another broker
                     }
                 }
