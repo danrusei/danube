@@ -232,7 +232,10 @@ impl ConsumerService for DanubeServerImpl {
 
         match service.get_topic(&req.topic_name, None, true).await {
             Ok(_) => info!("topic_name: {} was found", &req.topic_name),
-            Err(status) => return Err(status),
+            Err(status) => {
+                info!("Error topic request: {}", status.message());
+                return Err(status);
+            }
         }
 
         match service

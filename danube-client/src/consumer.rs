@@ -12,10 +12,12 @@ use futures_core::Stream;
 use futures_util::stream::StreamExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Response, Status};
+use tonic::{transport::Uri, Code, Response, Status};
 use tonic_types::pb::{bad_request, BadRequest};
 use tonic_types::StatusExt;
+use tracing::{info, warn};
 
 /// Represents a Consumer
 #[derive(Debug)]
@@ -74,8 +76,36 @@ impl Consumer {
         }
     }
     pub async fn subscribe(&mut self) -> Result<u64> {
-        // Initialize the gRPC client connection
-        self.connect().await?;
+        let mut broker_addr = self.client.uri.clone();
+
+        match self
+            .client
+            .lookup_service
+            .handle_lookup(&broker_addr, &self.topic_name)
+            .await
+        {
+            Ok(addr) => {
+                broker_addr = addr.clone();
+                self.connect(&addr).await?;
+            }
+
+            Err(err) => {
+                if let Some(status) = err.extract_status() {
+                    if let Some(error_message) = decode_error_details(status) {
+                        return Err(DanubeError::FromStatus(
+                            status.to_owned(),
+                            Some(error_message),
+                        ));
+                    }
+                } else {
+                    warn!("Lookup request failed with error:  {}", err);
+                    return Err(DanubeError::Unrecoverable(format!(
+                        "Lookup failed with error: {}",
+                        err
+                    )));
+                }
+            }
+        }
 
         let req = ConsumerRequest {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
@@ -97,12 +127,20 @@ impl Consumer {
                 self.consumer_id = Some(r.consumer_id);
                 return Ok(r.consumer_id);
             }
-            // maybe some checks on the status, if anything can be handled by server
             Err(status) => {
-                let decoded_message = decode_error_details(&status);
-                return Err(DanubeError::FromStatus(status, decoded_message));
+                let error_message = decode_error_details(&status);
+
+                if status.code() == Code::AlreadyExists {
+                    // meaning that the consumer is already present on the connection
+                    // creating a consumer with the same name is not allowed
+                    warn!(
+                        "The consumer already exist, not allowed to create the same consumer twice"
+                    );
+                }
+
+                return Err(DanubeError::FromStatus(status, error_message));
             }
-        };
+        }
     }
 
     // receive messages
@@ -126,12 +164,8 @@ impl Consumer {
         Ok(response.into_inner())
     }
 
-    async fn connect(&mut self) -> Result<()> {
-        let grpc_cnx = self
-            .client
-            .cnx_manager
-            .get_connection(&self.client.uri, &self.client.uri)
-            .await?;
+    async fn connect(&mut self, addr: &Uri) -> Result<()> {
+        let grpc_cnx = self.client.cnx_manager.get_connection(addr, addr).await?;
         let client = ConsumerServiceClient::new(grpc_cnx.grpc_cnx.clone());
         self.stream_client = Some(client);
         Ok(())

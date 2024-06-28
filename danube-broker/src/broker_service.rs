@@ -358,10 +358,10 @@ impl BrokerService {
         subscription_name: &str,
         topic_name: &str,
     ) -> Option<u64> {
-        let topic = self
-            .topics
-            .get(topic_name)
-            .expect("The topic should be validated before calling this function");
+        let topic = match self.topics.get(topic_name) {
+            None => return None,
+            Some(topic) => topic,
+        };
 
         let subscription = match topic.get_subscription(subscription_name) {
             Some(subscr) => subscr,
