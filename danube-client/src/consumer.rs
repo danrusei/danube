@@ -87,6 +87,8 @@ impl Consumer {
             Ok(addr) => {
                 broker_addr = addr.clone();
                 self.connect(&addr).await?;
+                // update the client URI with the latest connection
+                self.client.uri = addr;
             }
 
             Err(err) => {

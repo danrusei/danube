@@ -30,7 +30,8 @@ pub(crate) async fn register_broker(
     let put_opts = EtcdPutOptions::new().with_lease(lease_id);
 
     let path = join_path(&[BASE_REGISTER_PATH, broker_id]);
-    let payload = serde_json::Value::String(broker_addr.to_owned());
+    let broker_uri = format!("http://{}", broker_addr);
+    let payload = serde_json::Value::String(broker_uri);
 
     // Register the broker with a key associated with the lease
     match store

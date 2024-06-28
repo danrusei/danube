@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use tokio::time::error::Elapsed;
-use tracing::trace;
+use tracing::{trace, warn};
 
 use crate::proto::consumer_request::SubscriptionType;
 use crate::subscription::{self, Subscription};
@@ -46,9 +46,10 @@ impl Consumer {
             tx.send(messages).await?;
             trace!("Consumer instace is sending the message over channel");
         } else {
-            return Err(anyhow!(
-                "unable to send the message, as the tx is not found"
-            ));
+            warn!(
+                "unable to send the message to consumer: {} with id: {}, as the tx is not found",
+                self.consumer_name, self.consumer_id
+            );
         };
 
         Ok(())

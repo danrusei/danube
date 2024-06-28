@@ -50,7 +50,7 @@ impl SchemaService {
                 let schema_resp = resp.into_inner();
                 let proto_schema: ProtoSchema = schema_resp
                     .schema
-                    .expect("can't get a Ok response without a valid schema");
+                    .expect("can't get a response without a valid schema");
 
                 schema = proto_schema.into();
             }

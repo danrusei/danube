@@ -263,12 +263,9 @@ impl BrokerService {
     }
 
     pub(crate) fn get_schema(&self, topic_name: &str) -> Option<ProtoSchema> {
-        let topic = self.topics.get(topic_name);
-        if let Some(topic) = topic {
-            let schema = topic.get_schema();
-            if let Some(schema) = schema {
-                return Some(ProtoSchema::from(schema));
-            }
+        let result = self.resources.topic.get_schema(topic_name);
+        if let Some(schema) = result {
+            return Some(ProtoSchema::from(schema));
         }
         None
     }
