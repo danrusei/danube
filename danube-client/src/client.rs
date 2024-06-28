@@ -7,6 +7,8 @@ use crate::{
     lookup_service,
     lookup_service::{LookupResult, LookupService},
     producer::ProducerBuilder,
+    schema::Schema,
+    schema_service::SchemaService,
 };
 
 use std::sync::Arc;
@@ -16,6 +18,7 @@ pub struct DanubeClient {
     pub(crate) uri: Uri,
     pub(crate) cnx_manager: Arc<ConnectionManager>,
     pub(crate) lookup_service: LookupService,
+    pub(crate) schema_service: SchemaService,
 }
 
 impl DanubeClient {
@@ -25,10 +28,13 @@ impl DanubeClient {
 
         let lookup_service = LookupService::new(cnx_manager.clone());
 
+        let schema_service = SchemaService::new(cnx_manager.clone());
+
         DanubeClient {
             uri: uri,
             cnx_manager,
             lookup_service,
+            schema_service,
         }
     }
     //creates a Client Builder
@@ -49,6 +55,11 @@ impl DanubeClient {
     /// gets the address of a broker handling the topic
     pub async fn lookup_topic(&self, addr: &Uri, topic: impl Into<String>) -> Result<LookupResult> {
         self.lookup_service.lookup_topic(addr, topic).await
+    }
+
+    /// gets the schema for the requested topic
+    pub async fn get_schema(&self, topic: impl Into<String>) -> Result<Schema> {
+        self.schema_service.get_schema(&self.uri, topic).await
     }
 }
 

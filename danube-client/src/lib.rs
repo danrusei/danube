@@ -20,6 +20,8 @@ pub use consumer::{Consumer, ConsumerBuilder, ConsumerOptions, SubType};
 mod schema;
 pub use schema::{Schema, SchemaType};
 
+mod schema_service;
+
 mod message;
 
 mod lookup_service;

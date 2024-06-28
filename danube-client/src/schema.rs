@@ -4,7 +4,27 @@ use std::convert::TryFrom;
 
 use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema};
 
-// Define the enum with serde attributes for (de)serialization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Schema {
+    name: String,
+    schema_data: Option<Vec<u8>>,
+    type_schema: SchemaType,
+}
+
+impl Schema {
+    pub fn new(name: String, type_schema: SchemaType) -> Self {
+        let schema_data = match &type_schema {
+            SchemaType::Json(schema) => Some(schema.as_bytes().to_vec()),
+            _ => None,
+        };
+        Self {
+            name,
+            schema_data,
+            type_schema,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SchemaType {
     Bytes,
@@ -33,27 +53,6 @@ impl From<ProtoTypeSchema> for SchemaType {
             ProtoTypeSchema::String => SchemaType::String,
             ProtoTypeSchema::Int64 => SchemaType::Int64,
             ProtoTypeSchema::Json => SchemaType::Json(String::new()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Schema {
-    name: String,
-    schema_data: Option<Vec<u8>>,
-    type_schema: SchemaType,
-}
-
-impl Schema {
-    pub fn new(name: String, type_schema: SchemaType) -> Self {
-        let schema_data = match &type_schema {
-            SchemaType::Json(schema) => Some(schema.as_bytes().to_vec()),
-            _ => None,
-        };
-        Self {
-            name,
-            schema_data,
-            type_schema,
         }
     }
 }
