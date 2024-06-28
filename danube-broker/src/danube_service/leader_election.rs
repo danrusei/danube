@@ -62,9 +62,9 @@ impl LeaderElection {
         match self.try_to_become_leader().await {
             Ok(is_leader) => {
                 if is_leader {
-                    self.set_state(LeaderElectionState::Leading);
+                    self.set_state(LeaderElectionState::Leading).await;
                 } else {
-                    self.set_state(LeaderElectionState::Following);
+                    self.set_state(LeaderElectionState::Following).await;
                 }
             }
             Err(e) => {
@@ -169,10 +169,10 @@ impl LeaderElection {
                         .as_u64()
                         .expect("Broker Id should be a valid u64");
                     if leader_id == self.broker_id {
-                        self.set_state(LeaderElectionState::Leading);
+                        self.set_state(LeaderElectionState::Leading).await;
                         debug!("Broker {} is the leader", self.broker_id);
                     } else {
-                        self.set_state(LeaderElectionState::Following);
+                        self.set_state(LeaderElectionState::Following).await;
                         debug!("Broker {} is a follower", self.broker_id);
                     }
                 }
