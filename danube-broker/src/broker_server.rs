@@ -5,29 +5,27 @@ use crate::proto::{
     topic_lookup_response::LookupType,
 };
 use crate::proto::{
-    AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, ErrorMessage, ErrorType,
-    MessageRequest, MessageResponse, ProducerRequest, ProducerResponse, ReceiveRequest,
-    SchemaRequest, SchemaResponse, StreamMessage, TopicLookupRequest, TopicLookupResponse,
+    AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, ErrorType, MessageRequest,
+    MessageResponse, ProducerRequest, ProducerResponse, ReceiveRequest, SchemaRequest,
+    SchemaResponse, StreamMessage, TopicLookupRequest, TopicLookupResponse,
 };
 use crate::{
     broker_service::{validate_topic, BrokerService},
     error_message::create_error_status,
-    producer::{self, Producer},
     subscription::SubscriptionOptions,
-    topic::Topic,
 };
 
 //use prost::Message;
-use bytes::Bytes;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+
+use std::collections::hash_map::Entry;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
-use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
-use tonic_types::{ErrorDetails, FieldViolation, StatusExt};
+use tonic::{Code, Request, Response, Status};
+//use tonic_types::ErrorDetails;
 use tracing::{info, trace, Level};
 
 #[derive(Debug, Clone)]
@@ -83,7 +81,7 @@ impl ProducerService for DanubeServerImpl {
             req.producer_name, req.topic_name,
         );
 
-        let mut err_details = ErrorDetails::new();
+        //let err_details = ErrorDetails::new();
 
         let mut service = self.service.lock().await;
 
@@ -153,7 +151,7 @@ impl ProducerService for DanubeServerImpl {
             req.metadata
         );
 
-        let mut err_details = ErrorDetails::new();
+        //let err_details = ErrorDetails::new();
 
         let arc_service = self.service.clone();
         let mut service = arc_service.lock().await;
@@ -224,7 +222,7 @@ impl ConsumerService for DanubeServerImpl {
             req.consumer_name, req.topic_name, req.subscription_type
         );
 
-        let mut err_details = ErrorDetails::new();
+        // let err_details = ErrorDetails::new();
 
         // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
 
@@ -318,9 +316,9 @@ impl ConsumerService for DanubeServerImpl {
             consumer_id
         );
 
-        let mut err_details = ErrorDetails::new();
+        // let err_details = ErrorDetails::new();
 
-        let mut service = self.service.lock().await;
+        let service = self.service.lock().await;
 
         let consumer = if let Some(consumer) = service.get_consumer(consumer_id) {
             consumer
@@ -363,7 +361,7 @@ impl ConsumerService for DanubeServerImpl {
     // Consumer acknowledge the received message
     async fn ack(
         &self,
-        request: tonic::Request<AckRequest>,
+        _request: tonic::Request<AckRequest>,
     ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
         todo!()
     }
@@ -394,7 +392,7 @@ impl Discovery for DanubeServerImpl {
             return Err(status);
         }
 
-        let mut service = self.service.lock().await;
+        let service = self.service.lock().await;
 
         let result = match service.lookup_topic(&req.topic).await {
             Some((true, _)) => (self.broker_addr.to_string(), LookupType::Connect),
@@ -442,7 +440,7 @@ impl Discovery for DanubeServerImpl {
             return Err(status);
         }
 
-        let mut service = self.service.lock().await;
+        let service = self.service.lock().await;
 
         let proto_schema = service.get_schema(&req.topic);
 

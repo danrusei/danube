@@ -1,13 +1,10 @@
 use crate::metadata_store::{MetaOptions, MetadataStorage, MetadataStore};
 use anyhow::{anyhow, Result};
-use etcd_client::{
-    Client, Error, GetOptions as EtcdGetOptions, LeaseKeepAliveStream, PutOptions as EtcdPutOptions,
-};
-use serde_json::Value;
+use etcd_client::PutOptions as EtcdPutOptions;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{self, error::Elapsed, sleep, Duration, Interval};
-use tracing::{debug, error, info, trace, warn};
+use tokio::time::{sleep, Duration, Interval};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LeaderElectionState {
@@ -40,7 +37,7 @@ impl LeaderElection {
     pub async fn start(&mut self, mut leader_check_interval: Interval) {
         //      self.elect().await;
         loop {
-            self.check_leader().await;
+            let _ = self.check_leader().await;
             leader_check_interval.tick().await;
         }
     }
@@ -129,7 +126,7 @@ impl LeaderElection {
 
                 // Check for responses from etcd to confirm the lease is still alive
                 match stream.message().await {
-                    Ok(Some(response)) => {
+                    Ok(Some(_response)) => {
                         debug!(
                             "Leader Election, received keep-alive response for lease {}",
                             lease_id

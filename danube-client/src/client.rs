@@ -4,7 +4,6 @@ use crate::{
     connection_manager::{ConnectionManager, ConnectionOptions},
     consumer::ConsumerBuilder,
     errors::Result,
-    lookup_service,
     lookup_service::{LookupResult, LookupService},
     producer::ProducerBuilder,
     schema::Schema,

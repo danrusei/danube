@@ -31,6 +31,7 @@ impl Policies {
             ..Default::default()
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn get_fields_as_map(&self) -> Map<String, Value> {
         let serialized = serde_json::to_value(self).unwrap();
         let map: Map<String, Value> = serialized.as_object().unwrap().clone();
@@ -38,6 +39,7 @@ impl Policies {
     }
 
     // ensure that we can construct a complete Policies with the fields retrieve from the Store
+    #[allow(dead_code)]
     pub fn from_hashmap(map: HashMap<String, serde_json::Value>) -> Result<Self> {
         let mut policies = Policies::default();
         let mut found_fields = HashSet::new();

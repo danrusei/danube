@@ -1,26 +1,15 @@
-use anyhow::{anyhow, Context, Result};
-use dashmap::DashMap;
-use std::any;
+use anyhow::{anyhow, Result};
 use std::collections::{hash_map::Entry, HashMap};
-use std::net::SocketAddr;
-use std::str::from_boxed_utf8_unchecked;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{transport::Server, Code, Status};
+use tonic::{Code, Status};
 use tracing::{info, warn};
-use tracing_subscriber::fmt::format;
 
-use crate::proto::{ErrorType, ProducerAccessMode, Schema as ProtoSchema};
+use crate::proto::{ErrorType, Schema as ProtoSchema};
 
 use crate::{
-    consumer::Consumer,
-    error_message::create_error_status,
-    policies::Policies,
-    producer::Producer,
-    resources::Resources,
-    subscription::SubscriptionOptions,
-    topic::{self, Topic},
-    utils::get_random_id,
+    consumer::Consumer, error_message::create_error_status, policies::Policies, producer::Producer,
+    resources::Resources, subscription::SubscriptionOptions, topic::Topic, utils::get_random_id,
 };
 
 // BrokerService - owns the topics and manages their lifecycle.
@@ -163,7 +152,7 @@ impl BrokerService {
     // post the Topic resources to Metadata Store
     pub(crate) async fn post_new_topic(
         &mut self,
-        ns_name: &str,
+        _ns_name: &str,
         topic_name: &str,
         schema: ProtoSchema,
         policies: Option<Policies>,
@@ -209,13 +198,13 @@ impl BrokerService {
             warn!("Unable to create topic without a valid schema");
             return Err(anyhow!("Unable to create topic without a valid schema"));
         }
-        new_topic.add_schema(schema.unwrap());
+        let _ = new_topic.add_schema(schema.unwrap());
 
         // get policies from local_cache
         let policies = self.resources.topic.get_policies(topic_name);
 
         if let Some(with_policies) = policies {
-            new_topic.policies_update(with_policies);
+            let _ = new_topic.policies_update(with_policies);
         } else {
             // get namespace policies
             let parts: Vec<_> = topic_name.split('/').collect();
@@ -224,7 +213,7 @@ impl BrokerService {
             let policies = self.resources.namespace.get_policies(&ns_name)?;
             //TODO! for now the namespace polices == topic policies, if they will be different as number of values
             // then I shoud copy field by field
-            new_topic.policies_update(policies);
+            let _ = new_topic.policies_update(policies);
         }
 
         self.topics.insert(topic_name.to_string(), new_topic);
@@ -233,7 +222,7 @@ impl BrokerService {
     }
 
     // deletes the topic
-    pub(crate) async fn delete_topic(&mut self, topic: &str) -> Result<Topic> {
+    pub(crate) async fn delete_topic(&mut self, _topic: &str) -> Result<Topic> {
         todo!()
     }
 
@@ -327,7 +316,7 @@ impl BrokerService {
     // having the producer_id, return to the caller the topic attached to the producer
     pub(crate) fn get_topic_for_producer(&mut self, producer_id: u64) -> Result<&Topic> {
         let topic_name = match self.producers.entry(producer_id) {
-            Entry::Vacant(entry) => {
+            Entry::Vacant(_entry) => {
                 return Err(anyhow!(
                     "the producer with id {} does not exist",
                     producer_id

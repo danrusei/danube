@@ -6,11 +6,11 @@ pub(crate) use etcd_metadata_store::EtcdMetadataStore;
 pub(crate) use etcd_watch::{etcd_watch_prefixes, ETCDWatchEvent};
 pub(crate) use memory_metadata_store::MemoryMetadataStore;
 
-use etcd_client::{GetOptions, LeaseKeepAliveStream, PutOptions};
+use etcd_client::{GetOptions, PutOptions};
 use serde_json::Value;
-use std::error::Error;
 
 // MetadataStore is the storage layer for Danube Metadata
+#[allow(dead_code)]
 pub(crate) trait MetadataStore {
     // Read the value of one key, identified by the path
     async fn get(&mut self, path: &str, get_options: MetaOptions) -> Result<Option<Value>>;
@@ -31,12 +31,14 @@ pub(crate) trait MetadataStore {
 // TODO! this is not optimal if you need GetOptions::new().with_prefix()
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) enum MetadataStorage {
     MemoryStore(MemoryMetadataStore),
     EtcdStore(EtcdMetadataStore),
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum MetaOptions {
     None,
     EtcdGet(GetOptions),
@@ -79,12 +81,13 @@ impl MetadataStore for MetadataStorage {
     }
     fn get_client(&mut self) -> Option<etcd_client::Client> {
         match self {
-            MetadataStorage::MemoryStore(store) => None,
+            MetadataStorage::MemoryStore(_store) => None,
             MetadataStorage::EtcdStore(store) => store.get_client(),
         }
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct MetadataStoreConfig {
     meta_store: String,
     config_file: Option<String>,

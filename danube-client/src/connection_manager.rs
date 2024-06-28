@@ -1,5 +1,5 @@
 use crate::{
-    errors::{DanubeError, Result},
+    errors::Result,
     rpc_connection::{new_rpc_connection, RpcConnection},
 };
 
@@ -22,6 +22,7 @@ pub struct BrokerAddress {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum ConnectionStatus {
     Connected(Arc<RpcConnection>),
     Disconnected,

@@ -3,9 +3,9 @@ use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    policies::{self, Policies},
+    policies::Policies,
     resources::BASE_TOPICS_PATH,
-    schema::{self, Schema},
+    schema::Schema,
     utils::join_path,
     LocalCache,
 };
@@ -66,8 +66,10 @@ impl TopicResources {
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name]);
         //TODO! all the partitions I guess should be added
-        self.store
-            .put(&path, num_partitions.into(), MetaOptions::None);
+        let _ = self
+            .store
+            .put(&path, num_partitions.into(), MetaOptions::None)
+            .await;
 
         Ok(())
     }

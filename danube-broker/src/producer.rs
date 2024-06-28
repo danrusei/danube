@@ -1,10 +1,8 @@
 use anyhow::Result;
-use bytes::BytesMut;
-
-use crate::topic::Topic;
 
 // Represents the connected producer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct Producer {
     pub(crate) producer_id: u64,
     pub(crate) producer_name: String,
@@ -13,6 +11,7 @@ pub(crate) struct Producer {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) enum ProducerAccessMode {
     // multiple producers can concurrently produce messages to the same topic
     Shared,
@@ -49,6 +48,7 @@ impl Producer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_id(&self) -> u64 {
         self.producer_id
     }

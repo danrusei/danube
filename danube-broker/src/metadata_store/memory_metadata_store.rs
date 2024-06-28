@@ -17,6 +17,7 @@ pub(crate) struct MemoryMetadataStore {
 }
 
 impl MemoryMetadataStore {
+    #[allow(dead_code)]
     pub(crate) async fn new(_store_config: MetadataStoreConfig) -> Result<Self> {
         Ok(MemoryMetadataStore {
             inner: DashMap::new(),

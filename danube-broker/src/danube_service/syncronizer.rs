@@ -1,5 +1,3 @@
-use crate::{consumer::Consumer, producer::Producer};
-
 use anyhow::{anyhow, Result};
 use danube_client::{
     Consumer as ClientConsumer, DanubeClient, Producer as ClientProducer, SchemaType, SubType,
@@ -16,6 +14,7 @@ pub(crate) static SUBSCRIPTION_NAME: &str = "metadata-sync";
 // even if there was a communication glitch or the broker was unavailable for a short period, potentially missing the Store Watch events.
 // The synchronizer allows for dynamic updates to configuration settings without requiring a broker service restart.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct Syncronizer {
     client: Option<DanubeClient>,
     consumer: Option<ClientConsumer>,
@@ -34,6 +33,7 @@ impl Syncronizer {
         self.client = Some(client);
         Ok(())
     }
+    #[allow(dead_code)]
     async fn create_producer(&mut self) -> Result<()> {
         let client = if let Some(client) = &self.client {
             client
@@ -56,6 +56,7 @@ impl Syncronizer {
         );
         Ok(())
     }
+    #[allow(dead_code)]
     async fn create_consumer(&mut self) -> Result<()> {
         let client = if let Some(client) = &self.client {
             client
@@ -82,12 +83,13 @@ impl Syncronizer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn notify(&self, event: MetadataEvent) -> Result<()> {
         // Serialize the event into a Vec<u8>
         let serialized_data = serde_json::to_vec(&event)?;
 
         if let Some(producer) = &self.producer {
-            let message_id = producer.send(serialized_data).await?;
+            let _message_id = producer.send(serialized_data).await?;
             info!(
                 "Successfully sent the notification of the metadata change event {:?}",
                 event

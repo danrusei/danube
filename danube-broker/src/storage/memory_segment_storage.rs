@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct SegmentStore {
     // Map segment ID to segment data
     segments: DashMap<u64, Vec<u8>>,
@@ -11,6 +12,7 @@ pub(crate) struct SegmentStore {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct SegmentMetadata {
     // segment id
     segment_id: u64,
@@ -21,6 +23,7 @@ pub(crate) struct SegmentMetadata {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct MessageMetadata {
     // the sequence of the message
     sequence_id: u64,
@@ -33,6 +36,7 @@ pub(crate) struct MessageMetadata {
 }
 
 impl SegmentStore {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         SegmentStore {
             segments: DashMap::new(),
@@ -42,6 +46,7 @@ impl SegmentStore {
     }
 
     // StoreSegment adds segment data and metadata to the store
+    #[allow(dead_code)]
     pub fn store_segment(&mut self, segment_metadata: SegmentMetadata, data: Vec<u8>) {
         let topic = segment_metadata.topic.clone();
         let segment_id = segment_metadata.segment_id;
@@ -57,6 +62,7 @@ impl SegmentStore {
     }
 
     // GetSegment retrieves segment data and metadata by segment id
+    #[allow(dead_code)]
     pub fn get_segment(&self, segment_id: u64) -> Option<(Vec<u8>, SegmentMetadata)> {
         let segment_data = self.segments.get(&segment_id)?;
         let segment_metadata = self.segments_metadata.get(&segment_id)?;
@@ -64,6 +70,7 @@ impl SegmentStore {
     }
 
     // RemoveSegment removes segment data and metadata based on segment id
+    #[allow(dead_code)]
     pub fn remove_segment(&mut self, segment_id: u64) -> Option<SegmentMetadata> {
         let _ = self.segments.remove(&segment_id)?;
         let metadata = self.segments_metadata.remove(&segment_id)?;
@@ -80,6 +87,7 @@ impl SegmentStore {
     }
 
     // GetMessage retrieves a specific message based on segment id and message sequence id
+    #[allow(dead_code)]
     pub fn get_message(&self, segment_id: u64, message_sequence_id: u64) -> Option<Vec<u8>> {
         self.segments_metadata
             .get(&segment_id)
@@ -153,7 +161,7 @@ mod tests {
             messages_metadata: DashMap::new(),
         };
         let message_data = vec![1, 2, 3, 4];
-        let message_metadata = MessageMetadata {
+        let _message_metadata = MessageMetadata {
             sequence_id: 1,
             segment_id: 1,
             offset: 0,

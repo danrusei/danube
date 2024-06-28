@@ -1,8 +1,8 @@
 use anyhow::Result;
 use danube_client::{DanubeClient, SchemaType};
 use serde_json::json;
+use std::thread;
 use std::time::Duration;
-use std::{env, thread};
 use tracing::info;
 
 #[tokio::main]

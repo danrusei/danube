@@ -1,13 +1,9 @@
-use anyhow::{anyhow, Result};
-use bytes::Bytes;
-use tokio::time::error::Elapsed;
+use anyhow::Result;
 use tracing::{trace, warn};
-
-use crate::proto::consumer_request::SubscriptionType;
-use crate::subscription::{self, Subscription};
 
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct Consumer {
     pub(crate) topic_name: String,
     pub(crate) consumer_id: u64,
@@ -36,8 +32,8 @@ impl Consumer {
     }
 
     // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>, batch_size: usize) -> Result<()> {
-        let unacked_messages = messages.len();
+    pub(crate) async fn send_messages(&self, messages: Vec<u8>, _batch_size: usize) -> Result<()> {
+        let _unacked_messages = messages.len();
         //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
 
         // It attempts to send the message through the tx channel.
@@ -61,18 +57,21 @@ impl Consumer {
 
     // Close the consumer if: a. the connection is dropped
     // b. all messages were delivered and there are no pending message acks, graceful close connection
+    #[allow(dead_code)]
     pub(crate) fn close(&self) -> Result<()> {
         // subscription.remove_consumer(self)
         todo!()
     }
 
     // Unsubscribe consumer from the Subscription
+    #[allow(dead_code)]
     pub(crate) fn unsubscribe(&self) -> Result<()> {
         // subscription.unsubscribe(self)
         todo!()
     }
 
     // acked message from client
+    #[allow(dead_code)]
     pub(crate) fn message_acked(&self) -> Result<()> {
         todo!()
     }

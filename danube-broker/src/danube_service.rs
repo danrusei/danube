@@ -13,26 +13,20 @@ pub(crate) use syncronizer::Syncronizer;
 
 use anyhow::Result;
 use danube_client::DanubeClient;
-use etcd_client::PutOptions;
-use etcd_client::{Client, WatchOptions};
+use etcd_client::Client;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tokio::time::{self, sleep, Duration};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 
-use crate::resources::{BASE_BROKER_PATH, BASE_REGISTER_PATH};
 use crate::{
     broker_server,
-    broker_service::{self, BrokerService},
-    metadata_store::{
-        etcd_watch_prefixes, EtcdMetadataStore, MemoryMetadataStore, MetaOptions, MetadataStorage,
-        MetadataStore, MetadataStoreConfig,
-    },
+    broker_service::BrokerService,
+    metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
     namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
     policies::Policies,
-    resources::{self, Resources, BASE_BROKER_LOAD_PATH},
+    resources::{Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH},
     service_configuration::ServiceConfiguration,
-    storage,
     topic::SYSTEM_TOPIC,
     utils::join_path,
 };
@@ -118,9 +112,11 @@ impl DanubeService {
 
         // Cluster metadata setup
         //==========================================================================
-        self.resources
+        let _ = self
+            .resources
             .cluster
-            .create_cluster(&self.service_config.cluster_name);
+            .create_cluster(&self.service_config.cluster_name)
+            .await;
 
         // register the local broker to cluster
         let ttl = 40; // Time to live for the lease in seconds
@@ -179,7 +175,7 @@ impl DanubeService {
             .service_url("http://[::1]:6650")
             .build()?;
 
-        self.syncronizer.with_client(client);
+        let _ = self.syncronizer.with_client(client);
 
         // TODO! create producer / consumer and use it
 
@@ -187,7 +183,7 @@ impl DanubeService {
         //==========================================================================
 
         // to be configurable
-        let mut leader_check_interval = time::interval(Duration::from_secs(10));
+        let leader_check_interval = time::interval(Duration::from_secs(10));
 
         let mut leader_election_cloned = self.leader_election.clone();
 
@@ -200,7 +196,7 @@ impl DanubeService {
         //==========================================================================
 
         // Fetch initial data, populate cache & watch for Events to update local cache
-        let mut client = self.meta_store.get_client();
+        let client = self.meta_store.get_client();
         if let Some(client) = client.clone() {
             let local_cache_cloned = self.local_cache.clone();
             let rx_event = self.local_cache.populate_start_local_cache(client).await?;
@@ -265,7 +261,7 @@ impl DanubeService {
             let mut prefixes = Vec::new();
             let topic_assignment_path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
             prefixes.extend([topic_assignment_path].into_iter());
-            etcd_watch_prefixes(client, prefixes, tx_event).await;
+            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
         //process the events
@@ -276,7 +272,7 @@ impl DanubeService {
                     format!("A new Watch event has been received {:?}", event)
                 );
 
-                let mut parts: Vec<_> = event.key.split('/').collect();
+                let parts: Vec<_> = event.key.split('/').collect();
                 if parts.len() < 3 {
                     warn!("Invalid key format {}", event.key);
                     return;
@@ -332,6 +328,7 @@ impl DanubeService {
     }
 
     // Checks whether the broker owns a specific topic
+    #[allow(dead_code)]
     pub(crate) async fn check_topic_ownership(&self, topic_name: &str) -> bool {
         self.load_manager
             .check_ownership(self.broker_id, topic_name)
@@ -339,7 +336,10 @@ impl DanubeService {
     }
 }
 
-async fn create_namespace_if_absent(resources: &mut Resources, namespace_name: &str) -> Result<()> {
+async fn create_namespace_if_absent(
+    resources: &mut Resources,
+    _namespace_name: &str,
+) -> Result<()> {
     if !resources
         .namespace
         .namespace_exist(DEFAULT_NAMESPACE)
@@ -392,6 +392,7 @@ async fn post_broker_load_report(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) enum LookupResult {
     BrokerUrl(String),
     RedirectUrl(String),

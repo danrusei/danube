@@ -1,15 +1,13 @@
-use anyhow::{anyhow, Ok, Result};
-use bytes::Bytes;
+use anyhow::{anyhow, Result};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::trace;
 
-use crate::{consumer::Consumer, subscription::Subscription, topic::Topic};
-
-use crate::proto::consumer_request::SubscriptionType;
+use crate::consumer::Consumer;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct DispatcherMultipleConsumers {
     topic_name: String,
     subscription_name: String,
@@ -36,6 +34,7 @@ impl DispatcherMultipleConsumers {
     }
 
     // manage the removal of consumers from the dispatcher
+    #[allow(dead_code)]
     pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
         // Find the position asynchronously
         let pos = {
@@ -57,13 +56,15 @@ impl DispatcherMultipleConsumers {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
         Some(&self.consumers)
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
-        self.consumers.iter().map(|consumer| async {
-            consumer.lock().await.disconnect();
+        let _ = self.consumers.iter().map(|consumer| async {
+            let _ = consumer.lock().await.disconnect();
         });
         Ok(())
     }

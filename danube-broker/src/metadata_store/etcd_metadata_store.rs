@@ -1,11 +1,9 @@
-use anyhow::{anyhow, Result};
-use etcd_client::{Client, DeleteOptions, GetOptions, PutOptions};
+use anyhow::Result;
+use etcd_client::{Client, DeleteOptions, GetOptions};
 use serde_json::Value;
-use std::error::Error;
-
-use crate::metadata_store::{MetaOptions, MetadataStore};
 
 use super::MetadataStoreConfig;
+use crate::metadata_store::{MetaOptions, MetadataStore};
 
 #[derive(Clone)]
 pub(crate) struct EtcdMetadataStore {

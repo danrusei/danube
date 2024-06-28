@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::convert::TryFrom;
 
 use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema};

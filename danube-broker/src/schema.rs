@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::convert::TryFrom;
 
 use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema};
@@ -45,6 +44,7 @@ pub struct Schema {
 }
 
 impl Schema {
+    #[allow(dead_code)]
     pub fn new(name: String, type_schema: SchemaType) -> Self {
         let schema_data = match &type_schema {
             SchemaType::Json(schema) => Some(schema.as_bytes().to_vec()),

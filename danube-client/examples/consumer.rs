@@ -1,10 +1,10 @@
 use anyhow::Result;
-use danube_client::{DanubeClient, SchemaType, SubType};
+use danube_client::{DanubeClient, SubType};
 use futures_util::stream::StreamExt;
-use serde::{Deserialize, Serialize};
-use std::env;
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct MyMessage {
     field1: String,
     field2: i32,

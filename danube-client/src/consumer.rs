@@ -9,18 +9,13 @@ use crate::proto::{
 };
 
 use futures_core::Stream;
-use futures_util::stream::StreamExt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Uri, Code, Response, Status};
-use tonic_types::pb::{bad_request, BadRequest};
-use tonic_types::StatusExt;
-use tracing::{info, warn};
+use tracing::warn;
 
 /// Represents a Consumer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Consumer {
     // the Danube client
     client: DanubeClient,

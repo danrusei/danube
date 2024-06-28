@@ -1,7 +1,7 @@
 use base64::prelude::*;
 use prost::Message;
 use thiserror::Error;
-use tonic::{codegen::http::uri, metadata::MetadataValue, Status};
+use tonic::{codegen::http::uri, Status};
 
 use crate::proto::{ErrorMessage, ErrorType};
 
@@ -55,6 +55,7 @@ pub(crate) fn decode_error_details(status: &Status) -> Option<ErrorMessage> {
 }
 
 // A helper function to convert i32 to ErrorType.
+#[allow(dead_code)]
 pub(crate) fn error_type_from_i32(value: i32) -> Option<ErrorType> {
     match value {
         0 => Some(ErrorType::UnknownError),

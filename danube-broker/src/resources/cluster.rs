@@ -32,12 +32,12 @@ impl ClusterResources {
         Ok(())
     }
 
-    pub(crate) async fn register(&mut self, broker_id: &str, broker_addr: &str) -> Result<()> {
-        let path = join_path(&[BASE_REGISTER_PATH, broker_id]);
-        let data = serde_json::Value::String(broker_addr.to_string());
-        self.create(&path, data).await?;
-        Ok(())
-    }
+    // pub(crate) async fn register(&mut self, broker_id: &str, broker_addr: &str) -> Result<()> {
+    //     let path = join_path(&[BASE_REGISTER_PATH, broker_id]);
+    //     let data = serde_json::Value::String(broker_addr.to_string());
+    //     self.create(&path, data).await?;
+    //     Ok(())
+    // }
 
     pub(crate) async fn new_unassigned_topic(&mut self, topic_name: &str) -> Result<()> {
         let path = join_path(&[BASE_UNASSIGNED_PATH, topic_name]);

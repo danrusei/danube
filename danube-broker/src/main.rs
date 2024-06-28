@@ -21,9 +21,7 @@ use std::sync::Arc;
 use crate::{
     broker_service::BrokerService,
     danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
-    metadata_store::{
-        EtcdMetadataStore, MemoryMetadataStore, MetadataStorage, MetadataStoreConfig,
-    },
+    metadata_store::{EtcdMetadataStore, MetadataStorage, MetadataStoreConfig},
     resources::{Resources, LEADER_SELECTION_PATH},
     service_configuration::ServiceConfiguration,
 };
@@ -31,7 +29,6 @@ use crate::{
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use tokio::sync::Mutex;
-use tokio::sync::RwLock;
 use tracing::info;
 use tracing_subscriber;
 
@@ -103,7 +100,7 @@ async fn main() -> Result<()> {
 
     // convenient functions to handle the metadata and configurations required
     // for managing the cluster, namespaces & topics
-    let mut resources = Resources::new(local_cache.clone(), metadata_store.clone());
+    let resources = Resources::new(local_cache.clone(), metadata_store.clone());
 
     // The synchronizer ensures that metadata & configuration settings across different brokers remains consistent.
     // using the client Producers to distribute metadata updates across brokers.
@@ -114,7 +111,7 @@ async fn main() -> Result<()> {
     let broker_id = broker_service.broker_id;
 
     // the service selects one broker per cluster to be the leader to coordinate and take assignment decision.
-    let mut leader_election_service = LeaderElection::new(
+    let leader_election_service = LeaderElection::new(
         metadata_store.clone(),
         LEADER_SELECTION_PATH,
         broker_service.broker_id,

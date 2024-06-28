@@ -1,14 +1,12 @@
 use anyhow::{anyhow, Result};
-use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
-use crate::{consumer::Consumer, subscription::Subscription, topic::Topic};
-
-use crate::proto::consumer_request::SubscriptionType;
+use crate::consumer::Consumer;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct DispatcherSingleConsumer {
     topic_name: String,
     subscription_name: String,
@@ -105,6 +103,7 @@ impl DispatcherSingleConsumer {
     }
 
     // manage the removal of consumers from the dispatcher
+    #[allow(dead_code)]
     pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
         // Find the position asynchronously
         let pos = {
@@ -133,6 +132,7 @@ impl DispatcherSingleConsumer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
         todo!()
     }

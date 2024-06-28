@@ -1,6 +1,6 @@
 use crate::{
     connection_manager::ConnectionManager,
-    errors::{decode_error_details, error_type_from_i32, DanubeError, Result},
+    errors::{DanubeError, Result},
 };
 
 use crate::proto::{
@@ -12,7 +12,6 @@ use std::sync::Arc;
 use tonic::transport::Uri;
 use tonic::{Response, Status};
 use tracing::warn;
-use url::Url;
 
 #[derive(Debug, Default)]
 pub struct LookupResult {

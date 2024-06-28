@@ -9,18 +9,15 @@ use crate::{
     DanubeClient,
 };
 
-use bytes::Bytes;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 use tonic::{transport::Uri, Code, Response, Status};
-use tonic_types::pb::{bad_request, BadRequest};
-use tonic_types::StatusExt;
-use tracing::{info, warn};
+use tracing::warn;
 
 /// Represents a Producer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Producer {
     // the Danube client
     client: DanubeClient,

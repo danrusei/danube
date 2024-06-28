@@ -1,5 +1,4 @@
 use anyhow::Result;
-use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -33,6 +32,7 @@ impl Dispatcher {
             }
         }
     }
+    #[allow(dead_code)]
     pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.remove_consumer(consumer).await?),
@@ -41,6 +41,7 @@ impl Dispatcher {
             }
         }
     }
+    #[allow(dead_code)]
     pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers().await,

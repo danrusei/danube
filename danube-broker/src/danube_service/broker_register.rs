@@ -1,16 +1,11 @@
 use anyhow::{anyhow, Result};
-use etcd_client::WatchOptions;
-use etcd_client::{
-    Client, Error, GetOptions as EtcdGetOptions, LeaseKeepAliveStream, PutOptions as EtcdPutOptions,
-};
-use tokio::time::{self, sleep, Duration};
+use etcd_client::{Client, PutOptions as EtcdPutOptions};
+use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info};
 
 use crate::metadata_store::{MetaOptions, MetadataStorage, MetadataStore};
 use crate::resources::BASE_REGISTER_PATH;
 use crate::utils::join_path;
-
-use crate::resources::{self, Resources};
 
 pub(crate) async fn register_broker(
     mut store: MetadataStorage,
@@ -70,7 +65,7 @@ async fn keep_alive_lease(mut client: Client, lease_id: i64, ttl: i64) -> Result
 
             // Check for responses from etcd to confirm the lease is still alive
             match stream.message().await {
-                Ok(Some(response)) => {
+                Ok(Some(_response)) => {
                     debug!(
                         "Broker Register, received keep-alive response for lease {}",
                         lease_id

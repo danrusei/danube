@@ -6,6 +6,7 @@ use tracing::{debug, warn};
 
 // Represent an event of interest
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct ETCDWatchEvent {
     pub(crate) key: String,
     pub(crate) value: Option<Vec<u8>>,
@@ -57,7 +58,7 @@ async fn watch_prefix(
     prefix: &str,
     sender: mpsc::Sender<ETCDWatchEvent>,
 ) -> Result<()> {
-    let (watcher, mut watch_stream) = client
+    let (_watcher, mut watch_stream) = client
         .watch(prefix, Some(WatchOptions::new().with_prefix()))
         .await?;
 

@@ -1,18 +1,16 @@
 use crate::{
     connection_manager::ConnectionManager,
-    errors::{decode_error_details, error_type_from_i32, DanubeError, Result},
+    errors::{DanubeError, Result},
     Schema,
 };
 
-use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema};
+use crate::proto::Schema as ProtoSchema;
 
 use crate::proto::{discovery_client::DiscoveryClient, SchemaRequest, SchemaResponse};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tonic::transport::Uri;
 use tonic::{Response, Status};
-use tracing::warn;
-use url::Url;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SchemaService {

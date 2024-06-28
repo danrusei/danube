@@ -1,31 +1,25 @@
 pub(crate) mod load_report;
-use load_report::{LoadReport, ResourceType, SystemLoad};
+use load_report::{LoadReport, ResourceType};
 
 use anyhow::{anyhow, Result};
 use etcd_client::{Client, EventType, GetOptions};
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tokio::task;
-use tokio::time::{self, Duration};
+use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace, warn};
 
-use crate::metadata_store::MetaOptions;
-use crate::resources::BASE_REGISTER_PATH;
 use crate::{
     metadata_store::{
-        etcd_watch_prefixes, ETCDWatchEvent, EtcdMetadataStore, MetadataStorage, MetadataStore,
-        MetadataStoreConfig,
+        etcd_watch_prefixes, ETCDWatchEvent, MetaOptions, MetadataStorage, MetadataStore,
     },
     resources::{
-        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_UNASSIGNED_PATH, LOADBALANCE_DECISION_PATH,
+        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_REGISTER_PATH, BASE_UNASSIGNED_PATH,
     },
     utils::join_path,
 };
 
-use super::{leader_election, LeaderElection, LeaderElectionState};
+use super::{LeaderElection, LeaderElectionState};
 
 // The Load Manager monitors and distributes load across brokers by managing topic and partition assignments.
 // It implements rebalancing logic to redistribute topics/partitions when brokers join or leave the cluster
@@ -50,7 +44,7 @@ impl LoadManager {
             meta_store,
         }
     }
-    pub async fn bootstrap(&mut self, broker_id: u64) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
+    pub async fn bootstrap(&mut self, _broker_id: u64) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
         let client = if let Some(client) = self.meta_store.get_client() {
             client
         } else {
@@ -60,12 +54,12 @@ impl LoadManager {
         };
 
         // fetch the initial broker Load information
-        self.fetch_initial_load(client.clone()).await;
+        let _ = self.fetch_initial_load(client.clone()).await;
 
         //calculate rankings after the initial load fetch
         self.calculate_rankings_simple().await;
 
-        let (tx_event, mut rx_event) = mpsc::channel(32);
+        let (tx_event, rx_event) = mpsc::channel(32);
 
         // Watch for Metadata Store events (ETCD), interested of :
         //
@@ -81,7 +75,7 @@ impl LoadManager {
             prefixes.push(BASE_BROKER_LOAD_PATH.to_string());
             prefixes.push(BASE_UNASSIGNED_PATH.to_string());
             prefixes.push(BASE_REGISTER_PATH.to_string());
-            etcd_watch_prefixes(client, prefixes, tx_event).await;
+            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
         Ok(rx_event)
@@ -263,6 +257,7 @@ impl LoadManager {
         next_broker
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn check_ownership(&self, broker_id: u64, topic_name: &str) -> bool {
         let brokers_usage = self.brokers_usage.lock().await;
         if let Some(load_report) = brokers_usage.get(&broker_id) {
@@ -288,6 +283,7 @@ impl LoadManager {
     }
 
     // Composite Load Calculation: the load is based on the number of topics, CPU usage, and memory usage.
+    #[allow(dead_code)]
     async fn calculate_rankings_composite(&self) {
         let brokers_usage = self.brokers_usage.lock().await;
 
@@ -331,9 +327,9 @@ fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
 
 #[cfg(test)]
 mod tests {
-    use crate::metadata_store::MemoryMetadataStore;
-
+    use super::load_report::SystemLoad;
     use super::*;
+    use crate::metadata_store::{MemoryMetadataStore, MetadataStoreConfig};
 
     fn create_load_report(cpu_usage: usize, memory_usage: usize, topics_len: usize) -> LoadReport {
         LoadReport {

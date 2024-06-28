@@ -1,8 +1,4 @@
-use crate::{
-    metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    LocalCache,
-};
-use anyhow::{Ok, Result};
+use crate::{metadata_store::MetadataStorage, LocalCache};
 
 mod cluster;
 mod namespace;
@@ -27,6 +23,7 @@ pub(crate) static BASE_UNASSIGNED_PATH: &str = "/cluster/unassigned";
 pub(crate) static BASE_BROKER_LOAD_PATH: &str = "/cluster/load";
 
 // The Load Manager post it's decision and the calculated load metrics on this path
+#[allow(dead_code)]
 pub(crate) static LOADBALANCE_DECISION_PATH: &str = "/cluster/load_balance";
 
 // Cluster Leader broker_id, posted by Leader Election Service
@@ -43,6 +40,7 @@ pub(crate) static LEADER_SELECTION_PATH: &str = "/cluster/leader";
 // Reduced Overhead: By limiting the scope of data retrievals to a specific path,
 // the overhead of processing unnecessary data, is reduced.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct Resources {
     store: MetadataStorage,
     pub(crate) cluster: ClusterResources,

@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
-use serde_json::{from_value, Value};
+use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},

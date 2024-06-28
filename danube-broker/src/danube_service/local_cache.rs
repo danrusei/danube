@@ -4,12 +4,11 @@ pub(crate) use trie::Trie;
 
 use anyhow::Result;
 use dashmap::DashMap;
-use etcd_client::{Client, WatchOptions};
-use futures::StreamExt;
+use etcd_client::Client;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{info, trace};
+use tokio::sync::{mpsc, Mutex};
+use tracing::info;
 
 use crate::metadata_store::{etcd_watch_prefixes, ETCDWatchEvent};
 use crate::resources::{
@@ -112,7 +111,7 @@ impl LocalCache {
         }
         info!("Initial cache populated");
 
-        let (tx_event, mut rx_event) = mpsc::channel(32);
+        let (tx_event, rx_event) = mpsc::channel(32);
 
         // watch for ETCD events
         tokio::spawn(async move {
@@ -126,7 +125,7 @@ impl LocalCache {
                 ]
                 .into_iter(),
             );
-            etcd_watch_prefixes(client, prefixes, tx_event).await;
+            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
         });
 
         Ok(rx_event)
@@ -181,6 +180,7 @@ impl LocalCache {
     }
 
     // remove the list of keys from both the DashMap and the Trie.
+    #[allow(dead_code)]
     pub(crate) async fn remove_keys(&self, keys_to_remove: Vec<&str>) {
         for key in keys_to_remove {
             let parts: Vec<&str> = key.split('/').collect();

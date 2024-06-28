@@ -1,12 +1,9 @@
 use anyhow::{anyhow, Result};
-use bytes::Bytes;
-use dashmap::DashMap;
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-use tracing::{info, trace};
+use tracing::trace;
 
 use crate::{
-    broker_service::{self, BrokerService},
     consumer::Consumer,
     policies::Policies,
     producer::Producer,
@@ -52,11 +49,13 @@ impl Topic {
     }
 
     // Close all producers and subscriptions associated with this topic
+    #[allow(dead_code)]
     pub(crate) fn close() -> Result<()> {
         todo!()
     }
 
     // Close all producers/consumers and deletes the topic
+    #[allow(dead_code)]
     pub(crate) fn delete() -> Result<()> {
         todo!()
     }
@@ -85,7 +84,7 @@ impl Topic {
         {
             Ok(_) => (),
             Err(err) => {
-                return Err(anyhow!("the Producer checks have failed"));
+                return Err(anyhow!("the Producer checks have failed: {}", err));
             }
         }
 
@@ -148,7 +147,8 @@ impl Topic {
     }
 
     // Unsubscribes the specified subscription from the topic
-    pub(crate) fn unsubscribe(&self, subscription_name: &str) -> Result<()> {
+    #[allow(dead_code)]
+    pub(crate) fn unsubscribe(&self, _subscription_name: &str) -> Result<()> {
         todo!()
     }
 
@@ -170,12 +170,14 @@ impl Topic {
     }
 
     // get topic's schema
+    #[allow(dead_code)]
     pub(crate) fn get_schema(&self) -> Option<Schema> {
         self.schema.clone()
     }
 
     // Add a schema to the topic.
-    pub(crate) fn delete_schema(&self, schema: Schema) -> Result<()> {
+    #[allow(dead_code)]
+    pub(crate) fn delete_schema(&self, _schema: Schema) -> Result<()> {
         todo!()
     }
 }
