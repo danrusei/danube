@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytes = { workspace = true }
+danube-client = {path = "../danube-client"}
+
 clap = { version = "4.5.4", features = ["derive"] }
 dashmap = "5.5.3"
 etcd-client = "0.12.4"
@@ -22,8 +23,6 @@ tonic-types = { workspace = true }
 rand = "0.8.5"
 tokio-stream = "0.1.15"
 futures = "0.3.30"
-
-danube-client = {path = "../danube-client"}
 base64 = "0.22.1"
 
 [build-dependencies]

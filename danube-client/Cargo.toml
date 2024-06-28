@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 base64 = "0.22.1"
-bytes = { workspace = true }
 futures-core = "0.3.30"
 futures-util = "0.3.30"
 prost = { workspace = true }
@@ -19,7 +18,6 @@ tokio-stream = "0.1.15"
 tonic = { workspace = true }
 tonic-types = { workspace = true }
 tracing = { workspace = true }
-url = "2.5.0"
 
 [[example]]
 name = "producer"
