@@ -71,7 +71,7 @@ impl Consumer {
         }
     }
     pub async fn subscribe(&mut self) -> Result<u64> {
-        let mut broker_addr = self.client.uri.clone();
+        let broker_addr = self.client.uri.clone();
 
         match self
             .client
@@ -80,7 +80,7 @@ impl Consumer {
             .await
         {
             Ok(addr) => {
-                broker_addr = addr.clone();
+                //broker_addr = addr.clone();
                 self.connect(&addr).await?;
                 // update the client URI with the latest connection
                 self.client.uri = addr;
@@ -114,6 +114,7 @@ impl Consumer {
 
         let request = tonic::Request::new(req);
 
+        #[allow(unused_mut)]
         let mut client = self.stream_client.as_mut().unwrap();
         let response: std::result::Result<Response<ConsumerResponse>, Status> =
             client.subscribe(request).await;
@@ -149,6 +150,7 @@ impl Consumer {
             consumer_id: self.consumer_id.unwrap(),
         };
 
+        #[allow(unused_mut)]
         let mut stream_client = self.stream_client.as_mut().unwrap();
 
         let response = match stream_client.receive_messages(receive_request).await {

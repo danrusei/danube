@@ -245,6 +245,9 @@ impl DanubeService {
         // Wait for the server task to complete
         server_handle.await?;
 
+        //TODO! evalueate other backgroud services like PublishRateLimiter, DispatchRateLimiter,
+        // compaction, innactivity monitor
+
         Ok(())
     }
 

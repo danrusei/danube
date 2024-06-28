@@ -26,7 +26,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 //use tonic_types::ErrorDetails;
-use tracing::{info, trace, Level};
+use tracing::{info, trace, warn, Level};
 
 #[derive(Debug, Clone)]
 pub(crate) struct DanubeServerImpl {
@@ -42,9 +42,6 @@ impl DanubeServerImpl {
         }
     }
     pub(crate) async fn start(self, ready_tx: oneshot::Sender<()>) -> JoinHandle<()> {
-        //TODO! start other backgroud services like PublishRateLimiter, DispatchRateLimiter,
-        // compaction, innactivity monitor
-
         let socket_addr = self.broker_addr.clone();
 
         let server = Server::builder()
@@ -58,7 +55,7 @@ impl DanubeServerImpl {
             info!("Server is listening on address: {}", socket_addr);
             let _ = ready_tx.send(()); // Signal readiness
             if let Err(e) = server.await {
-                anyhow::anyhow!("Server error: {:?}", e);
+                warn!("Server error: {:?}", e);
             }
         });
 
