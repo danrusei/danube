@@ -2,7 +2,7 @@
 name = "danube-client"
 version = "0.1.0"
 description = "The async client for Danube Pub/Sub messsaging platform"
-keywords = ["danube", "pub-sub", "messaging platform"]
+keywords = ["danube", "pub-sub", "messaging_system", "message_broker", "event_streaming"]
 authors = ["Dan Rusei <dan.rusei@gmail.com>"]
 repository = "https://github.com/danrusei/danube"
 documentation = "https://docs.rs/danube-client"
