@@ -3,7 +3,7 @@
 //! Danube-Client -- the Danube stream service client
 
 pub mod proto {
-    include!("../../proto/danube.rs");
+    include!("proto/danube.rs");
 }
 
 mod client;

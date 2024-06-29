@@ -33,7 +33,7 @@ use tracing::info;
 use tracing_subscriber;
 
 pub(crate) mod proto {
-    include!("../../proto/danube.rs");
+    include!("proto/danube.rs");
 }
 
 #[derive(Parser, Debug)]
