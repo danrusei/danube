@@ -48,15 +48,11 @@ impl Topic {
         }
     }
 
-    // Close all producers and subscriptions associated with this topic
-    #[allow(dead_code)]
-    pub(crate) fn close() -> Result<()> {
-        todo!()
-    }
+    // Close this topic - disconnect all producers and subscriptions associated with this topic
+    pub(crate) fn close(&self) -> Result<()> {
+        // TODO! disconnect all the topic producers
 
-    // Close all producers/consumers and deletes the topic
-    #[allow(dead_code)]
-    pub(crate) fn delete() -> Result<()> {
+        // TODO! close all the topic subscriptions
         todo!()
     }
 

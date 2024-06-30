@@ -97,8 +97,9 @@ impl Subscription {
     // remove a consumer from the subscription
     #[allow(dead_code)]
     pub(crate) fn remove_consumer(_consumer: Consumer) -> Result<()> {
+        // TODO!
         // removes consumer from the dispatcher
-        //If there are no consumers left after removing the specified one,
+        // If there are no consumers left after removing the specified one,
         // it unsubscribes the subscription from the topic.
         todo!()
     }
@@ -106,6 +107,7 @@ impl Subscription {
     // handles the disconnection of consumers associated with the subscription.
     #[allow(dead_code)]
     pub(crate) fn disconnect() -> Result<()> {
+        // TODO!
         //  It checks if there is a dispatcher associated with the subscription.
         // If there is, it calls the disconnectAllConsumers method of the dispatcher
         todo!()
@@ -114,6 +116,7 @@ impl Subscription {
     // Deletes the subscription after it is unsubscribed from the topic and disconnected from consumers.
     #[allow(dead_code)]
     pub(crate) fn delete() -> Result<()> {
+        // TODO!
         //  It checks if there is a dispatcher associated with the subscription.
         // If there is, it calls the disconnectAllConsumers method of the dispatcher
         todo!()

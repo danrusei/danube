@@ -28,6 +28,8 @@ pub(crate) struct BrokerService {
     // the list of active producers, mapping producer_id to topic_name
     pub(crate) producers: HashMap<u64, String>,
     // the list of active consumers
+    // TODO! remove the consumers from this struct, should be part only of the subscription
+    // as one consumer is allowed to consume only from one subscription
     pub(crate) consumers: HashMap<u64, Arc<Mutex<Consumer>>>,
 }
 
@@ -43,15 +45,14 @@ impl BrokerService {
         }
     }
 
-    // The broker checks if it is the owner of the topic.
+    // The broker checks if it is the owner of the topic. If it is not, but the topic exist in the cluster,
+    // the broker instruct the client to redo the lookup request.
     //
-    // If it is not, the broker responds to the client with a redirection message
-    // containing the address of the correct broker that owns the topic.
-    //  ?????? or is better to ask the client to redo the lookup request????
+    // If the topic doesn't exist in the cluster, and the auto-topic creation is enabled,
+    // the broker creates new topic to the metadata store.
     //
-    // If the topic doesn't exist in the cluster, and auto-topic creation is enabled,
-    // the broker creates new topic to the metadata store, that will be assigned by Load Manager to a broker
-    // it respond to the client with Service_not_ready, to retry the lookup
+    // The Leader Broker will be informed about the new topic creation and assign the topic to a broker.
+    // The selected Broker will be informed through watch mechanism and will host the topic.
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
@@ -222,8 +223,36 @@ impl BrokerService {
     }
 
     // deletes the topic
-    pub(crate) async fn delete_topic(&mut self, _topic: &str) -> Result<Topic> {
-        todo!()
+    pub(crate) async fn delete_topic(&mut self, topic_name: &str) -> Result<Topic> {
+        let topic = match self.topics.get(topic_name) {
+            Some(topic) => topic,
+            None => {
+                return Err(anyhow!(
+                    "The topic {} does not exist on the broker {}",
+                    topic_name,
+                    self.broker_id
+                ))
+            }
+        };
+
+        // disconnect all the producers/consumers associated to the topic
+        let _ = topic.close()?;
+
+        // removing the topic should delete all the resources associated with topic
+        match self.topics.remove(topic_name) {
+            Some(topic) => {
+                info!(
+                    "The topic {} was removed from the broker {}",
+                    topic.topic_name, self.broker_id
+                );
+                Ok(topic)
+            }
+            None => Err(anyhow!(
+                "The topic {} it is not owened by broker {}",
+                topic_name,
+                self.broker_id
+            )),
+        }
     }
 
     // search for the broker socket address that serve this topic
