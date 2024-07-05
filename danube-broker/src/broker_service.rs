@@ -232,7 +232,15 @@ impl BrokerService {
         };
 
         // disconnect all the producers/consumers associated to the topic
-        let _ = topic.close()?;
+        let (producers, consumers) = topic.close()?;
+
+        for producer_id in producers {
+            self.producer_index.remove(&producer_id);
+        }
+
+        for consumer_id in consumers {
+            self.consumer_index.remove(&consumer_id);
+        }
 
         // removing the topic should delete all the resources associated with topic
         match self.topics.remove(topic_name) {

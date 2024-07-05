@@ -49,7 +49,7 @@ impl Topic {
     }
 
     // Close this topic - disconnect all producers and subscriptions associated with this topic
-    pub(crate) fn close(&self) -> Result<()> {
+    pub(crate) fn close(&self) -> Result<(Vec<u64>, Vec<u64>)> {
         // TODO! disconnect all the topic producers
 
         // TODO! close all the topic subscriptions
