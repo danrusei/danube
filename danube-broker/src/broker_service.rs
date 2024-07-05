@@ -21,16 +21,12 @@ pub(crate) struct BrokerService {
     pub(crate) broker_id: u64,
     // to handle the metadata and configurations
     pub(crate) resources: Resources,
-    // a map with namespace wise topics - Namespace --> topicName --> topic
-    //topics: DashMap<String, DashMap<String, Topic>>,
     // maps topic_name to Topic
     pub(crate) topics: HashMap<String, Topic>,
-    // the list of active producers, mapping producer_id to topic_name
-    pub(crate) producers: HashMap<u64, String>,
-    // the list of active consumers
-    // TODO! remove the consumers from this struct, should be part only of the subscription
-    // as one consumer is allowed to consume only from one subscription
-    pub(crate) consumers: HashMap<u64, Arc<Mutex<Consumer>>>,
+    // maps producer_id to topic_name
+    pub(crate) producer_index: HashMap<u64, String>,
+    // maps consumer_id to (topic_name, subscription_name)
+    pub(crate) consumer_index: HashMap<u64, (String, String)>,
 }
 
 impl BrokerService {
@@ -40,8 +36,8 @@ impl BrokerService {
             broker_id,
             resources: resources,
             topics: HashMap::new(),
-            producers: HashMap::new(),
-            consumers: HashMap::new(),
+            producer_index: HashMap::new(),
+            consumer_index: HashMap::new(),
         }
     }
 
@@ -313,58 +309,54 @@ impl BrokerService {
         topic_name: &str,
         producer_access_mode: i32,
     ) -> Result<u64> {
-        let topic = self
-            .topics
-            .get_mut(topic_name)
-            .expect("we know that the topic exist");
-
         let producer_id = get_random_id();
-        match topic.producers.entry(producer_id) {
-            Entry::Vacant(entry) => {
-                entry.insert(Producer::new(
-                    producer_id,
-                    producer_name.into(),
-                    topic_name.into(),
-                    producer_access_mode,
-                ));
-            }
-            Entry::Occupied(entry) => {
-                //let current_producer = entry.get();
-                info!("the requested producer: {} already exists", entry.key());
-                return Err(anyhow!(" the producer already exist"));
-            }
-        }
 
-        self.producers
-            .entry(producer_id)
-            .or_insert(topic_name.into());
+        if let Some(topic) = self.topics.get_mut(topic_name) {
+            match topic.producers.entry(producer_id) {
+                Entry::Vacant(entry) => {
+                    entry.insert(Producer::new(
+                        producer_id,
+                        producer_name.into(),
+                        topic_name.into(),
+                        producer_access_mode,
+                    ));
+                }
+                Entry::Occupied(entry) => {
+                    //let current_producer = entry.get();
+                    info!("the requested producer: {} already exists", entry.key());
+                    return Err(anyhow!(" the producer already exist"));
+                }
+            }
+
+            // insert into producer_index for efficient searches and retrievals
+            self.producer_index
+                .insert(producer_id, topic_name.to_string());
+        } else {
+            return Err(anyhow!("Unable to find the topic: {}", topic_name));
+        }
 
         Ok(producer_id)
     }
 
-    // having the producer_id, return to the caller the topic attached to the producer
-    pub(crate) fn get_topic_for_producer(&mut self, producer_id: u64) -> Result<&Topic> {
-        let topic_name = match self.producers.entry(producer_id) {
-            Entry::Vacant(_entry) => {
-                return Err(anyhow!(
-                    "the producer with id {} does not exist",
-                    producer_id
-                ))
-            }
-            Entry::Occupied(entry) => entry.get().to_owned(),
-        };
-
-        if !self.topics.contains_key(&topic_name) {
-            return Err(anyhow!(
-                "Unable to find any topic associated to this producer"
-            ));
+    // finding a Topic by Producer ID
+    pub(crate) fn find_topic_by_producer(&mut self, producer_id: u64) -> Option<&Topic> {
+        if let Some(topic_name) = self.producer_index.get(&producer_id) {
+            self.topics.get(topic_name)
+        } else {
+            None
         }
-
-        Ok(self.topics.get_mut(&topic_name).unwrap())
     }
 
-    pub(crate) fn get_consumer(&self, consumer_id: u64) -> Option<Arc<Mutex<Consumer>>> {
-        self.consumers.get(&consumer_id).cloned()
+    // finding a Consumer by Consumer ID
+    pub(crate) fn find_consumer_by_id(&self, consumer_id: u64) -> Option<Arc<Mutex<Consumer>>> {
+        if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
+            if let Some(topic) = self.topics.get(topic_name) {
+                if let Some(subscription) = topic.subscriptions.get(subscription_name) {
+                    return subscription.consumers.get(&consumer_id).cloned();
+                }
+            }
+        }
+        None
     }
 
     pub(crate) async fn check_if_consumer_exist(
@@ -410,22 +402,28 @@ impl BrokerService {
         topic_name: &str,
         subscription_options: SubscriptionOptions,
     ) -> Result<u64> {
-        let topic = self
-            .topics
-            .get_mut(topic_name)
-            .expect("the topic should be there");
+        if let Some(topic) = self.topics.get_mut(topic_name) {
+            //TODO! checkTopicOwnership
+            // if it's owened by this instance continue,
+            // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
 
-        //TODO! use NameSpace service to checkTopicOwnership
-        // if it's owened by this instance continue,
-        // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
+            let consumer = topic
+                .subscribe(topic_name, subscription_options.clone())
+                .await?;
+            let consumer_id = consumer.lock().await.consumer_id;
 
-        let consumer = topic.subscribe(topic_name, subscription_options).await?;
-
-        let consumer_id = consumer.lock().await.consumer_id;
-
-        self.consumers.entry(consumer_id).or_insert(consumer);
-
-        Ok(consumer_id)
+            // insert into consumer_index for efficient searches and retrievals
+            self.consumer_index.insert(
+                consumer_id,
+                (
+                    topic_name.to_string(),
+                    subscription_options.subscription_name,
+                ),
+            );
+            return Ok(consumer_id);
+        } else {
+            return Err(anyhow!("Unable to find the topic: {}", topic_name));
+        }
     }
 }
 

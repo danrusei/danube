@@ -15,8 +15,6 @@ use crate::{
     subscription::SubscriptionOptions,
 };
 
-//use prost::Message;
-
 use std::collections::hash_map::Entry;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -25,7 +23,6 @@ use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
-//use tonic_types::ErrorDetails;
 use tracing::{info, trace, warn, Level};
 
 #[derive(Debug, Clone)]
@@ -77,8 +74,6 @@ impl ProducerService for DanubeServerImpl {
             "New Producer request with name: {} for topic: {}",
             req.producer_name, req.topic_name,
         );
-
-        //let err_details = ErrorDetails::new();
 
         let mut service = self.service.lock().await;
 
@@ -148,13 +143,11 @@ impl ProducerService for DanubeServerImpl {
             req.metadata
         );
 
-        //let err_details = ErrorDetails::new();
-
         let arc_service = self.service.clone();
         let mut service = arc_service.lock().await;
 
         // check if the producer exist
-        match service.producers.entry(req.producer_id) {
+        match service.producer_index.entry(req.producer_id) {
             Entry::Vacant(_) => {
                 let status = Status::not_found(format!(
                     "The producer with id {} does not exist",
@@ -165,13 +158,13 @@ impl ProducerService for DanubeServerImpl {
             Entry::Occupied(_) => (),
         };
 
-        let topic = match service.get_topic_for_producer(req.producer_id) {
-            Ok(topic) => topic,
-            Err(err) => {
+        let topic = match service.find_topic_by_producer(req.producer_id) {
+            Some(topic) => topic,
+            None => {
                 // Should not happen, as the Producer can only be created if it's associated with the Topic
                 let status = Status::internal(format!(
                     "Unable to get the topic for the producer: {}",
-                    err.to_string()
+                    req.producer_id,
                 ));
                 return Err(status);
             }
@@ -218,8 +211,6 @@ impl ConsumerService for DanubeServerImpl {
             "New Consumer request with name: {} for topic: {} with subscription_type {}",
             req.consumer_name, req.topic_name, req.subscription_type
         );
-
-        // let err_details = ErrorDetails::new();
 
         // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
 
@@ -313,11 +304,9 @@ impl ConsumerService for DanubeServerImpl {
             consumer_id
         );
 
-        // let err_details = ErrorDetails::new();
-
         let service = self.service.lock().await;
 
-        let consumer = if let Some(consumer) = service.get_consumer(consumer_id) {
+        let consumer = if let Some(consumer) = service.find_consumer_by_id(consumer_id) {
             consumer
         } else {
             let status = Status::not_found(format!(

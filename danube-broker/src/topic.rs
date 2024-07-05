@@ -117,7 +117,7 @@ impl Topic {
         let sub_metadata = HashMap::new();
         let subscription = self
             .subscriptions
-            .entry(options.consumer_name.clone())
+            .entry(options.subscription_name.clone())
             .or_insert(Subscription::new(
                 topic_name,
                 options.subscription_name.clone(),
