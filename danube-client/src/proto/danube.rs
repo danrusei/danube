@@ -294,9 +294,11 @@ pub mod schema {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckRequest {
-    #[prost(enumeration = "health_check_request::ClientType", tag = "1")]
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(enumeration = "health_check_request::ClientType", tag = "2")]
     pub client: i32,
-    #[prost(uint64, tag = "2")]
+    #[prost(uint64, tag = "3")]
     pub id: u64,
 }
 /// Nested message and enum types in `HealthCheckRequest`.

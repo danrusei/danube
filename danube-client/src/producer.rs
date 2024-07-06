@@ -9,7 +9,10 @@ use crate::{
     DanubeClient,
 };
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 use tonic::{transport::Uri, Code, Response, Status};
@@ -37,6 +40,8 @@ pub struct Producer {
     producer_options: ProducerOptions,
     // the grpc client cnx
     stream_client: Option<ProducerServiceClient<tonic::transport::Channel>>,
+    // stop_signal received from broker, should close the producer
+    stop_signal: Arc<AtomicBool>,
 }
 
 impl Producer {
@@ -57,6 +62,7 @@ impl Producer {
             schema,
             producer_options,
             stream_client: None,
+            stop_signal: Arc::new(AtomicBool::new(false)),
         }
     }
     pub async fn create(&mut self) -> Result<u64> {
@@ -96,6 +102,16 @@ impl Producer {
                 Ok(resp) => {
                     let response = resp.into_inner();
                     self.producer_id = Some(response.producer_id);
+
+                    // start health_check service, which regularly check the status of the producer on the connected broker
+                    let stop_signal = Arc::clone(&self.stop_signal);
+
+                    let _ = self
+                        .client
+                        .health_check_service
+                        .start_health_check(&broker_addr, 0, response.producer_id, stop_signal)
+                        .await;
+
                     return Ok(response.producer_id);
                 }
                 Err(status) => {

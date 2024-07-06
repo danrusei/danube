@@ -4,6 +4,7 @@ use crate::{
     connection_manager::{ConnectionManager, ConnectionOptions},
     consumer::ConsumerBuilder,
     errors::Result,
+    health_check::HealthCheckService,
     lookup_service::{LookupResult, LookupService},
     producer::ProducerBuilder,
     schema::Schema,
@@ -18,6 +19,7 @@ pub struct DanubeClient {
     pub(crate) cnx_manager: Arc<ConnectionManager>,
     pub(crate) lookup_service: LookupService,
     pub(crate) schema_service: SchemaService,
+    pub(crate) health_check_service: HealthCheckService,
 }
 
 impl DanubeClient {
@@ -29,11 +31,14 @@ impl DanubeClient {
 
         let schema_service = SchemaService::new(cnx_manager.clone());
 
+        let health_check_service = HealthCheckService::new(cnx_manager.clone());
+
         DanubeClient {
             uri: uri,
             cnx_manager,
             lookup_service,
             schema_service,
+            health_check_service,
         }
     }
     //creates a Client Builder

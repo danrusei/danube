@@ -29,3 +29,5 @@ mod lookup_service;
 mod connection_manager;
 
 mod rpc_connection;
+
+mod health_check;

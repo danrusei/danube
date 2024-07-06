@@ -167,8 +167,9 @@ message HealthCheckRequest {
         Producer = 0;
         Consumer = 1;
     }
-    ClientType client = 1;
-    uint64 id = 2;
+    uint64 request_id = 1;
+    ClientType client = 2;
+    uint64 id = 3;
 }
 
 message HealthCheckResponse {

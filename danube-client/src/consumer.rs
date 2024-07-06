@@ -9,7 +9,10 @@ use crate::proto::{
 };
 
 use futures_core::Stream;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use tonic::{transport::Uri, Code, Response, Status};
 use tracing::warn;
 
@@ -35,6 +38,8 @@ pub struct Consumer {
     request_id: AtomicU64,
     // the grpc client cnx
     stream_client: Option<ConsumerServiceClient<tonic::transport::Channel>>,
+    // stop_signal received from broker, should close the consumer
+    stop_signal: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +73,7 @@ impl Consumer {
             consumer_options,
             request_id: AtomicU64::new(0),
             stream_client: None,
+            stop_signal: Arc::new(AtomicBool::new(false)),
         }
     }
     pub async fn subscribe(&mut self) -> Result<u64> {
@@ -123,6 +129,16 @@ impl Consumer {
             Ok(resp) => {
                 let r = resp.into_inner();
                 self.consumer_id = Some(r.consumer_id);
+
+                // start health_check service, which regularly check the status of the producer on the connected broker
+                let stop_signal = Arc::clone(&self.stop_signal);
+
+                let _ = self
+                    .client
+                    .health_check_service
+                    .start_health_check(&broker_addr, 1, r.consumer_id, stop_signal)
+                    .await;
+
                 return Ok(r.consumer_id);
             }
             Err(status) => {
