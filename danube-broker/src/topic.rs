@@ -29,7 +29,7 @@ pub(crate) struct Topic {
     pub(crate) topic_name: String,
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
-    // subscription_id -> Subscription
+    // subscription_name -> Subscription
     pub(crate) subscriptions: HashMap<String, Subscription>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
@@ -49,11 +49,23 @@ impl Topic {
     }
 
     // Close this topic - disconnect all producers and subscriptions associated with this topic
-    pub(crate) fn close(&self) -> Result<()> {
-        // TODO! disconnect all the topic producers
+    pub(crate) async fn close(&mut self) -> Result<(Vec<u64>, Vec<u64>)> {
+        let mut disconnected_producers = Vec::new();
+        let mut disconnected_consumers = Vec::new();
 
-        // TODO! close all the topic subscriptions
-        todo!()
+        // Disconnect all the topic producers
+        for (_, producer) in self.producers.iter_mut() {
+            let producer_id = producer.disconnect();
+            disconnected_producers.push(producer_id);
+        }
+
+        // Disconnect all the topic subscriptions
+        for (_, subscription) in self.subscriptions.iter_mut() {
+            let mut consumers = subscription.disconnect().await?;
+            disconnected_consumers.append(&mut consumers);
+        }
+
+        Ok((disconnected_producers, disconnected_consumers))
     }
 
     // Publishes the message to the topic, and send to active consumers
@@ -107,6 +119,15 @@ impl Topic {
         Ok(())
     }
 
+    pub(crate) fn get_producer_status(&self, producer_id: u64) -> bool {
+        if let Some(producer) = self.producers.get(&producer_id) {
+            if producer.status == true {
+                return true;
+            }
+        }
+        false
+    }
+
     // Subscribe to the topic and create a consumer for receiving messages
     pub(crate) async fn subscribe(
         &mut self,
@@ -117,7 +138,7 @@ impl Topic {
         let sub_metadata = HashMap::new();
         let subscription = self
             .subscriptions
-            .entry(options.consumer_name.clone())
+            .entry(options.subscription_name.clone())
             .or_insert(Subscription::new(
                 topic_name,
                 options.subscription_name.clone(),

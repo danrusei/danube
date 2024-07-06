@@ -105,12 +105,15 @@ impl Subscription {
     }
 
     // handles the disconnection of consumers associated with the subscription.
-    #[allow(dead_code)]
-    pub(crate) fn disconnect() -> Result<()> {
-        // TODO!
-        //  It checks if there is a dispatcher associated with the subscription.
-        // If there is, it calls the disconnectAllConsumers method of the dispatcher
-        todo!()
+    pub(crate) async fn disconnect(&mut self) -> Result<Vec<u64>> {
+        let mut consumers_id = Vec::new();
+
+        if let Some(dispatcher) = &self.dispatcher {
+            let mut disconnected_consumers = dispatcher.disconnect_all_consumers().await?;
+            consumers_id.append(&mut disconnected_consumers);
+        }
+
+        Ok(consumers_id)
     }
 
     // Deletes the subscription after it is unsubscribed from the topic and disconnected from consumers.

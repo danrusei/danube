@@ -157,6 +157,30 @@ message Schema {
 }
 
 // ============================================================================================
+
+service HealthCheck {
+    rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {
+    enum ClientType {
+        Producer = 0;
+        Consumer = 1;
+    }
+    uint64 request_id = 1;
+    ClientType client = 2;
+    uint64 id = 3;
+}
+
+message HealthCheckResponse {
+    enum ClientStatus {
+        OK = 0;
+        CLOSE = 1;
+    }
+    ClientStatus status = 1;
+}
+
+// ============================================================================================
 // Define the possible error types
 
 enum ErrorType {

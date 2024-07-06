@@ -11,6 +11,8 @@ pub(crate) struct Consumer {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be SubscriptionType,
     pub(crate) tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
+    // status = true -> consumer OK, status = false -> Close the consumer
+    pub(crate) status: bool,
 }
 
 impl Consumer {
@@ -28,6 +30,7 @@ impl Consumer {
             subscription_name: subscription_name.into(),
             subscription_type,
             tx: None,
+            status: true,
         }
     }
 
@@ -55,6 +58,10 @@ impl Consumer {
         self.tx = Some(tx);
     }
 
+    pub(crate) fn get_status(&self) -> bool {
+        return self.status;
+    }
+
     // Close the consumer if: a. the connection is dropped
     // b. all messages were delivered and there are no pending message acks, graceful close connection
     #[allow(dead_code)]
@@ -76,8 +83,10 @@ impl Consumer {
         todo!()
     }
 
-    pub(crate) fn disconnect(&self) -> Result<()> {
-        // close the consumer connection
-        todo!()
+    // closes the consumer from server-side and inform the client through health_check mechanism
+    // to disconnect consumer
+    pub(crate) fn disconnect(&mut self) -> u64 {
+        self.status = false;
+        self.consumer_id
     }
 }

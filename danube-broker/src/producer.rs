@@ -8,6 +8,8 @@ pub(crate) struct Producer {
     pub(crate) producer_name: String,
     pub(crate) topic_name: String,
     pub(crate) access_mode: i32, // should be ProducerAccessMode
+    // status = true -> producer OK, status = false -> Close the producer
+    pub(crate) status: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +33,7 @@ impl Producer {
             producer_name,
             topic_name,
             access_mode,
+            status: true,
         }
     }
     // publish message to topic
@@ -46,6 +49,13 @@ impl Producer {
         //let's assume that the checks pass and let the broker_server to call the topic.publish_message
 
         Ok(())
+    }
+
+    // closes the producer from server-side and inform the client through health_check mechanism
+    // to disconnect producer
+    pub(crate) fn disconnect(&mut self) -> u64 {
+        self.status = false;
+        self.producer_id
     }
 
     #[allow(dead_code)]

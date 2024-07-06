@@ -132,6 +132,16 @@ impl DispatcherSingleConsumer {
         Ok(())
     }
 
+    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
+        let mut consumers = Vec::new();
+
+        for consumer in self.consumers.iter() {
+            let consumer_id = consumer.lock().await.disconnect();
+            consumers.push(consumer_id)
+        }
+        Ok(consumers)
+    }
+
     #[allow(dead_code)]
     pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
         todo!()
