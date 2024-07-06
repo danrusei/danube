@@ -310,6 +310,13 @@ impl BrokerService {
         false
     }
 
+    pub(crate) fn health_producer(&mut self, producer_id: u64) -> bool {
+        if let Some(topic) = self.find_topic_by_producer(producer_id) {
+            return topic.get_producer_status(producer_id);
+        }
+        false
+    }
+
     // create a new producer and attach to the topic
     pub(crate) fn create_new_producer(
         &mut self,
@@ -365,6 +372,14 @@ impl BrokerService {
             }
         }
         None
+    }
+
+    pub(crate) async fn health_consumer(&mut self, consumer_id: u64) -> bool {
+        if let Some(consumer) = self.find_consumer_by_id(consumer_id) {
+            let consumer = consumer.lock().await;
+            return consumer.get_status();
+        }
+        false
     }
 
     pub(crate) async fn check_if_consumer_exist(

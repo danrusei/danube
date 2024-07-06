@@ -107,6 +107,15 @@ impl Topic {
         Ok(())
     }
 
+    pub(crate) fn get_producer_status(&self, producer_id: u64) -> bool {
+        if let Some(producer) = self.producers.get(&producer_id) {
+            if producer.status == true {
+                return true;
+            }
+        }
+        false
+    }
+
     // Subscribe to the topic and create a consumer for receiving messages
     pub(crate) async fn subscribe(
         &mut self,

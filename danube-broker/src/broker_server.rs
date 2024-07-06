@@ -1,11 +1,12 @@
 mod consumer_handler;
 mod discovery_handler;
+mod health_check_handler;
 mod producer_handler;
 
 use crate::broker_service::BrokerService;
 use crate::proto::{
     consumer_service_server::ConsumerServiceServer, discovery_server::DiscoveryServer,
-    producer_service_server::ProducerServiceServer,
+    health_check_server::HealthCheckServer, producer_service_server::ProducerServiceServer,
 };
 
 use std::net::SocketAddr;
@@ -34,7 +35,8 @@ impl DanubeServerImpl {
         let server = Server::builder()
             .add_service(ProducerServiceServer::new(self.clone()))
             .add_service(ConsumerServiceServer::new(self.clone()))
-            .add_service(DiscoveryServer::new(self))
+            .add_service(DiscoveryServer::new(self.clone()))
+            .add_service(HealthCheckServer::new(self))
             .serve(socket_addr);
 
         // Server has started

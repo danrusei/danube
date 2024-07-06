@@ -8,6 +8,8 @@ pub(crate) struct Producer {
     pub(crate) producer_name: String,
     pub(crate) topic_name: String,
     pub(crate) access_mode: i32, // should be ProducerAccessMode
+    // status = true -> producer OK, status = false -> Close the producer
+    pub(crate) status: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +33,7 @@ impl Producer {
             producer_name,
             topic_name,
             access_mode,
+            status: true,
         }
     }
     // publish message to topic

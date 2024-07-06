@@ -11,6 +11,8 @@ pub(crate) struct Consumer {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be SubscriptionType,
     pub(crate) tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
+    // status = true -> consumer OK, status = false -> Close the consumer
+    pub(crate) status: bool,
 }
 
 impl Consumer {
@@ -28,6 +30,7 @@ impl Consumer {
             subscription_name: subscription_name.into(),
             subscription_type,
             tx: None,
+            status: true,
         }
     }
 
@@ -53,6 +56,10 @@ impl Consumer {
 
     pub(crate) fn set_tx(&mut self, tx: tokio::sync::mpsc::Sender<Vec<u8>>) -> () {
         self.tx = Some(tx);
+    }
+
+    pub(crate) fn get_status(&self) -> bool {
+        return self.status;
     }
 
     // Close the consumer if: a. the connection is dropped
