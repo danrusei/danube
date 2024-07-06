@@ -220,7 +220,7 @@ impl BrokerService {
 
     // deletes the topic
     pub(crate) async fn delete_topic(&mut self, topic_name: &str) -> Result<Topic> {
-        let topic = match self.topics.get(topic_name) {
+        let topic = match self.topics.get_mut(topic_name) {
             Some(topic) => topic,
             None => {
                 return Err(anyhow!(
@@ -232,7 +232,9 @@ impl BrokerService {
         };
 
         // disconnect all the producers/consumers associated to the topic
-        let (producers, consumers) = topic.close()?;
+        let (producers, consumers) = topic.close().await?;
+
+        //maybe wait here for producers / consumers to disconnect
 
         for producer_id in producers {
             self.producer_index.remove(&producer_id);

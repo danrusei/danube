@@ -24,6 +24,16 @@ impl Dispatcher {
             }
         }
     }
+    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.disconnect_all_consumers().await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.disconnect_all_consumers().await?)
+            }
+        }
+    }
     pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.add_consumer(consumer).await?),

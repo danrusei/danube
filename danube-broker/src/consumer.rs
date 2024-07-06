@@ -83,8 +83,10 @@ impl Consumer {
         todo!()
     }
 
-    pub(crate) fn disconnect(&self) -> Result<()> {
-        // close the consumer connection
-        todo!()
+    // closes the consumer from server-side and inform the client through health_check mechanism
+    // to disconnect consumer
+    pub(crate) fn disconnect(&mut self) -> u64 {
+        self.status = false;
+        self.consumer_id
     }
 }

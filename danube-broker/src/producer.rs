@@ -51,6 +51,13 @@ impl Producer {
         Ok(())
     }
 
+    // closes the producer from server-side and inform the client through health_check mechanism
+    // to disconnect producer
+    pub(crate) fn disconnect(&mut self) -> u64 {
+        self.status = false;
+        self.producer_id
+    }
+
     #[allow(dead_code)]
     pub(crate) fn get_id(&self) -> u64 {
         self.producer_id

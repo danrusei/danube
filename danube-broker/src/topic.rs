@@ -29,7 +29,7 @@ pub(crate) struct Topic {
     pub(crate) topic_name: String,
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
-    // subscription_id -> Subscription
+    // subscription_name -> Subscription
     pub(crate) subscriptions: HashMap<String, Subscription>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
@@ -49,11 +49,23 @@ impl Topic {
     }
 
     // Close this topic - disconnect all producers and subscriptions associated with this topic
-    pub(crate) fn close(&self) -> Result<(Vec<u64>, Vec<u64>)> {
-        // TODO! disconnect all the topic producers
+    pub(crate) async fn close(&mut self) -> Result<(Vec<u64>, Vec<u64>)> {
+        let mut disconnected_producers = Vec::new();
+        let mut disconnected_consumers = Vec::new();
 
-        // TODO! close all the topic subscriptions
-        todo!()
+        // Disconnect all the topic producers
+        for (_, producer) in self.producers.iter_mut() {
+            let producer_id = producer.disconnect();
+            disconnected_producers.push(producer_id);
+        }
+
+        // Disconnect all the topic subscriptions
+        for (_, subscription) in self.subscriptions.iter_mut() {
+            let mut consumers = subscription.disconnect().await?;
+            disconnected_consumers.append(&mut consumers);
+        }
+
+        Ok((disconnected_producers, disconnected_consumers))
     }
 
     // Publishes the message to the topic, and send to active consumers
