@@ -23,10 +23,13 @@ The danube-cli is a command-line interface designed for interacting with and man
 
 - **danube-cli namespaces topics** *NAMESPACE* - ❌
   - Get the list of topics of a namespace
+
 - **danube-cli namespaces policies** *NAMESPACE* - ❌
   - Get the configuration policies of a namespace
+
 - **danube-cli namespaces create** *NAMESPACE* - ❌
   - Create a new namespace
+
 - **danube-cli namespaces delete** *NAMESPACE* - ❌
   - Deletes a namespace. The namespace needs to be empty
 
@@ -34,15 +37,21 @@ The danube-cli is a command-line interface designed for interacting with and man
 
 - **danube-cli topics list** *NAMESPACE* - ❌
   - Get the list of topics of a namespace
+
 - **danube-cli topics create** *TOPIC* - ❌
   - Creates a non-partitioned topic
+
 - **danube-cli topics create-partitioned-topic** *TOPIC* - ❌
   - Create a partitioned topic (--partitions #)
+
 - **danube-cli topics delete** *TOPIC* - ❌
   - Delete the topic
+
 - **danube-cli topics unsubscribe** --subscription *SUBSCRIPTION* *TOPIC* - ❌
   - Delete a subscribtion from a topic
+
 - **danube-cli topics subscriptions** *TOPIC* - ❌
   - Get the list of subscriptions on the topic
+  
 - **danube-cli topics create-subscription** --subscription *SUBSCRIPTION* *TOPIC* - ❌
   - Create a new subscription for the topic
