@@ -15,26 +15,31 @@ pub(crate) enum NamespacesCommands {
     Delete { namespace: String },
 }
 
+#[allow(unreachable_code)]
 pub async fn handle_command(namespaces: Namespaces) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = NamespaceAdminClient::connect("http://[::1]:50051").await?;
+    let client = NamespaceAdminClient::connect("http://[::1]:50051").await?;
 
     match namespaces.command {
         NamespacesCommands::Topics { namespace } => {
+            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.get_namespace_topics(request).await?;
             println!("Topics: {:?}", response.into_inner().topics);
         }
         NamespacesCommands::Policies { namespace } => {
+            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.get_namespace_policies(request).await?;
             println!("Policies: {:?}", response.into_inner().policies);
         }
         NamespacesCommands::Create { namespace } => {
+            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.create_namespace(request).await?;
             println!("Namespace Created: {:?}", response.into_inner().success);
         }
         NamespacesCommands::Delete { namespace } => {
+            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.delete_namespace(request).await?;
             println!("Namespace Deleted: {:?}", response.into_inner().success);

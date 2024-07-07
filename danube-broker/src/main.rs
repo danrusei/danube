@@ -1,3 +1,4 @@
+mod admin;
 mod broker_server;
 mod broker_service;
 mod consumer;
@@ -34,6 +35,10 @@ use tracing_subscriber;
 
 pub(crate) mod proto {
     include!("proto/danube.rs");
+}
+
+pub(crate) mod admin_proto {
+    include!("proto/danube_admin.rs");
 }
 
 #[derive(Parser, Debug)]

@@ -41,21 +41,25 @@ pub(crate) enum TopicsCommands {
     },
 }
 
+#[allow(unreachable_code)]
 pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = TopicAdminClient::connect("http://[::1]:50051").await?;
+    let client = TopicAdminClient::connect("http://[::1]:50051").await?;
 
     match topics.command {
         TopicsCommands::List { namespace } => {
+            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.list_topics(request).await?;
             println!("Topics: {:?}", response.into_inner().topics);
         }
         TopicsCommands::Create { topic } => {
+            todo!();
             let request = TopicRequest { name: topic };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
         }
         TopicsCommands::CreatePartitionedTopic { topic, partitions } => {
+            todo!();
             let request = PartitionedTopicRequest {
                 name: topic,
                 partitions,
@@ -67,6 +71,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             );
         }
         TopicsCommands::Delete { topic } => {
+            todo!();
             let request = TopicRequest { name: topic };
             let response = client.delete_topic(request).await?;
             println!("Topic Deleted: {:?}", response.into_inner().success);
@@ -75,6 +80,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             topic,
             subscription,
         } => {
+            todo!();
             let request = SubscriptionRequest {
                 topic,
                 subscription,
@@ -83,6 +89,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             println!("Unsubscribed: {:?}", response.into_inner().success);
         }
         TopicsCommands::Subscriptions { topic } => {
+            todo!();
             let request = TopicRequest { name: topic };
             let response = client.list_subscriptions(request).await?;
             println!("Subscriptions: {:?}", response.into_inner().subscriptions);
@@ -91,6 +98,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             subscription,
             topic,
         } => {
+            todo!();
             let request = SubscriptionRequest {
                 topic,
                 subscription,
