@@ -1,3 +1,4 @@
+mod admin;
 mod broker_server;
 mod broker_service;
 mod consumer;
@@ -36,6 +37,10 @@ pub(crate) mod proto {
     include!("proto/danube.rs");
 }
 
+pub(crate) mod admin_proto {
+    include!("proto/danube_admin.rs");
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -50,6 +55,10 @@ struct Args {
     /// Danube Broker advertised address
     #[arg(short = 'b', long, default_value = "[::1]:6650")]
     broker_addr: String,
+
+    /// Danube Admin address
+    #[arg(short = 'a', long, default_value = "[::1]:5000")]
+    admin_addr: String,
 
     /// Metadata store address
     #[arg(short = 'm', long)]
@@ -72,6 +81,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
+    let admin_addr: std::net::SocketAddr = args.admin_addr.parse()?;
 
     // configuration settings for a Danube broker service
     // includes various parameters that control the behavior and performance of the broker
@@ -79,6 +89,7 @@ async fn main() -> Result<()> {
     let service_config = ServiceConfiguration {
         cluster_name: args.cluster_name,
         broker_addr: broker_addr,
+        admin_addr: admin_addr,
         meta_store_addr: args.meta_store_addr,
         bootstrap_namespaces: args.namespaces,
     };

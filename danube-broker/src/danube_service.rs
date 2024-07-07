@@ -20,6 +20,7 @@ use tokio::time::{self, sleep, Duration};
 use tracing::{error, info, trace, warn};
 
 use crate::{
+    admin::DanubeAdminImpl,
     broker_server,
     broker_service::BrokerService,
     metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
@@ -242,8 +243,28 @@ impl DanubeService {
                 .await;
         }
 
+        // Start the Danube Admin GRPC server
+        //==========================================================================
+
+        let admin_server = DanubeAdminImpl::new(self.service_config.admin_addr);
+
+        let admin_handle: tokio::task::JoinHandle<()> = admin_server.start().await;
+
+        info!(" Started the Danube Admin GRPC server");
+
         // Wait for the server task to complete
-        server_handle.await?;
+        // Await both tasks concurrently
+        let (result_server, result_admin) = tokio::join!(server_handle, admin_handle);
+
+        // Handle the results
+        if let Err(e) = result_server {
+            eprintln!("Broker Server failed: {:?}", e);
+        }
+
+        if let Err(e) = result_admin {
+            eprintln!("Danube Admin failed: {:?}", e);
+        }
+        //server_handle.await?;
 
         //TODO! evalueate other backgroud services like PublishRateLimiter, DispatchRateLimiter,
         // compaction, innactivity monitor
