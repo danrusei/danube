@@ -5,11 +5,14 @@ unsafe_code = "forbid"
 [workspace]
 resolver = "2"
 members = [
-    # -- Danube stream core services
+    # -- Danube pub/sub core services
     "danube-broker",
 
     # -- Danube lib client
-    "danube-client", 
+    "danube-client",
+
+    # -- Danube cli (admin)
+    "danube-cli",
 ]
 
 [workspace.dependencies]

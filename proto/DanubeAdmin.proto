@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package danube_admin;
+
+service BrokerAdmin {
+  // Broker related RPCs
+  rpc ListBrokers(Empty) returns (BrokerListResponse);
+  rpc GetLeaderBroker(Empty) returns (BrokerResponse);
+  rpc ListNamespaces(Empty) returns (NamespaceListResponse);
+  
+}
+
+service NamespaceAdmin {
+  // Namespace related RPCs
+  rpc GetNamespaceTopics(NamespaceRequest) returns (TopicListResponse);
+  rpc GetNamespacePolicies(NamespaceRequest) returns (PolicyResponse);
+  rpc CreateNamespace(NamespaceRequest) returns (NamespaceResponse);
+  rpc DeleteNamespace(NamespaceRequest) returns (NamespaceResponse);
+}
+
+service TopicAdmin {
+  // Topic related RPCs
+  rpc ListTopics(NamespaceRequest) returns (TopicListResponse);
+  rpc CreateTopic(TopicRequest) returns (TopicResponse);
+  rpc CreatePartitionedTopic(PartitionedTopicRequest) returns (TopicResponse);
+  rpc DeleteTopic(TopicRequest) returns (TopicResponse);
+  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
+  rpc ListSubscriptions(TopicRequest) returns (SubscriptionListResponse);
+  rpc CreateSubscription(SubscriptionRequest) returns (SubscriptionResponse);
+}
+
+// Common Messages
+message Empty {}
+
+message NamespaceRequest {
+  string name = 1;
+}
+
+message NamespaceResponse {
+  bool success = 1;
+}
+
+message TopicRequest {
+  string name = 1;
+}
+
+message TopicResponse {
+  bool success = 1;
+}
+
+message PartitionedTopicRequest {
+  string name = 1;
+  int32 partitions = 2;
+}
+
+message SubscriptionRequest {
+  string topic = 1;
+  string subscription = 2;
+}
+
+message SubscriptionResponse {
+  bool success = 1;
+}
+
+// Response Messages
+message BrokerListResponse {
+  repeated string brokers = 1;
+}
+
+message BrokerResponse {
+  string leader = 1;
+}
+
+message NamespaceListResponse {
+  repeated string namespaces = 1;
+}
+
+message TopicListResponse {
+  repeated string topics = 1;
+}
+
+message PolicyResponse {
+  string policies = 1;
+}
+
+message SubscriptionListResponse {
+  repeated string subscriptions = 1;
+}
