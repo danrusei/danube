@@ -32,13 +32,6 @@ impl ClusterResources {
         Ok(())
     }
 
-    // pub(crate) async fn register(&mut self, broker_id: &str, broker_addr: &str) -> Result<()> {
-    //     let path = join_path(&[BASE_REGISTER_PATH, broker_id]);
-    //     let data = serde_json::Value::String(broker_addr.to_string());
-    //     self.create(&path, data).await?;
-    //     Ok(())
-    // }
-
     pub(crate) async fn new_unassigned_topic(&mut self, topic_name: &str) -> Result<()> {
         let path = join_path(&[BASE_UNASSIGNED_PATH, topic_name]);
         self.create(&path, serde_json::Value::Null).await?;
@@ -65,6 +58,10 @@ impl ClusterResources {
         None
     }
 
+    pub(crate) fn get_brokers(&self) -> Vec<String> {
+        todo!()
+    }
+
     pub(crate) fn get_broker_addr(&self, broker_id: &str) -> Option<String> {
         let path = join_path(&[BASE_REGISTER_PATH, broker_id]);
         let value = self.local_cache.get(&path);
@@ -76,5 +73,9 @@ impl ClusterResources {
             }
         }
         None
+    }
+
+    pub(crate) fn get_broker_info(&self, broker_id: &str) -> Option<(String, String, String)> {
+        todo!()
     }
 }

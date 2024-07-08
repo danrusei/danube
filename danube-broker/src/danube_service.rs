@@ -246,7 +246,8 @@ impl DanubeService {
         // Start the Danube Admin GRPC server
         //==========================================================================
 
-        let admin_server = DanubeAdminImpl::new(self.service_config.admin_addr);
+        let admin_server =
+            DanubeAdminImpl::new(self.service_config.admin_addr, self.resources.clone());
 
         let admin_handle: tokio::task::JoinHandle<()> = admin_server.start().await;
 

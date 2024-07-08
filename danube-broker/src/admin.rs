@@ -2,9 +2,12 @@ mod brokers_admin;
 mod namespace_admin;
 mod topics_admin;
 
-use crate::admin_proto::{
-    broker_admin_server::BrokerAdminServer, namespace_admin_server::NamespaceAdminServer,
-    topic_admin_server::TopicAdminServer,
+use crate::{
+    admin_proto::{
+        broker_admin_server::BrokerAdminServer, namespace_admin_server::NamespaceAdminServer,
+        topic_admin_server::TopicAdminServer,
+    },
+    resources::Resources,
 };
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
@@ -14,11 +17,15 @@ use tracing::{info, warn};
 #[derive(Debug, Clone)]
 pub(crate) struct DanubeAdminImpl {
     admin_addr: SocketAddr,
+    resources: Resources,
 }
 
 impl DanubeAdminImpl {
-    pub(crate) fn new(admin_addr: SocketAddr) -> Self {
-        DanubeAdminImpl { admin_addr }
+    pub(crate) fn new(admin_addr: SocketAddr, resources: Resources) -> Self {
+        DanubeAdminImpl {
+            admin_addr,
+            resources,
+        }
     }
     pub(crate) async fn start(self) -> JoinHandle<()> {
         let socket_addr = self.admin_addr.clone();

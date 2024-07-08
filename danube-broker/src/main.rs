@@ -57,7 +57,7 @@ struct Args {
     broker_addr: String,
 
     /// Danube Admin address
-    #[arg(short = 'a', long, default_value = "[::1]:5000")]
+    #[arg(short = 'a', long, default_value = "[::1]:50051")]
     admin_addr: String,
 
     /// Metadata store address

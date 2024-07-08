@@ -53,8 +53,18 @@ pub struct SubscriptionResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BrokerListResponse {
-    #[prost(string, repeated, tag = "1")]
-    pub brokers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "1")]
+    pub brokers: ::prost::alloc::vec::Vec<BrokerInfo>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BrokerInfo {
+    #[prost(string, tag = "1")]
+    pub broker_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub broker_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub broker_role: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
