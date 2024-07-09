@@ -361,24 +361,18 @@ impl DanubeService {
     }
 }
 
-async fn create_namespace_if_absent(
-    resources: &mut Resources,
-    _namespace_name: &str,
-) -> Result<()> {
-    if !resources
-        .namespace
-        .namespace_exist(DEFAULT_NAMESPACE)
-        .await?
-    {
+async fn create_namespace_if_absent(resources: &mut Resources, namespace_name: &str) -> Result<()> {
+    if !resources.namespace.namespace_exist(namespace_name).await? {
         let policies = Policies::new();
         resources
             .namespace
-            .create_policies(DEFAULT_NAMESPACE, policies)
+            .create_policies(namespace_name, policies)
             .await?;
     } else {
-        info!("Namespace {} already exists.", DEFAULT_NAMESPACE);
+        info!("Namespace {} already exists.", namespace_name);
         // ensure that the policies are in place for the Default Namespace
-        let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE)?;
+        // wrong line below as the local cache have not yet loaded all the info
+        //let _policies = resources.namespace.get_policies(DEFAULT_NAMESPACE)?;
     }
     Ok(())
 }
