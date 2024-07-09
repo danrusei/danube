@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH},
+    resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH, LEADER_ELECTION_PATH},
     utils::join_path,
     LocalCache,
 };
@@ -58,8 +58,24 @@ impl ClusterResources {
         None
     }
 
-    pub(crate) fn get_brokers(&self) -> Vec<String> {
-        todo!()
+    // get the broker_id for all registered brokers
+    pub(crate) async fn get_brokers(&self) -> Vec<String> {
+        let paths = self
+            .local_cache
+            .get_keys_with_prefix(&BASE_REGISTER_PATH)
+            .await;
+
+        let mut broker_ids = Vec::new();
+
+        for path in paths {
+            let parts: Vec<&str> = path.split('/').collect();
+
+            if let Some(broker_id) = parts.get(3) {
+                broker_ids.push(broker_id.to_string());
+            }
+        }
+
+        broker_ids
     }
 
     pub(crate) fn get_broker_addr(&self, broker_id: &str) -> Option<String> {
@@ -75,7 +91,30 @@ impl ClusterResources {
         None
     }
 
+    pub(crate) fn get_cluster_leader(&self) -> Option<String> {
+        let value = self.local_cache.get(LEADER_ELECTION_PATH);
+        if let Some(value) = value {
+            match value {
+                Value::String(broker_addr) => return Some(broker_addr),
+
+                _ => return None,
+            }
+        }
+        None
+    }
+
     pub(crate) fn get_broker_info(&self, broker_id: &str) -> Option<(String, String, String)> {
-        todo!()
+        let broker_addr = self.get_broker_addr(broker_id);
+        let mut cluster_leader = "None".to_string();
+
+        if let Some(leader) = self.get_cluster_leader() {
+            if leader == broker_id {
+                cluster_leader = "Cluster_Leader".to_string();
+            } else {
+                cluster_leader = "Cluster_Follower".to_string();
+            }
+        };
+
+        Some((broker_id.to_string(), broker_addr.unwrap(), cluster_leader))
     }
 }

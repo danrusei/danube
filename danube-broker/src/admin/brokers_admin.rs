@@ -12,15 +12,13 @@ impl BrokerAdmin for DanubeAdminImpl {
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn list_brokers(
         &self,
-        request: Request<Empty>,
+        _request: Request<Empty>,
     ) -> std::result::Result<Response<BrokerListResponse>, tonic::Status> {
-        let req = request.into_inner();
-
         trace!("Admin: list brokers command");
 
         let mut brokers_info = Vec::new();
 
-        let brokers = self.resources.cluster.get_brokers();
+        let brokers = self.resources.cluster.get_brokers().await;
 
         for broker_id in brokers {
             if let Some((broker_id, broker_addr, broker_role)) =
