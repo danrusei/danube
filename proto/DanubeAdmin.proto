@@ -64,7 +64,13 @@ message SubscriptionResponse {
 
 // Response Messages
 message BrokerListResponse {
-  repeated string brokers = 1;
+  repeated BrokerInfo brokers = 1;
+}
+
+message BrokerInfo {
+  string broker_id = 1;
+  string broker_addr = 2;
+  string broker_role = 3;
 }
 
 message BrokerResponse {

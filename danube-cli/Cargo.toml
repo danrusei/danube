@@ -9,6 +9,7 @@ tonic = { workspace = true }
 tonic-types = { workspace = true }
 prost = { workspace = true }
 tokio = { workspace = true }
+prettytable-rs = "0.10.0"
 
 [lints]
 workspace = true

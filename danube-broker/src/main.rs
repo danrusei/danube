@@ -23,7 +23,7 @@ use crate::{
     broker_service::BrokerService,
     danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
     metadata_store::{EtcdMetadataStore, MetadataStorage, MetadataStoreConfig},
-    resources::{Resources, LEADER_SELECTION_PATH},
+    resources::{Resources, LEADER_ELECTION_PATH},
     service_configuration::ServiceConfiguration,
 };
 
@@ -57,7 +57,7 @@ struct Args {
     broker_addr: String,
 
     /// Danube Admin address
-    #[arg(short = 'a', long, default_value = "[::1]:5000")]
+    #[arg(short = 'a', long, default_value = "[::1]:50051")]
     admin_addr: String,
 
     /// Metadata store address
@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
     // the service selects one broker per cluster to be the leader to coordinate and take assignment decision.
     let leader_election_service = LeaderElection::new(
         metadata_store.clone(),
-        LEADER_SELECTION_PATH,
+        LEADER_ELECTION_PATH,
         broker_service.broker_id,
     );
 

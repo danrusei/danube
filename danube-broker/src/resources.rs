@@ -27,7 +27,7 @@ pub(crate) static BASE_BROKER_LOAD_PATH: &str = "/cluster/load";
 pub(crate) static LOADBALANCE_DECISION_PATH: &str = "/cluster/load_balance";
 
 // Cluster Leader broker_id, posted by Leader Election Service
-pub(crate) static LEADER_SELECTION_PATH: &str = "/cluster/leader";
+pub(crate) static LEADER_ELECTION_PATH: &str = "/cluster/leader";
 
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 //
