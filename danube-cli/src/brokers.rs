@@ -16,7 +16,6 @@ pub(crate) enum BrokersCommands {
     Namespaces,
 }
 
-#[allow(unreachable_code)]
 pub async fn handle_command(brokers: Brokers) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = BrokerAdminClient::connect("http://[::1]:50051").await?;
 
@@ -47,14 +46,15 @@ pub async fn handle_command(brokers: Brokers) -> Result<(), Box<dyn std::error::
             table.printstd();
         }
         BrokersCommands::LeaderBroker => {
-            todo!();
             let response = client.get_leader_broker(Empty {}).await?;
             println!("Leader Broker: {:?}", response.into_inner().leader);
         }
         BrokersCommands::Namespaces => {
-            todo!();
             let response = client.list_namespaces(Empty {}).await?;
-            println!("Namespaces: {:?}", response.into_inner().namespaces);
+            let namespaces = response.into_inner().namespaces;
+            for namespace in namespaces {
+                println!("Namespace: {}", namespace);
+            }
         }
     }
 

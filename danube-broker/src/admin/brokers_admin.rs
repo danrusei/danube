@@ -45,7 +45,16 @@ impl BrokerAdmin for DanubeAdminImpl {
         &self,
         _request: Request<Empty>,
     ) -> std::result::Result<Response<BrokerResponse>, tonic::Status> {
-        todo!()
+        trace!("Admin: get leader broker command");
+
+        let leader = if let Some(lead) = self.resources.cluster.get_cluster_leader() {
+            lead.to_string()
+        } else {
+            "not_found".to_string()
+        };
+
+        let response = BrokerResponse { leader };
+        Ok(tonic::Response::new(response))
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
@@ -53,6 +62,11 @@ impl BrokerAdmin for DanubeAdminImpl {
         &self,
         _request: Request<Empty>,
     ) -> std::result::Result<Response<NamespaceListResponse>, tonic::Status> {
-        todo!()
+        trace!("Admin: get cluster namespaces command");
+
+        let namespaces = self.resources.cluster.get_namespaces().await;
+
+        let response = NamespaceListResponse { namespaces };
+        Ok(tonic::Response::new(response))
     }
 }

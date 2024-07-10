@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH, LEADER_ELECTION_PATH},
+    resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH, BASE_NAMESPACES_PATH, LEADER_ELECTION_PATH},
     utils::join_path,
     LocalCache,
 };
@@ -65,8 +65,6 @@ impl ClusterResources {
             .get_keys_with_prefix(&BASE_REGISTER_PATH)
             .await;
 
-        dbg!(&paths);
-
         let mut broker_ids = Vec::new();
 
         for path in paths {
@@ -112,5 +110,25 @@ impl ClusterResources {
         };
 
         Some((broker_id.to_string(), broker_addr, cluster_leader))
+    }
+
+    // get the cluster namespaces
+    pub(crate) async fn get_namespaces(&self) -> Vec<String> {
+        let paths = self
+            .local_cache
+            .get_keys_with_prefix(&BASE_NAMESPACES_PATH)
+            .await;
+
+        let mut namespaces = Vec::new();
+
+        for path in paths {
+            let parts: Vec<&str> = path.split('/').collect();
+
+            if let Some(namespace) = parts.get(2) {
+                namespaces.push(namespace.to_string());
+            }
+        }
+
+        namespaces
     }
 }
