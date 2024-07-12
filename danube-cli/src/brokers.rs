@@ -20,6 +20,7 @@ pub async fn handle_command(brokers: Brokers) -> Result<(), Box<dyn std::error::
     let mut client = BrokerAdminClient::connect("http://[::1]:50051").await?;
 
     match brokers.command {
+        // List active brokers of the cluster
         BrokersCommands::List => {
             let response = client.list_brokers(Empty {}).await?;
             let brokers = response.into_inner().brokers;
@@ -45,10 +46,12 @@ pub async fn handle_command(brokers: Brokers) -> Result<(), Box<dyn std::error::
             // Print the table
             table.printstd();
         }
+        // Get the information of the leader broker
         BrokersCommands::LeaderBroker => {
             let response = client.get_leader_broker(Empty {}).await?;
             println!("Leader Broker: {:?}", response.into_inner().leader);
         }
+        // List namespaces part of the cluster
         BrokersCommands::Namespaces => {
             let response = client.list_namespaces(Empty {}).await?;
             let namespaces = response.into_inner().namespaces;
