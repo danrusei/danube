@@ -77,4 +77,23 @@ impl NamespaceResources {
 
         Ok(())
     }
+
+    pub(crate) async fn get_topics_for_namespace(&self, ns_name: &str) -> Vec<String> {
+        let path = join_path(&[BASE_NAMESPACES_PATH, ns_name]);
+
+        let keys = self.local_cache.get_keys_with_prefix(&path).await;
+
+        let mut topics = Vec::new();
+
+        for key in keys {
+            let parts: Vec<&str> = key.split('/').collect();
+
+            if let (Some(namespace), Some(topic)) = (parts.get(4), parts.get(5)) {
+                let topic_name = join_path(&[namespace, topic]);
+                topics.push(topic_name);
+            }
+        }
+
+        topics
+    }
 }
