@@ -1,5 +1,6 @@
 mod brokers;
 mod namespaces;
+mod shared;
 mod topics;
 
 use brokers::Brokers;

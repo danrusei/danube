@@ -29,6 +29,39 @@ impl NamespaceResources {
         Ok(true)
     }
 
+    pub(crate) async fn create_namespace(
+        &mut self,
+        ns_name: &str,
+        policies: Option<Policies>,
+    ) -> Result<()> {
+        let pol = policies.unwrap_or_else(|| Policies::new());
+        self.create_policies(ns_name, pol).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn delete_namespace(&mut self, ns_name: &str) -> Result<()> {
+        let exist = self.namespace_exist(ns_name).await?;
+
+        match exist {
+            true => {
+                // check if empty
+                let topics = self.get_topics_for_namespace(ns_name).await;
+
+                if !topics.is_empty() {
+                    return Err(anyhow!("Can't delete and non empty namespace: {}", ns_name));
+                }
+            }
+            false => return Err(anyhow!("Namespace {} does not exists.", ns_name)),
+        }
+
+        let path = join_path(&[BASE_NAMESPACES_PATH, ns_name, "policy"]);
+
+        self.delete(&path).await?;
+
+        Ok(())
+    }
+
     pub(crate) async fn create_policies(
         &mut self,
         namespace_name: &str,
@@ -59,6 +92,11 @@ impl NamespaceResources {
         Ok(())
     }
 
+    pub(crate) async fn delete(&mut self, path: &str) -> Result<()> {
+        let _prev_value = self.store.delete(path).await?;
+        Ok(())
+    }
+
     pub(crate) fn check_if_topic_exist(&self, ns_name: &str, topic_name: &str) -> bool {
         let path = join_path(&[BASE_NAMESPACES_PATH, ns_name, "topics", topic_name]);
 
@@ -76,5 +114,24 @@ impl NamespaceResources {
         self.create(&path, serde_json::Value::Null).await?;
 
         Ok(())
+    }
+
+    pub(crate) async fn get_topics_for_namespace(&self, ns_name: &str) -> Vec<String> {
+        let path = join_path(&[BASE_NAMESPACES_PATH, ns_name]);
+
+        let keys = self.local_cache.get_keys_with_prefix(&path).await;
+
+        let mut topics = Vec::new();
+
+        for key in keys {
+            let parts: Vec<&str> = key.split('/').collect();
+
+            if let (Some(namespace), Some(topic)) = (parts.get(4), parts.get(5)) {
+                let topic_name = join_path(&[namespace, topic]);
+                topics.push(topic_name);
+            }
+        }
+
+        topics
     }
 }

@@ -7,23 +7,30 @@ use crate::{
         broker_admin_server::BrokerAdminServer, namespace_admin_server::NamespaceAdminServer,
         topic_admin_server::TopicAdminServer,
     },
+    broker_service::BrokerService,
     resources::Resources,
 };
-use std::net::SocketAddr;
-use tokio::task::JoinHandle;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{sync::Mutex, task::JoinHandle};
 use tonic::transport::Server;
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
 pub(crate) struct DanubeAdminImpl {
     admin_addr: SocketAddr,
+    broker_service: Arc<Mutex<BrokerService>>,
     resources: Resources,
 }
 
 impl DanubeAdminImpl {
-    pub(crate) fn new(admin_addr: SocketAddr, resources: Resources) -> Self {
+    pub(crate) fn new(
+        admin_addr: SocketAddr,
+        broker_service: Arc<Mutex<BrokerService>>,
+        resources: Resources,
+    ) -> Self {
         DanubeAdminImpl {
             admin_addr,
+            broker_service,
             resources,
         }
     }
