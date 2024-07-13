@@ -3,10 +3,8 @@ use crate::admin_proto::{
     namespace_admin_server::NamespaceAdmin, NamespaceRequest, NamespaceResponse, PolicyResponse,
     TopicListResponse,
 };
-use crate::danube_service::create_namespace_if_absent;
-use crate::policies::Policies;
 
-use tonic::{Request, Response};
+use tonic::{Request, Response, Status};
 use tracing::{trace, Level};
 
 #[tonic::async_trait]
@@ -47,13 +45,20 @@ impl NamespaceAdmin for DanubeAdminImpl {
                     req.name,
                     err
                 );
-                Policies::new()
+                let status = Status::not_found(format!(
+                    "Unable to retrieve polices for the namespace {} due to {}",
+                    req.name, err
+                ));
+                return Err(status);
             }
         };
 
         let serialized = match serde_json::to_string(&policies) {
             Ok(serialized) => serialized,
-            Err(err) => format!("Unable to serialize the policies: {}", err),
+            Err(err) => {
+                let status = Status::internal(format!("Unable to serialize the policies: {}", err));
+                return Err(status);
+            }
         };
 
         let response = PolicyResponse {
@@ -70,14 +75,18 @@ impl NamespaceAdmin for DanubeAdminImpl {
         trace!("Admin: create a new namespace");
 
         let req = request.into_inner();
-        let mut success = false;
-
         let mut service = self.broker_service.lock().await;
 
-        match service.create_namespace_if_absent(&req.name).await {
-            Ok(()) => (success = true),
-            Err(_) => (),
-        }
+        let success = match service.create_namespace_if_absent(&req.name).await {
+            Ok(()) => true,
+            Err(err) => {
+                let status = Status::not_found(format!(
+                    "Unable to create the namespace {} due to {}",
+                    req.name, err
+                ));
+                return Err(status);
+            }
+        };
 
         let response = NamespaceResponse { success };
         Ok(tonic::Response::new(response))
@@ -91,14 +100,18 @@ impl NamespaceAdmin for DanubeAdminImpl {
         trace!("Admin: delete the namespace");
 
         let req = request.into_inner();
-        let mut success = false;
-
         let mut service = self.broker_service.lock().await;
 
-        match service.delete_namespace(&req.name).await {
-            Ok(()) => (success = true),
-            Err(_) => (),
-        }
+        let success = match service.delete_namespace(&req.name).await {
+            Ok(()) => true,
+            Err(err) => {
+                let status = Status::not_found(format!(
+                    "Unable to delete the namespace {} due to {}",
+                    req.name, err
+                ));
+                return Err(status);
+            }
+        };
 
         let response = NamespaceResponse { success };
         Ok(tonic::Response::new(response))

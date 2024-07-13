@@ -17,7 +17,6 @@ pub(crate) enum NamespacesCommands {
     Delete { namespace: String },
 }
 
-#[allow(unreachable_code)]
 pub async fn handle_command(namespaces: Namespaces) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = NamespaceAdminClient::connect("http://[::1]:50051").await?;
 
@@ -48,18 +47,13 @@ pub async fn handle_command(namespaces: Namespaces) -> Result<(), Box<dyn std::e
 
         // Create a new namespace
         NamespacesCommands::Create { namespace } => {
-            let _namespace = namespace;
-            // to implement
-            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.create_namespace(request).await?;
             println!("Namespace Created: {:?}", response.into_inner().success);
         }
+
         // Deletes a namespace. The namespace needs to be empty
         NamespacesCommands::Delete { namespace } => {
-            let _namespace = namespace;
-            // to implement
-            todo!();
             let request = NamespaceRequest { name: namespace };
             let response = client.delete_namespace(request).await?;
             println!("Namespace Deleted: {:?}", response.into_inner().success);

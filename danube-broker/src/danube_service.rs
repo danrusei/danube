@@ -25,7 +25,6 @@ use crate::{
     broker_service::BrokerService,
     metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
     namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
-    policies::Policies,
     resources::{Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH},
     service_configuration::ServiceConfiguration,
     topic::SYSTEM_TOPIC,
@@ -371,10 +370,9 @@ pub(crate) async fn create_namespace_if_absent(
     namespace_name: &str,
 ) -> Result<()> {
     if !resources.namespace.namespace_exist(namespace_name).await? {
-        let policies = Policies::new();
         resources
             .namespace
-            .create_policies(namespace_name, policies)
+            .create_namespace(namespace_name, None)
             .await?;
     } else {
         info!("Namespace {} already exists.", namespace_name);

@@ -21,16 +21,16 @@ The danube-cli is a command-line interface designed for interacting with and man
 
 ### Namespace commands
 
-- **danube-cli namespaces topics** *NAMESPACE* - ❌
+- **danube-cli namespaces topics** *NAMESPACE* - ✅
   - Get the list of topics of a namespace
 
-- **danube-cli namespaces policies** *NAMESPACE* - ❌
+- **danube-cli namespaces policies** *NAMESPACE* - ✅
   - Get the configuration policies of a namespace
 
-- **danube-cli namespaces create** *NAMESPACE* - ❌
+- **danube-cli namespaces create** *NAMESPACE* - ✅
   - Create a new namespace
 
-- **danube-cli namespaces delete** *NAMESPACE* - ❌
+- **danube-cli namespaces delete** *NAMESPACE* - ✅
   - Deletes a namespace. The namespace needs to be empty
 
 ### Topic Commands

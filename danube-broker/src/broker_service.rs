@@ -462,10 +462,9 @@ impl BrokerService {
                 return Err(anyhow!("Namespace {} already exists.", namespace_name));
             }
             Ok(false) => {
-                let policies = Policies::new();
                 self.resources
                     .namespace
-                    .create_policies(namespace_name, policies)
+                    .create_namespace(namespace_name, None)
                     .await?;
             }
             Err(err) => {
@@ -477,11 +476,10 @@ impl BrokerService {
     }
 
     // deletes only empty namespaces (with no topics)
-    pub(crate) async fn delete_namespace(&mut self, _namespace_name: &str) -> Result<()> {
-        // check if namespace exist and is empty
+    pub(crate) async fn delete_namespace(&mut self, ns_name: &str) -> Result<()> {
+        self.resources.namespace.delete_namespace(ns_name).await?;
 
-        // delete the namespace
-        todo!()
+        Ok(())
     }
 }
 
