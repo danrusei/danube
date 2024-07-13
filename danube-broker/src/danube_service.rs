@@ -246,8 +246,13 @@ impl DanubeService {
         // Start the Danube Admin GRPC server
         //==========================================================================
 
-        let admin_server =
-            DanubeAdminImpl::new(self.service_config.admin_addr, self.resources.clone());
+        let broker_service_cloned = Arc::clone(&self.broker);
+
+        let admin_server = DanubeAdminImpl::new(
+            self.service_config.admin_addr,
+            broker_service_cloned,
+            self.resources.clone(),
+        );
 
         let admin_handle: tokio::task::JoinHandle<()> = admin_server.start().await;
 
@@ -361,7 +366,10 @@ impl DanubeService {
     }
 }
 
-async fn create_namespace_if_absent(resources: &mut Resources, namespace_name: &str) -> Result<()> {
+pub(crate) async fn create_namespace_if_absent(
+    resources: &mut Resources,
+    namespace_name: &str,
+) -> Result<()> {
     if !resources.namespace.namespace_exist(namespace_name).await? {
         let policies = Policies::new();
         resources

@@ -450,6 +450,39 @@ impl BrokerService {
             return Err(anyhow!("Unable to find the topic: {}", topic_name));
         }
     }
+
+    pub(crate) async fn create_namespace_if_absent(&mut self, namespace_name: &str) -> Result<()> {
+        match self
+            .resources
+            .namespace
+            .namespace_exist(namespace_name)
+            .await
+        {
+            Ok(true) => {
+                return Err(anyhow!("Namespace {} already exists.", namespace_name));
+            }
+            Ok(false) => {
+                let policies = Policies::new();
+                self.resources
+                    .namespace
+                    .create_policies(namespace_name, policies)
+                    .await?;
+            }
+            Err(err) => {
+                return Err(anyhow!("Unable to perform operation {}", err));
+            }
+        }
+
+        Ok(())
+    }
+
+    // deletes only empty namespaces (with no topics)
+    pub(crate) async fn delete_namespace(&mut self, _namespace_name: &str) -> Result<()> {
+        // check if namespace exist and is empty
+
+        // delete the namespace
+        todo!()
+    }
 }
 
 // Topics string representation:  /{namespace}/{topic-name}

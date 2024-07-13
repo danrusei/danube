@@ -3,6 +3,7 @@ use crate::admin_proto::{
     namespace_admin_server::NamespaceAdmin, NamespaceRequest, NamespaceResponse, PolicyResponse,
     TopicListResponse,
 };
+use crate::danube_service::create_namespace_if_absent;
 use crate::policies::Policies;
 
 use tonic::{Request, Response};
@@ -64,16 +65,42 @@ impl NamespaceAdmin for DanubeAdminImpl {
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_namespace(
         &self,
-        _request: Request<NamespaceRequest>,
+        request: Request<NamespaceRequest>,
     ) -> std::result::Result<Response<NamespaceResponse>, tonic::Status> {
-        todo!()
+        trace!("Admin: create a new namespace");
+
+        let req = request.into_inner();
+        let mut success = false;
+
+        let mut service = self.broker_service.lock().await;
+
+        match service.create_namespace_if_absent(&req.name).await {
+            Ok(()) => (success = true),
+            Err(_) => (),
+        }
+
+        let response = NamespaceResponse { success };
+        Ok(tonic::Response::new(response))
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn delete_namespace(
         &self,
-        _request: Request<NamespaceRequest>,
+        request: Request<NamespaceRequest>,
     ) -> std::result::Result<Response<NamespaceResponse>, tonic::Status> {
-        todo!()
+        trace!("Admin: delete the namespace");
+
+        let req = request.into_inner();
+        let mut success = false;
+
+        let mut service = self.broker_service.lock().await;
+
+        match service.delete_namespace(&req.name).await {
+            Ok(()) => (success = true),
+            Err(_) => (),
+        }
+
+        let response = NamespaceResponse { success };
+        Ok(tonic::Response::new(response))
     }
 }
