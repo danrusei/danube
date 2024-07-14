@@ -4,25 +4,57 @@ use crate::admin_proto::{
     SubscriptionListResponse, SubscriptionRequest, SubscriptionResponse, TopicListResponse,
     TopicRequest, TopicResponse,
 };
+use crate::schema::{Schema, SchemaType};
 
-use tonic::{Request, Response};
-use tracing::Level;
+use tonic::{Request, Response, Status};
+use tracing::{trace, Level};
 
 #[tonic::async_trait]
 impl TopicAdmin for DanubeAdminImpl {
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn list_topics(
         &self,
-        _request: Request<NamespaceRequest>,
+        request: Request<NamespaceRequest>,
     ) -> std::result::Result<Response<TopicListResponse>, tonic::Status> {
-        todo!()
+        trace!("Admin: get the list of topics of a namespace");
+
+        let req = request.into_inner();
+
+        let topics = self
+            .resources
+            .namespace
+            .get_topics_for_namespace(&req.name)
+            .await;
+
+        let response = TopicListResponse { topics };
+        Ok(tonic::Response::new(response))
     }
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_topic(
         &self,
-        _request: Request<TopicRequest>,
+        request: Request<TopicRequest>,
     ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!("Admin: creates a non-partitioned topic: {}", req.name);
+
+        let mut service = self.broker_service.lock().await;
+
+        let schema = Schema::new(format!("{}_schema", req.name), SchemaType::String);
+
+        let success = match service.post_new_topic(&req.name, schema.into(), None).await {
+            Ok(()) => true,
+            Err(err) => {
+                let status = Status::not_found(format!(
+                    "Unable to create the topic {} due to {}",
+                    req.name, err
+                ));
+                return Err(status);
+            }
+        };
+
+        let response = TopicResponse { success };
+        Ok(tonic::Response::new(response))
     }
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_partitioned_topic(

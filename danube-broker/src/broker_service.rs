@@ -114,10 +114,7 @@ impl BrokerService {
             return Err(status);
         }
 
-        let status = match self
-            .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
-            .await
-        {
+        let status = match self.post_new_topic(topic_name, schema.unwrap(), None).await {
             Ok(()) => {
                 let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
                 let status = create_error_status(
@@ -149,7 +146,6 @@ impl BrokerService {
     // post the Topic resources to Metadata Store
     pub(crate) async fn post_new_topic(
         &mut self,
-        _ns_name: &str,
         topic_name: &str,
         schema: ProtoSchema,
         policies: Option<Policies>,
