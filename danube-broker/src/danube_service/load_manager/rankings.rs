@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+// Simple Load Calculation: the load is just based on the number of topics.
 pub(crate) async fn rankings_simple(
     brokers_usage: Arc<Mutex<HashMap<u64, LoadReport>>>,
 ) -> Vec<(u64, usize)> {
@@ -20,6 +21,7 @@ pub(crate) async fn rankings_simple(
     broker_loads
 }
 
+// Composite Load Calculation: the load is based on the number of topics, CPU usage, and memory usage.
 #[allow(dead_code)]
 pub(crate) async fn rankings_composite(
     brokers_usage: Arc<Mutex<HashMap<u64, LoadReport>>>,

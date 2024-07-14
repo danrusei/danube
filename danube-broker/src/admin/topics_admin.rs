@@ -56,6 +56,7 @@ impl TopicAdmin for DanubeAdminImpl {
         let response = TopicResponse { success };
         Ok(tonic::Response::new(response))
     }
+
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_partitioned_topic(
         &self,
@@ -63,12 +64,31 @@ impl TopicAdmin for DanubeAdminImpl {
     ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
         todo!()
     }
+
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn delete_topic(
         &self,
-        _request: Request<TopicRequest>,
+        request: Request<TopicRequest>,
     ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!("Admin: delete the topic: {}", req.name);
+
+        let mut service = self.broker_service.lock().await;
+
+        let success = match service.post_delete_topic(&req.name).await {
+            Ok(()) => true,
+            Err(err) => {
+                let status = Status::not_found(format!(
+                    "Unable to delete the topic {} due to {}",
+                    req.name, err
+                ));
+                return Err(status);
+            }
+        };
+
+        let response = TopicResponse { success };
+        Ok(tonic::Response::new(response))
     }
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn unsubscribe(

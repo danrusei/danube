@@ -181,6 +181,31 @@ impl BrokerService {
         Ok(())
     }
 
+    // Post topic deletion request to Metadata Store
+    pub(crate) async fn post_delete_topic(&mut self, topic_name: &str) -> Result<()> {
+        // find the broker owning the topic
+
+        let broker_id = match self
+            .resources
+            .cluster
+            .get_broker_for_topic(topic_name)
+            .await
+        {
+            Some(broker_id) => broker_id,
+            None => return Err(anyhow!("Unable to find topic")),
+        };
+
+        // remove the topic from the metadata store
+        // that will trigger the watch event on the hosting broker to proceed with the deletion
+
+        self.resources
+            .cluster
+            .schedule_topic_deletion(&broker_id, topic_name)
+            .await?;
+
+        Ok(())
+    }
+
     pub(crate) async fn create_topic(&mut self, topic_name: &str) -> Result<()> {
         // create the topic,
         let mut new_topic = Topic::new(topic_name);

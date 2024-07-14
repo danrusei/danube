@@ -28,7 +28,7 @@ Holds information about the cluster and the cluster's brokers. Mainly read and w
   * the broker register once it join the cluster, contain the broker metadata (broker id & socket addr)  
 * **/cluster/brokers/{broker-id}/{namespace}/{topic}**
   * topics served by the broker, with value ()
-  * **Load Manager** updates the path, with topic assgnemnts to brokers
+  * **Load Manager** updates the path, with topic assignments to brokers
   * **Brokers** should watch it's own path like (/cluster/brokers/1122334455) - and perform the neccesary actions on adding or removing a topic
 * **/cluster/unassigned/{namespace}/{topic}**
   * New unassigned topics created by Broker
