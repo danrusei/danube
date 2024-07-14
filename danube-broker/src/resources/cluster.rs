@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use serde_json::Value;
 
 use crate::{
@@ -26,6 +26,11 @@ impl ClusterResources {
         Ok(())
     }
 
+    pub(crate) async fn delete(&mut self, path: &str) -> Result<()> {
+        self.store.delete(path).await?;
+        Ok(())
+    }
+
     pub(crate) async fn create_cluster(&mut self, path: &str) -> Result<()> {
         let path = join_path(&[BASE_CLUSTER_PATH, path]);
         self.create(&path, serde_json::Value::Null).await?;
@@ -35,6 +40,16 @@ impl ClusterResources {
     pub(crate) async fn new_unassigned_topic(&mut self, topic_name: &str) -> Result<()> {
         let path = join_path(&[BASE_UNASSIGNED_PATH, topic_name]);
         self.create(&path, serde_json::Value::Null).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn schedule_topic_deletion(
+        &mut self,
+        broker_id: &str,
+        topic_name: &str,
+    ) -> Result<()> {
+        let path = join_path(&[BASE_BROKER_PATH, broker_id, topic_name]);
+        self.delete(&path).await?;
         Ok(())
     }
 

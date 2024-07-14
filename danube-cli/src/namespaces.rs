@@ -29,7 +29,7 @@ pub async fn handle_command(namespaces: Namespaces) -> Result<(), Box<dyn std::e
             let topics = response.into_inner().topics;
 
             for topic in topics {
-                println!("Topics: {}", topic);
+                println!("Topic: {}", topic);
             }
         }
 

@@ -114,10 +114,7 @@ impl BrokerService {
             return Err(status);
         }
 
-        let status = match self
-            .post_new_topic(ns_name, topic_name, schema.unwrap(), None)
-            .await
-        {
+        let status = match self.post_new_topic(topic_name, schema.unwrap(), None).await {
             Ok(()) => {
                 let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
                 let status = create_error_status(
@@ -149,7 +146,6 @@ impl BrokerService {
     // post the Topic resources to Metadata Store
     pub(crate) async fn post_new_topic(
         &mut self,
-        _ns_name: &str,
         topic_name: &str,
         schema: ProtoSchema,
         policies: Option<Policies>,
@@ -180,6 +176,31 @@ impl BrokerService {
         self.resources
             .topic
             .add_topic_schema(topic_name, schema.into())
+            .await?;
+
+        Ok(())
+    }
+
+    // Post topic deletion request to Metadata Store
+    pub(crate) async fn post_delete_topic(&mut self, topic_name: &str) -> Result<()> {
+        // find the broker owning the topic
+
+        let broker_id = match self
+            .resources
+            .cluster
+            .get_broker_for_topic(topic_name)
+            .await
+        {
+            Some(broker_id) => broker_id,
+            None => return Err(anyhow!("Unable to find topic")),
+        };
+
+        // remove the topic from the metadata store
+        // that will trigger the watch event on the hosting broker to proceed with the deletion
+
+        self.resources
+            .cluster
+            .schedule_topic_deletion(&broker_id, topic_name)
             .await?;
 
         Ok(())
