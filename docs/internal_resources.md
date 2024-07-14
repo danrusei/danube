@@ -68,13 +68,13 @@ Holds information about the topic policy and the associated producers / subscrip
   * holds the topic schema, the value stores the schema
 * **/topics/{namespace}/{topic}/producers/{producer_id}**
   * holds the producer config
-* **/topics/{namespace}/{topic}/subscriptions/{subscription_id}**
+* **/topics/{namespace}/{topic}/subscriptions/{subscription_name}**
   * holds the subscription config
 
 Example:
 
 * /topics/markets/trade-events/producers/1122334455 - with value Producer Metadata
-* /topics/markets/trade-events/subscriptions/5544332211 - with value Subscription Metadata
+* /topics/markets/trade-events/subscriptions/my_subscription - with value Subscription Metadata
 * /topics/markets/trade-events-part-1/policy - where */markets/trade-events-part-1* is the partitioned topic that stores partition policy
 
 ### Subscriptions Resources
@@ -86,4 +86,4 @@ Holds information about the topic subscriptions, including associated consumers
 
 Example:
 
-* /subscriptions/my_new_subscription/23232323
+* /subscriptions/my_subscription/23232323

@@ -90,6 +90,7 @@ impl TopicAdmin for DanubeAdminImpl {
         let response = TopicResponse { success };
         Ok(tonic::Response::new(response))
     }
+
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn unsubscribe(
         &self,
@@ -97,13 +98,29 @@ impl TopicAdmin for DanubeAdminImpl {
     ) -> std::result::Result<Response<SubscriptionResponse>, tonic::Status> {
         todo!()
     }
+
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn list_subscriptions(
         &self,
-        _request: Request<TopicRequest>,
+        request: Request<TopicRequest>,
     ) -> std::result::Result<Response<SubscriptionListResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!(
+            "Admin: get the list of subscriptions on the topic: {}",
+            req.name
+        );
+
+        let subscriptions = self
+            .resources
+            .topic
+            .get_subscription_for_topic(&req.name)
+            .await;
+
+        let response = SubscriptionListResponse { subscriptions };
+        Ok(tonic::Response::new(response))
     }
+
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_subscription(
         &self,

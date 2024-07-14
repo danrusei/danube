@@ -93,4 +93,23 @@ impl TopicResources {
         }
         None
     }
+
+    //return the list of subscriptions and their respective type
+    pub(crate) async fn get_subscription_for_topic(&self, topic_name: &str) -> Vec<String> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "subscriptions"]);
+
+        let mut subscriptions = Vec::new();
+
+        let paths = self.local_cache.get_keys_with_prefix(&path).await;
+
+        for path in paths {
+            let parts: Vec<&str> = path.split('/').collect();
+
+            if let Some(subscription) = parts.get(5) {
+                subscriptions.push(subscription.to_string());
+            }
+        }
+
+        subscriptions
+    }
 }

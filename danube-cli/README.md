@@ -6,7 +6,7 @@ The danube-cli is a command-line interface designed for interacting with and man
 
 ✅ - **Implemented**
 
-❌ - **Not Implemented**
+❌ - **Not Implemented Yet**
 
 ### Broker commands
 
@@ -35,22 +35,22 @@ The danube-cli is a command-line interface designed for interacting with and man
 
 ### Topic Commands
 
-- **danube-cli topics list** *NAMESPACE* - ❌
+- **danube-cli topics list** *NAMESPACE* - ✅
   - Get the list of topics of a namespace
 
-- **danube-cli topics create** *TOPIC* - ❌
+- **danube-cli topics create** *TOPIC* - ✅
   - Creates a non-partitioned topic
 
 - **danube-cli topics create-partitioned-topic** *TOPIC* - ❌
   - Create a partitioned topic (--partitions #)
 
-- **danube-cli topics delete** *TOPIC* - ❌
+- **danube-cli topics delete** *TOPIC* - ✅
   - Delete the topic
 
 - **danube-cli topics unsubscribe** --subscription *SUBSCRIPTION* *TOPIC* - ❌
   - Delete a subscription from a topic
 
-- **danube-cli topics subscriptions** *TOPIC* - ❌
+- **danube-cli topics subscriptions** *TOPIC* - ✅
   - Get the list of subscriptions on the topic
   
 - **danube-cli topics create-subscription** --subscription *SUBSCRIPTION* *TOPIC* - ❌
