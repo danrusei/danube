@@ -74,7 +74,7 @@ impl From<Schema> for ProtoSchema {
     fn from(schema: Schema) -> Self {
         ProtoSchema {
             name: schema.name,
-            schema_data: schema.schema_data.unwrap(),
+            schema_data: schema.schema_data.unwrap_or_default(),
             type_schema: ProtoTypeSchema::from(schema.type_schema).into(),
         }
     }
