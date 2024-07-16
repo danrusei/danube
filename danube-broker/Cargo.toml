@@ -33,3 +33,4 @@ workspace = true
 
 [dev-dependencies]
 futures-util = "0.3.30"
+once_cell = "1.19.0"
