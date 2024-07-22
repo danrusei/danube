@@ -44,8 +44,13 @@ pub struct Consumer {
 
 #[derive(Debug, Clone)]
 pub enum SubType {
-    Shared,    // Multiple consumers can subscribe to the topic concurrently.
-    Exclusive, // Only one consumer can subscribe to the topic at a time.
+    // Exclusivve - Only one consumer can subscribe to the topic at a time.
+    Exclusive,
+    // Shared - Multiple consumers can subscribe to the topic concurrently.
+    Shared,
+    // FailOver - Only one consumer can subscribe to the topic at a time,
+    // but waits in standby, if the active consumer disconnect
+    FailOver,
 }
 
 impl Consumer {

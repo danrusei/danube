@@ -4,55 +4,39 @@ extern crate futures_util;
 use anyhow::Result;
 use danube_client::{Consumer, DanubeClient, Producer, SchemaType, SubType};
 use futures_util::stream::StreamExt;
-use once_cell::sync::OnceCell;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{timeout, Duration};
 
 struct TestSetup {
-    producer: Arc<Mutex<Producer>>,
     client: Arc<DanubeClient>,
-    topic: String,
 }
 
-static CLIENT: OnceCell<Arc<DanubeClient>> = OnceCell::new();
-static PRODUCER: OnceCell<Arc<Mutex<Producer>>> = OnceCell::new();
-
 async fn setup() -> Result<TestSetup> {
-    let client = CLIENT
-        .get_or_init(|| {
-            Arc::new(
-                DanubeClient::builder()
-                    .service_url("http://[::1]:6650")
-                    .build()
-                    .unwrap(),
-            )
-        })
-        .clone();
+    let client = Arc::new(
+        DanubeClient::builder()
+            .service_url("http://[::1]:6650")
+            .build()
+            .unwrap(),
+    );
 
-    let topic = "/default/test_topic".to_string();
+    Ok(TestSetup { client })
+}
 
-    // Initialize the producer only once
-    if PRODUCER.get().is_none() {
-        let mut producer = client
-            .new_producer()
-            .with_topic(topic.clone())
-            .with_name("test_producer1")
-            .with_schema("my_app".into(), SchemaType::String)
-            .build();
+async fn setup_producer(
+    client: Arc<DanubeClient>,
+    topic: &str,
+    producer_name: &str,
+) -> Result<Producer> {
+    let mut producer = client
+        .new_producer()
+        .with_topic(topic)
+        .with_name(producer_name)
+        .with_schema("my_schema".into(), SchemaType::String)
+        .build();
 
-        producer.create().await?;
+    producer.create().await?;
 
-        PRODUCER.set(Arc::new(Mutex::new(producer))).unwrap();
-    }
-
-    let producer = PRODUCER.get().unwrap().clone();
-
-    Ok(TestSetup {
-        producer,
-        client,
-        topic,
-    })
+    Ok(producer)
 }
 
 async fn setup_consumer(
@@ -77,15 +61,17 @@ async fn setup_consumer(
 #[tokio::test]
 async fn test_exclusive_subscription() -> Result<()> {
     let setup = setup().await?;
+    let topic = "/default/topic_test_exclusive_subscription";
+
+    let producer = setup_producer(setup.client.clone(), topic, "test_producer_exclusive").await?;
 
     let mut consumer = setup_consumer(
         setup.client.clone(),
-        &setup.topic,
+        topic,
         "test_consumer_exclusive",
         SubType::Exclusive,
     )
     .await?;
-    let producer = setup.producer.lock().await;
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
@@ -118,19 +104,18 @@ async fn test_exclusive_subscription() -> Result<()> {
 
 #[tokio::test]
 async fn test_shared_subscription() -> Result<()> {
-    // find a better way to wait for initial setup
-    sleep(Duration::from_secs(4)).await;
-
     let setup = setup().await?;
+    let topic = "/default/topic_test_shared_subscription";
+
+    let producer = setup_producer(setup.client.clone(), topic, "test_producer_shared").await?;
 
     let mut consumer = setup_consumer(
         setup.client.clone(),
-        &setup.topic,
+        topic,
         "test_consumer_shared",
         SubType::Shared,
     )
     .await?;
-    let producer = setup.producer.lock().await;
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;

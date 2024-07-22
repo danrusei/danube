@@ -5,9 +5,10 @@ use crate::{
 
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::Mutex;
 use tonic::transport::Uri;
 
 /// holds connection information for a broker
@@ -63,7 +64,7 @@ impl ConnectionManager {
             proxy,
         };
 
-        let mut cnx = self.connections.lock().unwrap();
+        let mut cnx = self.connections.lock().await;
 
         // let entry = cnx.entry(broker);
 
