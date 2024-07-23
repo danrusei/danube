@@ -6,12 +6,12 @@ on:
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+    container:
+      image: node:16-bullseye
 
     services:
       etcd:
         image: bitnami/etcd:latest
-        ports:
-          - 2379:2379
         options: >-
           --name etcd-danube
         env:
@@ -43,11 +43,13 @@ jobs:
 
       - name: Run Broker 1
         run: |
-          docker run -d --name broker1 -p 6650:6650 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+          docker run -d --name broker1 -p 6650:6650 \
+            danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "http://etcd:2379"
       
       - name: Run Broker 2
         run: |
-          docker run -d --name broker2 -p 6651:6651 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+          docker run -d --name broker2 -p 6651:6651 \
+            danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "http://etcd:2379"
 
       - name: Wait for Brokers to be Ready
         run: |
@@ -67,6 +69,14 @@ jobs:
             echo "Waiting for Broker 2 to start..."
             sleep 10
           done
+
+      - name: Check broker1 logs if wait failed
+        if: failure()
+        run: docker logs broker1
+
+      - name: Check broker2 logs if wait failed
+        if: failure()
+        run: docker logs broker2
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
