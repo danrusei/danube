@@ -43,11 +43,11 @@ jobs:
 
       - name: Run Broker 1
         run: |
-          docker run -d --name broker1 --network host your_broker_image:latest --broker-addr "[::1]:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+          docker run -d --name broker1 --network host danube_broker_image:latest --broker-addr "[::1]:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
       
       - name: Run Broker 2
         run: |
-          docker run -d --name broker2 --network host your_broker_image:latest --broker-addr "[::1]:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+          docker run -d --name broker2 --network host danube_broker_image:latest --broker-addr "[::1]:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
