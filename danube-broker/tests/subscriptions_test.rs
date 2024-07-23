@@ -14,7 +14,7 @@ struct TestSetup {
 async fn setup() -> Result<TestSetup> {
     let client = Arc::new(
         DanubeClient::builder()
-            .service_url("http://[::1]:6650")
+            .service_url("http://127.0.0.1:6650")
             .build()
             .unwrap(),
     );

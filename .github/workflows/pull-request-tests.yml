@@ -49,6 +49,25 @@ jobs:
         run: |
           docker run -d --name broker2 --network host danube_broker_image:latest --broker-addr "[::1]:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
 
+      - name: Wait for Brokers to be Ready
+        run: |
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:6650 > /dev/null; then
+              echo "Broker 1 is ready."
+              break
+            fi
+            echo "Waiting for Broker 1 to start..."
+            sleep 10
+          done
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:6651 > /dev/null; then
+              echo "Broker 2 is ready."
+              break
+            fi
+            echo "Waiting for Broker 2 to start..."
+            sleep 10
+          done
+
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
