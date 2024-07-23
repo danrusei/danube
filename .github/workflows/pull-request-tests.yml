@@ -24,6 +24,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 

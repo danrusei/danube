@@ -3,7 +3,7 @@ name: Unit Tests
 on:
   push:
     branches:
-      - "**" # This will trigger on every branch
+      - '**'  # This will trigger on every branch
 
 jobs:
   test:
@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
