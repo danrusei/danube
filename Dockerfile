@@ -25,5 +25,6 @@ COPY --from=builder /app/target/release/danube-broker /usr/local/bin/danube-brok
 # Expose the ports your broker listens on
 EXPOSE 6650 6651
 
-# Command to run your broker
-CMD ["danube-broker"]
+# Define entrypoint and default command
+ENTRYPOINT ["/usr/local/bin/danube-broker"]
+CMD ["--broker-addr", "[::1]:6650", "--cluster-name", "MY_CLUSTER", "--meta-store-addr", "[::1]:2379"]
