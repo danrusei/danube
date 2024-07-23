@@ -1,11 +1,21 @@
-# Start with the official Rust image
-FROM rust:latest as builder
+# Use debian:bullseye-slim as the base image for both build and final stages
+FROM debian:bullseye-slim as base
+
+# Install Rust in the build stage
+FROM base as builder
+
+# Install necessary dependencies for building
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    protobuf-compiler
+
+# Install Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Set the working directory
 WORKDIR /app
-
-# Install protobuf-compiler
-RUN apt-get update && apt-get install -y protobuf-compiler
 
 # Copy the project files
 COPY . .
@@ -13,8 +23,8 @@ COPY . .
 # Build the project
 RUN cargo build --release
 
-# Use a smaller base image for the final image
-FROM debian:buster-slim
+# Final stage: use the same base image as the build stage
+FROM base
 
 # Install protobuf-compiler in the final image as well
 RUN apt-get update && apt-get install -y protobuf-compiler
