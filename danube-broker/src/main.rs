@@ -53,11 +53,11 @@ struct Args {
     config_file: Option<String>,
 
     /// Danube Broker advertised address
-    #[arg(short = 'b', long, default_value = "[::1]:6650")]
+    #[arg(short = 'b', long, default_value = "0.0.0.0:6650")]
     broker_addr: String,
 
     /// Danube Admin address
-    #[arg(short = 'a', long, default_value = "[::1]:50051")]
+    #[arg(short = 'a', long, default_value = "0.0.0.0:50051")]
     admin_addr: String,
 
     /// Metadata store address
