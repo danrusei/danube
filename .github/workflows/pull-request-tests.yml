@@ -7,7 +7,7 @@ jobs:
   build_and_test:
     runs-on: ubuntu-latest
     container:
-      image: node:16-bullseye
+      image: rust:latest 
 
     services:
       etcd:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Protobuf Compiler
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        run: apt-get update && apt-get install -y protobuf-compiler
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
