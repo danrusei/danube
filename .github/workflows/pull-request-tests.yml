@@ -1,0 +1,67 @@
+name: Integration Tests
+
+on:
+  pull_request:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    services:
+      etcd:
+        image: quay.io/coreos/etcd:latest
+        ports:
+          - 2379:2379
+        options: >-
+          --name etcd-danube
+          --data-dir /etcd-data
+          --advertise-client-urls http://0.0.0.0:2379
+          --listen-client-urls http://0.0.0.0:2379
+        volumes:
+          - ./etcd-data:/etcd-data
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image
+        run: |
+          docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag your_broker_image:latest .
+
+      - name: Run Broker 1
+        run: |
+          docker run -d --name broker1 --network host your_broker_image:latest --broker-addr "[::1]:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+      
+      - name: Run Broker 2
+        run: |
+          docker run -d --name broker2 --network host your_broker_image:latest --broker-addr "[::1]:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Run integration tests
+        run: cargo test --release --package danube-broker --tests
+
+      - name: Stop and remove broker1
+        run: |
+          docker stop broker1
+          docker rm broker1
+
+      - name: Stop and remove broker2
+        run: |
+          docker stop broker2
+          docker rm broker2
