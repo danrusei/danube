@@ -34,16 +34,23 @@ impl DispatcherSingleConsumer {
     pub(crate) async fn pick_active_consumer(&mut self) -> bool {
         // sort the self.consumers ,after a specific logic, maybe highest priority
 
-        if let Some(consumer) = self.consumers.pop() {
-            // validates that the consumer has called the receive methods
-            // that's populate the Consumer tx field
-            if consumer.lock().await.tx.is_some() {
-                self.active_consumer = Some(consumer);
+        let mut candidate = None;
+
+        for consumer in &self.consumers {
+            let guard = consumer.lock().await;
+            // validates that the consumer has called the receive methods which populates the Consumer tx field
+            if guard.tx.is_some() {
+                candidate = Some(consumer.clone());
+                break;
             }
-            return true;
         }
 
-        false
+        if let Some(consumer) = candidate {
+            self.active_consumer = Some(consumer);
+            true
+        } else {
+            false
+        }
     }
 
     // sending messages to an active consumer
@@ -73,30 +80,45 @@ impl DispatcherSingleConsumer {
     // manage the addition of consumers to the dispatcher
     pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
         // Handle Exclusive Subscription
-        // the consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
-        let consumer_guard = consumer.lock().await;
+        // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
+        let consumer_subscription_type;
 
-        if consumer_guard.subscription_type == 0 && !self.consumers.is_empty() {
-            // connect to active consumer self.active_consumer
-            return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
+        {
+            let consumer_guard = consumer.lock().await;
+            consumer_subscription_type = consumer_guard.subscription_type;
+
+            // if the subscription is Shared should not be routed to this dispatcher
+            if consumer_subscription_type == 1 {
+                return Err(anyhow!("Erroneous routing, Shared subscription should use dispatcher multiple consumer"));
+            }
+
+            if consumer_subscription_type == 0 && !self.consumers.is_empty() {
+                // connect to active consumer self.active_consumer
+                return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
+            }
         }
 
-        // Handle Failover Subscription ... should be SubscriptionType::Failover
-        if consumer_guard.subscription_type == 2 {
-            self.consumers.push(consumer.clone());
-            return Ok(());
+        if self.consumers.is_empty() {
+            self.active_consumer = Some(consumer.clone())
+        } else {
+            if !self.pick_active_consumer().await {
+                return Err(anyhow!("Unable to pick an active Consumer"));
+            }
         }
 
-        // Handle Shared Subscription
+        // add Exclusive and Failover consumer to dispatcher
         self.consumers.push(consumer.clone());
 
-        if !self.pick_active_consumer().await {
-            return Err(anyhow!("unable to pick an active Consumer"));
+        let consumer_name;
+
+        {
+            let consumer_guard = consumer.lock().await;
+            consumer_name = consumer_guard.consumer_name.clone();
         }
 
         info!(
             "The dispatcher {:?} has added the consumer {}",
-            self, consumer_guard.consumer_name
+            self, consumer_name
         );
 
         Ok(())

@@ -44,8 +44,13 @@ pub struct Consumer {
 
 #[derive(Debug, Clone)]
 pub enum SubType {
-    Shared,    // Multiple consumers can subscribe to the topic concurrently.
-    Exclusive, // Only one consumer can subscribe to the topic at a time.
+    // Exclusivve - Only one consumer can subscribe to the topic at a time.
+    Exclusive,
+    // Shared - Multiple consumers can subscribe to the topic concurrently.
+    Shared,
+    // FailOver - Only one consumer can subscribe to the topic at a time,
+    // but waits in standby, if the active consumer disconnect
+    FailOver,
 }
 
 impl Consumer {
@@ -99,6 +104,12 @@ impl Consumer {
                             status.to_owned(),
                             Some(error_message),
                         ));
+                    } else {
+                        warn!("Lookup request failed with error:  {}", status);
+                        return Err(DanubeError::Unrecoverable(format!(
+                            "Lookup failed with error: {}",
+                            status
+                        )));
                     }
                 } else {
                     warn!("Lookup request failed with error:  {}", err);
@@ -110,6 +121,10 @@ impl Consumer {
             }
         }
 
+        let stream_client = self.stream_client.as_mut().ok_or_else(|| {
+            DanubeError::Unrecoverable("Subscribe: Stream client is not initialized".to_string())
+        })?;
+
         let req = ConsumerRequest {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
             topic_name: self.topic_name.clone(),
@@ -120,10 +135,8 @@ impl Consumer {
 
         let request = tonic::Request::new(req);
 
-        #[allow(unused_mut)]
-        let mut client = self.stream_client.as_mut().unwrap();
         let response: std::result::Result<Response<ConsumerResponse>, Status> =
-            client.subscribe(request).await;
+            stream_client.subscribe(request).await;
 
         match response {
             Ok(resp) => {
@@ -161,13 +174,14 @@ impl Consumer {
     pub async fn receive(
         &mut self,
     ) -> Result<impl Stream<Item = std::result::Result<StreamMessage, Status>>> {
+        let stream_client = self.stream_client.as_mut().ok_or_else(|| {
+            DanubeError::Unrecoverable("Receive: Stream client is not initialized".to_string())
+        })?;
+
         let receive_request = ReceiveRequest {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
             consumer_id: self.consumer_id.unwrap(),
         };
-
-        #[allow(unused_mut)]
-        let mut stream_client = self.stream_client.as_mut().unwrap();
 
         let response = match stream_client.receive_messages(receive_request).await {
             Ok(response) => response,

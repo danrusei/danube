@@ -7,7 +7,7 @@ use crate::proto::{
 };
 
 use tonic::{Code, Request, Response};
-use tracing::{trace, Level};
+use tracing::{debug, trace, Level};
 
 #[tonic::async_trait]
 impl Discovery for DanubeServerImpl {
@@ -37,9 +37,24 @@ impl Discovery for DanubeServerImpl {
         let service = self.service.lock().await;
 
         let result = match service.lookup_topic(&req.topic).await {
-            Some((true, _)) => (self.broker_addr.to_string(), LookupType::Connect),
-            Some((false, addr)) => (addr, LookupType::Redirect),
+            Some((true, _)) => {
+                trace!(
+                    "Topic Lookup response for topic: {} is served by this broker {}",
+                    req.topic,
+                    self.broker_addr
+                );
+                (self.broker_addr.to_string(), LookupType::Connect)
+            }
+            Some((false, addr)) => {
+                trace!(
+                    "Topic Lookup response for topic: {} is served by other broker {}",
+                    req.topic,
+                    addr
+                );
+                (addr, LookupType::Redirect)
+            }
             None => {
+                debug!("Topic Lookup response for topic: {} failed ", req.topic);
                 let error_string = &format!("Unable to find the requested topic: {}", &req.topic);
                 let status = create_error_status(
                     Code::InvalidArgument,

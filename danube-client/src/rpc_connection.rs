@@ -1,4 +1,5 @@
 use tonic::transport::{Channel, Uri};
+use tracing::info;
 
 use crate::{connection_manager::ConnectionOptions, errors::Result};
 
@@ -11,6 +12,11 @@ pub(crate) async fn new_rpc_connection(
     cnx_options: &ConnectionOptions,
     connect_url: &Uri,
 ) -> Result<RpcConnection> {
+    info!(
+        "Attempting to establish a new RPC connection to {}",
+        connect_url
+    );
+
     let mut endpoint = Channel::builder(connect_url.to_owned());
 
     if let Some(keep_alive_interval) = cnx_options.keep_alive_interval {
@@ -22,6 +28,11 @@ pub(crate) async fn new_rpc_connection(
     }
 
     let grpc_cnx = endpoint.connect().await?;
+
+    info!(
+        "Successfully established a new RPC connection to {}",
+        connect_url
+    );
 
     Ok(RpcConnection { grpc_cnx })
 

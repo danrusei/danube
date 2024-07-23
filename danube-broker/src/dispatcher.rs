@@ -9,6 +9,7 @@ pub(crate) mod dispatcher_single_consumer;
 pub(crate) use dispatcher_multiple_consumers::DispatcherMultipleConsumers;
 pub(crate) use dispatcher_single_consumer::DispatcherSingleConsumer;
 
+// The dispatchers ensure that messages are routed to consumers according to the semantics of the subscription type
 #[derive(Debug)]
 pub(crate) enum Dispatcher {
     OneConsumer(DispatcherSingleConsumer),

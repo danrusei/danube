@@ -50,23 +50,31 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
 
-        let consumer_guard = consumer.lock().await;
+        // Retrieve the subscription type and consumer ID without holding the lock for too long
+        let (subscription_type, consumer_id);
 
-        let mut dispatcher = match consumer_guard.subscription_type {
-            //Exclusive
+        {
+            let consumer_guard = consumer.lock().await;
+            subscription_type = consumer_guard.subscription_type;
+            consumer_id = consumer_guard.consumer_id;
+        }
+
+        // Initialize the appropriate dispatcher based on the subscription type
+        let mut dispatcher = match subscription_type {
+            // Exclusive
             0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
                 &self.topic_name,
                 &self.subscription_name,
                 0,
             )),
 
-            //Shared
+            // Shared
             1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(
                 &self.topic_name,
                 &self.subscription_name,
             )),
 
-            //FailOver
+            // Failover
             2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
                 &self.topic_name,
                 &self.subscription_name,
@@ -78,9 +86,10 @@ impl Subscription {
             }
         };
 
-        self.consumers
-            .insert(consumer_guard.consumer_id, consumer.clone());
+        // Insert the consumer into the subscription's consumer list
+        self.consumers.insert(consumer_id, consumer.clone());
 
+        // Add the consumer to the dispatcher
         dispatcher.add_consumer(consumer.clone()).await?;
 
         trace!(
@@ -89,6 +98,7 @@ impl Subscription {
             self.subscription_name
         );
 
+        // Set the dispatcher for the subscription
         self.dispatcher = Some(dispatcher);
 
         Ok(())

@@ -1,0 +1,88 @@
+name: Integration Tests
+
+on:
+  pull_request:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    services:
+      etcd:
+        image: bitnami/etcd:latest
+        ports:
+          - 2379:2379
+        options: >-
+          --name etcd-danube
+        env:
+          ALLOW_NONE_AUTHENTICATION: "yes"
+          ETCD_ADVERTISE_CLIENT_URLS: "http://0.0.0.0:2379"
+          ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image
+        run: |
+          docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag danube_broker_image:latest --load .
+
+      - name: Run Broker 1
+        run: |
+          docker run -d --name broker1 -p 6650:6650 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+      
+      - name: Run Broker 2
+        run: |
+          docker run -d --name broker2 -p 6651:6651 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+
+      - name: Wait for Brokers to be Ready
+        run: |
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:6650 > /dev/null; then
+              echo "Broker 1 is ready."
+              break
+            fi
+            echo "Waiting for Broker 1 to start..."
+            sleep 10
+          done
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:6651 > /dev/null; then
+              echo "Broker 2 is ready."
+              break
+            fi
+            echo "Waiting for Broker 2 to start..."
+            sleep 10
+          done
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Run integration tests
+        run: cargo test --release --package danube-broker --tests
+
+      - name: Stop and remove broker1
+        run: |
+          docker stop broker1
+          docker rm broker1
+
+      - name: Stop and remove broker2
+        run: |
+          docker stop broker2
+          docker rm broker2

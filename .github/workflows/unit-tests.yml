@@ -1,0 +1,26 @@
+name: Unit Tests
+
+on:
+  push:
+    branches:
+      - '**'  # This will trigger on every branch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Run unit tests
+        run: cargo test --bin danube-broker
