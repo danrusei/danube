@@ -43,11 +43,11 @@ jobs:
 
       - name: Run Broker 1
         run: |
-          docker run -d --name broker1 --network host danube_broker_image:latest --broker-addr "[::1]:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+          docker run -d --name broker1 -p 6650:6650 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
       
       - name: Run Broker 2
         run: |
-          docker run -d --name broker2 --network host danube_broker_image:latest --broker-addr "[::1]:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379"
+          docker run -d --name broker2 -p 6651:6651 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
 
       - name: Wait for Brokers to be Ready
         run: |

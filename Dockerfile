@@ -27,4 +27,4 @@ EXPOSE 6650 6651
 
 # Define entrypoint and default command
 ENTRYPOINT ["/usr/local/bin/danube-broker"]
-CMD ["--broker-addr", "[::1]:6650", "--cluster-name", "MY_CLUSTER", "--meta-store-addr", "[::1]:2379"]
+CMD ["--broker-addr", "0.0.0.0:6650", "--cluster-name", "MY_CLUSTER", "--meta-store-addr", "0.0.0.0:2379"]
