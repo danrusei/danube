@@ -9,7 +9,7 @@ jobs:
 
     services:
       etcd:
-        image: quay.io/coreos/etcd:latest
+        image: bitnami/etcd:latest
         ports:
           - 2379:2379
         options: >-
@@ -40,7 +40,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag your_broker_image:latest .
+          docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag danube_broker_image:latest .
 
       - name: Run Broker 1
         run: |
