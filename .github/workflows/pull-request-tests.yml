@@ -25,6 +25,9 @@ jobs:
 
       - name: Install Protobuf Compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      
+      - name: Install Netcat
+        run: sudo apt-get install -y netcat
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -41,28 +44,55 @@ jobs:
         run: |
           docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag danube_broker_image:latest --load .
 
-      - name: Run Broker 1
+      - name: Wait for etcd to be Ready
         run: |
-          docker run -d --name broker1 -p 6650:6650 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+          for i in {1..10}; do
+            if nc -zv 127.0.0.1 2379; then
+              echo "etcd is ready."
+              break
+            elif [ $i -eq 10 ]; then
+              echo "etcd failed to start."
+              docker logs etcd-danube
+              exit 1
+            fi
+            echo "Waiting for etcd to start..."
+            sleep 5
+          done
+
+      - name: Run Broker 1
+        env:
+          RUST_LOG: danube_broker=trace
+        run: |
+          docker run --network host -d --name broker1 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
       
       - name: Run Broker 2
+        env:
+          RUST_LOG: danube_broker=trace  
         run: |
-          docker run -d --name broker2 -p 6651:6651 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379"
+          docker run --network host -d --name broker2 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
 
       - name: Wait for Brokers to be Ready
         run: |
-          for i in {1..10}; do
-            if curl -s http://127.0.0.1:6650 > /dev/null; then
+          for i in {1..5}; do
+            if nc -zv 127.0.0.1 6650; then
               echo "Broker 1 is ready."
               break
+            elif [ $i -eq 5 ]; then
+              echo "Broker 1 failed to start."
+              docker logs broker1
+              exit 1
             fi
             echo "Waiting for Broker 1 to start..."
             sleep 10
           done
-          for i in {1..10}; do
-            if curl -s http://127.0.0.1:6651 > /dev/null; then
+          for i in {1..5}; do
+            if nc -zv 127.0.0.1 6651; then
               echo "Broker 2 is ready."
               break
+            elif [ $i -eq 5 ]; then
+              echo "Broker 2 failed to start."
+              docker logs broker2
+              exit 1
             fi
             echo "Waiting for Broker 2 to start..."
             sleep 10
