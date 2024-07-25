@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
+          - x86_64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Install cross
+        run: cargo install cross
+
+      - name: Build with cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: danube-broker-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/danube-broker
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: danube-broker-x86_64-unknown-linux-gnu
+          path: artifacts/linux/
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: danube-broker-x86_64-pc-windows-gnu
+          path: artifacts/windows/
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: danube-broker-x86_64-apple-darwin
+          path: artifacts/macos/
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/linux/danube-broker
+          asset_name: danube-broker-linux
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/windows/danube-broker.exe
+          asset_name: danube-broker-windows.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-broker
+          asset_name: danube-broker-macos
+          asset_content_type: application/octet-stream
+
+  docker:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }} .
+
+      - name: Push Docker image
+        run: docker push ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}
+
+      - name: Update Release Notes with Docker Image
+        run: |
+          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}"
+          RELEASE_URL="https://api.github.com/repos/${{ github.repository_owner }}/$(basename ${{ github.repository }} .git)/releases/tags/${{ github.ref }}"
+          PAYLOAD=$(echo '{}' | jq --arg body "Docker Image: $IMAGE_URL" '{body: $body}')
+          curl -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Content-Type: application/json" \
+               --data "$PAYLOAD" \
+               "$RELEASE_URL"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
