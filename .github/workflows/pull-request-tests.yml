@@ -1,118 +1,97 @@
-name: Integration Tests
+name: Release
 
 on:
-  pull_request:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags
 
 jobs:
-  build_and_test:
+  build:
     runs-on: ubuntu-latest
-
-    services:
-      etcd:
-        image: bitnami/etcd:latest
-        ports:
-          - 2379:2379
-        options: >-
-          --name etcd-danube
-        env:
-          ALLOW_NONE_AUTHENTICATION: "yes"
-          ETCD_ADVERTISE_CLIENT_URLS: "http://0.0.0.0:2379"
-          ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install Protobuf Compiler
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-      
-      - name: Install Netcat
-        run: sudo apt-get install -y netcat
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Cache Docker layers
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Build Docker image
+      - name: Install dependencies
         run: |
-          docker buildx build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag danube_broker_image:latest --load .
-
-      - name: Wait for etcd to be Ready
-        run: |
-          for i in {1..10}; do
-            if nc -zv 127.0.0.1 2379; then
-              echo "etcd is ready."
-              break
-            elif [ $i -eq 10 ]; then
-              echo "etcd failed to start."
-              docker logs etcd-danube
-              exit 1
-            fi
-            echo "Waiting for etcd to start..."
-            sleep 5
-          done
-
-      - name: Run Broker 1
-        env:
-          RUST_LOG: danube_broker=trace
-        run: |
-          docker run --network host -d --name broker1 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
-      
-      - name: Run Broker 2
-        env:
-          RUST_LOG: danube_broker=trace  
-        run: |
-          docker run --network host -d --name broker2 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
-
-      - name: Wait for Brokers to be Ready
-        run: |
-          for i in {1..5}; do
-            if nc -zv 127.0.0.1 6650; then
-              echo "Broker 1 is ready."
-              break
-            elif [ $i -eq 5 ]; then
-              echo "Broker 1 failed to start."
-              docker logs broker1
-              exit 1
-            fi
-            echo "Waiting for Broker 1 to start..."
-            sleep 10
-          done
-          for i in {1..5}; do
-            if nc -zv 127.0.0.1 6651; then
-              echo "Broker 2 is ready."
-              break
-            elif [ $i -eq 5 ]; then
-              echo "Broker 2 failed to start."
-              docker logs broker2
-              exit 1
-            fi
-            echo "Waiting for Broker 2 to start..."
-            sleep 10
-          done
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
 
-      - name: Run integration tests
-        run: cargo test --release --package danube-broker --tests
+      - name: Build
+        run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Stop and remove broker1
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: danube-broker-linux
+          path: target/x86_64-unknown-linux-gnu/release/danube-broker
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }} .
+
+      - name: Push Docker image
+        run: docker push ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}
+
+  release:
+    needs: [build, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux binary
+        uses: actions/download-artifact@v3
+        with:
+          name: danube-broker-linux
+          path: artifacts/linux/
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/linux/danube-broker
+          asset_name: danube-broker-linux
+          asset_content_type: application/octet-stream
+
+      - name: Update Release Notes with Docker Image
         run: |
-          docker stop broker1
-          docker rm broker1
-
-      - name: Stop and remove broker2
-        run: |
-          docker stop broker2
-          docker rm broker2
+          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}"
+          RELEASE_URL="https://api.github.com/repos/${{ github.repository_owner }}/$(basename ${{ github.repository }} .git)/releases/tags/${{ github.ref }}"
+          PAYLOAD=$(echo '{}' | jq --arg body "Docker Image: $IMAGE_URL" '{body: $body}')
+          curl -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Content-Type: application/json" \
+               --data "$PAYLOAD" \
+               "$RELEASE_URL"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
