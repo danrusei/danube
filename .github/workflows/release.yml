@@ -65,6 +65,11 @@ jobs:
   release:
     needs: [build, docker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+      deployments: read
+      issues: read
     steps:
       - name: Download Linux binary
         uses: actions/download-artifact@v3
@@ -82,6 +87,11 @@ jobs:
           release_name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
+          body: |
+            ## Release Notes
+
+            - **Docker Image**: ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref_name }}
+            - **Binary**: [Download Linux binary](https://github.com/${{ github.repository_owner }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-linux)
 
       - name: Upload Linux binary
         uses: actions/upload-release-asset@v1
@@ -92,16 +102,3 @@ jobs:
           asset_path: artifacts/linux/danube-broker
           asset_name: danube-broker-linux
           asset_content_type: application/octet-stream
-
-      - name: Update Release Notes with Docker Image
-        run: |
-          IMAGE_TAG=$(echo "${GITHUB_REF#refs/tags/}")  # Extract tag from ref
-          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG}"
-          RELEASE_URL="https://api.github.com/repos/${{ github.repository_owner }}/$(basename ${{ github.repository }} .git)/releases/tags/${{ github.ref_name }}"
-          PAYLOAD=$(echo '{}' | jq --arg body "Docker Image: $IMAGE_URL" '{body: $body}')
-          curl -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-               -H "Content-Type: application/json" \
-               --data "$PAYLOAD" \
-               "$RELEASE_URL"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
