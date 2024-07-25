@@ -13,7 +13,6 @@ jobs:
         target:
           - x86_64-unknown-linux-gnu
           - x86_64-pc-windows-gnu
-          - x86_64-apple-darwin
 
     steps:
       - name: Checkout code
@@ -48,11 +47,6 @@ jobs:
         with:
           name: danube-broker-x86_64-pc-windows-gnu
           path: artifacts/windows/
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: danube-broker-x86_64-apple-darwin
-          path: artifacts/macos/
 
       - name: Create Release
         id: create_release
@@ -83,16 +77,6 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/windows/danube-broker.exe
           asset_name: danube-broker-windows.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-broker
-          asset_name: danube-broker-macos
           asset_content_type: application/octet-stream
 
   docker:
