@@ -27,7 +27,14 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: matrix.os == 'windows-latest'
-        run: choco install openssl.light protoc
+        run: |
+          # Download and install protoc
+          Invoke-WebRequest -Uri https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-win64.zip -OutFile protoc.zip
+          Expand-Archive protoc.zip -DestinationPath C:\Protoc
+          [Environment]::SetEnvironmentVariable("PATH", "$env:PATH;C:\Protoc\protoc-21.9-win64\bin", [EnvironmentVariableTarget]::Machine)
+          # Install OpenSSL
+          Invoke-WebRequest -Uri https://slproweb.com/download/Win64OpenSSL-1_1_1L.exe -OutFile openssl.exe
+          Start-Process -Wait -FilePath openssl.exe -Args "/SILENT /COMPONENTS=openssl /VERYSILENT /NORESTART"
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
