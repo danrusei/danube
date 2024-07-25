@@ -48,10 +48,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }} .
+        run: |
+          IMAGE_TAG=$(echo "${GITHUB_REF#refs/tags/}")  # Extract tag from ref
+          docker build -t ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG} .
 
       - name: Push Docker image
-        run: docker push ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}
+        run: |
+          IMAGE_TAG=$(echo "${GITHUB_REF#refs/tags/}")  # Extract tag from ref
+          docker push ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG}
 
   release:
     needs: [build, docker]
@@ -69,8 +73,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
 
@@ -86,8 +90,9 @@ jobs:
 
       - name: Update Release Notes with Docker Image
         run: |
-          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref }}"
-          RELEASE_URL="https://api.github.com/repos/${{ github.repository_owner }}/$(basename ${{ github.repository }} .git)/releases/tags/${{ github.ref }}"
+          IMAGE_TAG=$(echo "${GITHUB_REF#refs/tags/}")  # Extract tag from ref
+          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG}"
+          RELEASE_URL="https://api.github.com/repos/${{ github.repository_owner }}/$(basename ${{ github.repository }} .git)/releases/tags/${{ github.ref_name }}"
           PAYLOAD=$(echo '{}' | jq --arg body "Docker Image: $IMAGE_URL" '{body: $body}')
           curl -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Content-Type: application/json" \
