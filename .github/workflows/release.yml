@@ -91,7 +91,7 @@ jobs:
             ## Release Notes
 
             - **Docker Image**: ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref_name }}
-            - **Binary**: [Download Linux binary](https://github.com/${{ github.repository_owner }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-linux)
+            - **Binary**: [Download Linux binary](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-linux)
 
       - name: Upload Linux binary
         uses: actions/upload-release-asset@v1
