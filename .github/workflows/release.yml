@@ -10,28 +10,41 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-pc-windows-gnu
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
 
-      - name: Install cross
-        run: cargo install cross
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install openssl.light protoc
 
-      - name: Build with cross
-        run: cross build --release --target ${{ matrix.target }}
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          profile: minimal
+          override: true
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: danube-broker-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/danube-broker
+          path: target/${{ matrix.target }}/release/danube-broker${{ matrix.os == 'windows-latest' && '.exe' || '' }}
 
   release:
     needs: build
@@ -42,6 +55,7 @@ jobs:
         with:
           name: danube-broker-x86_64-unknown-linux-gnu
           path: artifacts/linux/
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v3
         with:
