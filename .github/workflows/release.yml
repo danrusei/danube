@@ -61,6 +61,11 @@ jobs:
         run: |
           IMAGE_TAG=$(echo "${GITHUB_REF#refs/tags/}")  # Extract tag from ref
           docker push ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG}
+      
+      - name: Tag Docker image as latest and push
+        run: |
+          docker tag ghcr.io/${{ github.repository_owner }}/danube-broker:${IMAGE_TAG} ghcr.io/${{ github.repository_owner }}/danube-broker:latest
+          docker push ghcr.io/${{ github.repository_owner }}/danube-broker:latest
 
   release:
     needs: [build, docker]
