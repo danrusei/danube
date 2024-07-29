@@ -1,0 +1,17 @@
+[package]
+name = "danube-pubsub"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = {version = "4.5.8", features =["derive"]}
+futures-util = "0.3.30"
+anyhow = "1.0.83"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+danube-client = {path = "../danube-client"}
+
+[lints]
+workspace = true

@@ -12,7 +12,10 @@ members = [
     "danube-client",
 
     # -- Danube cli (admin)
-    "danube-cli",
+    "danube-cli", 
+    
+    # -- Danube cli client (pubsub)
+    "danube-pubsub",
 ]
 
 [workspace.dependencies]
