@@ -5,7 +5,7 @@ use danube_client::{DanubeClient, SchemaType};
 #[derive(Debug, Parser)]
 pub struct Produce {
     #[arg(long, short = 'a', help = "The service URL for the Danube broker")]
-    pub service_url: String,
+    pub service_addr: String,
 
     #[arg(
         long,
@@ -33,20 +33,9 @@ pub enum SchemaTypeArg {
     Json,
 }
 
-impl From<SchemaTypeArg> for SchemaType {
-    fn from(arg: SchemaTypeArg) -> Self {
-        match arg {
-            SchemaTypeArg::Bytes => SchemaType::Bytes,
-            SchemaTypeArg::String => SchemaType::String,
-            SchemaTypeArg::Int64 => SchemaType::Int64,
-            SchemaTypeArg::Json => SchemaType::Json(String::new()), // Placeholder
-        }
-    }
-}
-
 pub async fn handle_produce(produce: Produce) -> Result<()> {
     let client = DanubeClient::builder()
-        .service_url(&produce.service_url)
+        .service_url(&produce.service_addr)
         .build()?;
 
     let schema_type = validate_schema(produce.schema, produce.json_schema)?;
@@ -65,6 +54,17 @@ pub async fn handle_produce(produce: Produce) -> Result<()> {
     println!("The Message with ID {} was sent", message_id);
 
     Ok(())
+}
+
+impl From<SchemaTypeArg> for SchemaType {
+    fn from(arg: SchemaTypeArg) -> Self {
+        match arg {
+            SchemaTypeArg::Bytes => SchemaType::Bytes,
+            SchemaTypeArg::String => SchemaType::String,
+            SchemaTypeArg::Int64 => SchemaType::Int64,
+            SchemaTypeArg::Json => SchemaType::Json(String::new()), // Placeholder
+        }
+    }
 }
 
 fn validate_schema(

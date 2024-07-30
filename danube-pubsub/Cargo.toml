@@ -10,6 +10,7 @@ anyhow = "1.0.83"
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+valico = "3.6"
 
 danube-client = {path = "../danube-client"}
 

@@ -5,9 +5,9 @@ use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Schema {
-    name: String,
-    schema_data: Option<Vec<u8>>,
-    type_schema: SchemaType,
+    pub name: String,
+    pub schema_data: Option<Vec<u8>>,
+    pub type_schema: SchemaType,
 }
 
 impl Schema {
