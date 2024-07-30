@@ -25,7 +25,7 @@ I'm continuously working on enhancing and adding new features. **Contributions a
 If you want to contribute to any of the following crates:
 
 * danube-broker - The main crate, danube pubsub platform
-* danube-cli - Admin CLI designed for interacting with and managing the Danube cluster
+* danube-admin - Admin CLI designed for interacting with and managing the Danube cluster
 * danube-client - An async Rust client library for interacting with Danube Pub/Sub messaging platform
 * danube-pubsub - CLI to handle message publishing and consumption,
 

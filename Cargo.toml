@@ -11,8 +11,8 @@ members = [
     # -- Danube lib client
     "danube-client",
 
-    # -- Danube cli (admin)
-    "danube-cli", 
+    # -- Danube admin
+    "danube-admin", 
     
     # -- Danube cli client (pubsub)
     "danube-pubsub",
