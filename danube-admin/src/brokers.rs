@@ -17,7 +17,7 @@ pub(crate) enum BrokersCommands {
 }
 
 pub async fn handle_command(brokers: Brokers) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = BrokerAdminClient::connect("http://[::1]:50051").await?;
+    let mut client = BrokerAdminClient::connect("http://127.0.0.1:50051").await?;
 
     match brokers.command {
         // List active brokers of the cluster

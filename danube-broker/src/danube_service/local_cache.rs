@@ -71,13 +71,19 @@ impl LocalCache {
             _ => return,
         };
 
-        if cache.contains_key(key) {
-            if cache.get(key).unwrap().0 >= version {
-                return;
-            }
-        }
-
         if let Some(value) = value {
+            // if it's a Put Operation make sure that the new version is bigger that current version from local cache
+            // otherwise you may update with the same value or even an older value
+            // the updates may be received from multiple sources, like Watch event and/or Syncronizer
+            //
+            // The version of the key.
+            // A deletion event resets the version to zero and any modification of the key increases its version.
+            if cache.contains_key(key) {
+                if cache.get(key).unwrap().0 >= version {
+                    return;
+                }
+            }
+
             if let Ok(json_value) = serde_json::from_slice(value) {
                 cache.insert(key.to_string(), (version, json_value));
                 let mut keys = self.keys.lock().await;
