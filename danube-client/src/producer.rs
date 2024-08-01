@@ -69,8 +69,8 @@ impl Producer {
         // Initialize the gRPC client connection
         self.connect(&self.client.uri.clone()).await?;
 
-        // default schema is Bytes if not specified
-        let mut schema = Schema::new("bytes_schema".into(), SchemaType::Bytes);
+        // default schema is String if not specified
+        let mut schema = Schema::new("bytes_schema".into(), SchemaType::String);
 
         if let Some(sch) = self.schema.clone() {
             schema = sch;

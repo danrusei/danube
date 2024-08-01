@@ -8,13 +8,17 @@ use valico::json_schema::{self, schema::ScopedSchema};
 
 #[derive(Debug, Parser)]
 pub struct Consume {
-    #[arg(long, short = 'a', help = "The service URL for the Danube broker")]
+    #[arg(
+        long,
+        short = 'a',
+        help = "The service URL for the Danube broker. Example: http://127.0.0.1:6650"
+    )]
     pub service_addr: String,
 
     #[arg(
         long,
         short = 't',
-        default_value = "/default/default",
+        default_value = "/default/test_topic",
         help = "The topic to consume messages from"
     )]
     pub topic: String,
@@ -23,18 +27,14 @@ pub struct Consume {
         long,
         short = 'c',
         default_value = "consumer_pubsub",
-        help = "The subscription name"
+        help = "The consumer name"
     )]
     pub consumer: String,
 
     #[arg(long, short = 'm', help = "The subscription name")]
     pub subscription: String,
 
-    #[arg(
-        long,
-        value_enum,
-        help = "The subscription type (Exclusive, Shared, FailOver)"
-    )]
+    #[arg(long, value_enum, help = "The subscription type. Default: Shared")]
     pub sub_type: Option<SubTypeArg>,
 }
 

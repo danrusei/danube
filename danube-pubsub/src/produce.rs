@@ -1,28 +1,58 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use danube_client::{DanubeClient, SchemaType};
+use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Parser)]
 pub struct Produce {
-    #[arg(long, short = 'a', help = "The service URL for the Danube broker")]
+    #[arg(
+        long,
+        short = 'a',
+        help = "The service URL for the Danube broker. Example: http://127.0.0.1:6650"
+    )]
     pub service_addr: String,
 
     #[arg(
         long,
         short = 't',
-        default_value = "/default/default",
-        help = "The topic to produce messages to"
+        default_value = "/default/test_topic",
+        help = "The topic to produce messages to."
     )]
     pub topic: String,
 
-    #[arg(long, short = 's', value_enum, help = "The schema type of the message")]
+    #[arg(
+        long,
+        short = 's',
+        value_enum,
+        help = "The schema type of the message."
+    )]
     pub schema: Option<SchemaTypeArg>,
 
-    #[arg(long, short = 'm', help = "The message to send")]
+    #[arg(
+        long,
+        short = 'm',
+        help = "The message to send. This is a required argument."
+    )]
     pub message: String,
 
-    #[arg(long, help = "The JSON schema, required if schema type is Json")]
+    #[arg(long, help = "The JSON schema, required if schema type is Json.")]
     pub json_schema: Option<String>,
+
+    #[arg(
+        long,
+        short = 'c',
+        default_value = "1",
+        help = "Number of times to send the message."
+    )]
+    pub count: u32,
+
+    #[arg(
+        long,
+        short = 'i',
+        default_value = "500",
+        help = "Interval between messages in milliseconds. Default: 500. Minimum: 100."
+    )]
+    pub interval: u64,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
@@ -34,6 +64,11 @@ pub enum SchemaTypeArg {
 }
 
 pub async fn handle_produce(produce: Produce) -> Result<()> {
+    // Validate interval
+    if produce.interval < 100 {
+        return Err(anyhow::anyhow!("The interval must be at least 100 milliseconds").into());
+    }
+
     let client = DanubeClient::builder()
         .service_url(&produce.service_addr)
         .build()?;
@@ -47,11 +82,17 @@ pub async fn handle_produce(produce: Produce) -> Result<()> {
         .with_schema("my_app".into(), schema_type) // Pass the correct schema type
         .build();
 
-    producer.create().await?;
+    let _ = producer.create().await?;
 
     let encoded_data = produce.message.as_bytes().to_vec();
-    let message_id = producer.send(encoded_data).await?;
-    println!("The Message with ID {} was sent", message_id);
+
+    for _ in 0..produce.count {
+        let message_id = producer.send(encoded_data.clone()).await?;
+        println!("The Message with ID {} was sent", message_id);
+        if produce.count - 1 > 0 {
+            sleep(Duration::from_millis(produce.interval)).await;
+        }
+    }
 
     Ok(())
 }
