@@ -21,7 +21,7 @@ service NamespaceAdmin {
 service TopicAdmin {
   // Topic related RPCs
   rpc ListTopics(NamespaceRequest) returns (TopicListResponse);
-  rpc CreateTopic(TopicRequest) returns (TopicResponse);
+  rpc CreateTopic(NewTopicRequest) returns (TopicResponse);
   rpc CreatePartitionedTopic(PartitionedTopicRequest) returns (TopicResponse);
   rpc DeleteTopic(TopicRequest) returns (TopicResponse);
   rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
@@ -38,6 +38,12 @@ message NamespaceRequest {
 
 message NamespaceResponse {
   bool success = 1;
+}
+
+message NewTopicRequest {
+  string name = 1;
+  string schema_type = 2;
+  string schema_data = 3;
 }
 
 message TopicRequest {

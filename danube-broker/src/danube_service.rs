@@ -110,6 +110,20 @@ impl DanubeService {
             self.service_config.cluster_name
         );
 
+        // Start the Local Cache
+        //==========================================================================
+
+        // Fetch initial data, populate cache & watch for Events to update local cache
+        let store_client = self.meta_store.get_client();
+        if let Some(client) = store_client.clone() {
+            let local_cache_cloned = self.local_cache.clone();
+            let rx_event = self.local_cache.populate_start_local_cache(client).await?;
+            // Process the ETCD Watch events
+            tokio::spawn(async move { local_cache_cloned.process_event(rx_event).await });
+        }
+
+        info!("Started the Local Cache service.");
+
         // Cluster metadata setup
         //==========================================================================
         let _ = self
@@ -171,11 +185,11 @@ impl DanubeService {
         ready_rx.await?;
 
         // it is needed by syncronizer in order to publish messages on meta_topic
-        let client = DanubeClient::builder()
-            .service_url("http://[::1]:6650")
+        let danube_client = DanubeClient::builder()
+            .service_url("http://127.0.0.1:6650")
             .build()?;
 
-        let _ = self.syncronizer.with_client(client);
+        let _ = self.syncronizer.with_client(danube_client);
 
         // TODO! create producer / consumer and use it
 
@@ -191,20 +205,6 @@ impl DanubeService {
             leader_election_cloned.start(leader_check_interval).await;
         });
         info!("Started the Leader Election service");
-
-        // Start the Local Cache
-        //==========================================================================
-
-        // Fetch initial data, populate cache & watch for Events to update local cache
-        let client = self.meta_store.get_client();
-        if let Some(client) = client.clone() {
-            let local_cache_cloned = self.local_cache.clone();
-            let rx_event = self.local_cache.populate_start_local_cache(client).await?;
-            // Process the ETCD Watch events
-            tokio::spawn(async move { local_cache_cloned.process_event(rx_event).await });
-        }
-
-        info!("Started the Local Cache service.");
 
         // Start the Load Manager Service
         //==========================================================================
@@ -237,7 +237,7 @@ impl DanubeService {
 
         // Watch for events of Broker's interest
         let broker_service_cloned = Arc::clone(&self.broker);
-        if let Some(client) = client {
+        if let Some(client) = store_client {
             self.watch_events_for_broker(client, broker_service_cloned)
                 .await;
         }
@@ -324,7 +324,7 @@ impl DanubeService {
                                 // wait a sec so the LocalCache receive the updates from the persistent metadata
                                 sleep(Duration::from_secs(2)).await;
                                 let mut broker_service = broker_service.lock().await;
-                                match broker_service.create_topic(&topic_name).await {
+                                match broker_service.create_topic_locally(&topic_name).await {
                                     Ok(()) => info!(
                                         "The topic {} , was successfully created on broker {}",
                                         topic_name, broker_id

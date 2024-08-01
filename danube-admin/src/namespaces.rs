@@ -11,14 +11,18 @@ pub(crate) struct Namespaces {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum NamespacesCommands {
+    #[command(about = "List topics in the specified namespace")]
     Topics { namespace: String },
+    #[command(about = "List the configuration policies for a specified namespace")]
     Policies { namespace: String },
+    #[command(about = "Create a new namespace")]
     Create { namespace: String },
+    #[command(about = "Delete an existing namespace")]
     Delete { namespace: String },
 }
 
 pub async fn handle_command(namespaces: Namespaces) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = NamespaceAdminClient::connect("http://[::1]:50051").await?;
+    let mut client = NamespaceAdminClient::connect("http://127.0.0.1:50051").await?;
 
     match namespaces.command {
         // Get the list of topics of a namespace

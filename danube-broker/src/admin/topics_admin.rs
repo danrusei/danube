@@ -1,6 +1,6 @@
 use crate::admin::DanubeAdminImpl;
 use crate::admin_proto::{
-    topic_admin_server::TopicAdmin, NamespaceRequest, PartitionedTopicRequest,
+    topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, PartitionedTopicRequest,
     SubscriptionListResponse, SubscriptionRequest, SubscriptionResponse, TopicListResponse,
     TopicRequest, TopicResponse,
 };
@@ -32,17 +32,34 @@ impl TopicAdmin for DanubeAdminImpl {
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn create_topic(
         &self,
-        request: Request<TopicRequest>,
+        request: Request<NewTopicRequest>,
     ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
         let req = request.into_inner();
 
         trace!("Admin: creates a non-partitioned topic: {}", req.name);
 
+        let mut schema_type = match SchemaType::from_str(&req.schema_type) {
+            Some(schema_type) => schema_type,
+            None => {
+                let status = Status::not_found(format!(
+                    "Invalid schema_type, allowed values: Bytes, String, Int64, Json "
+                ));
+                return Err(status);
+            }
+        };
+
+        if schema_type == SchemaType::Json(String::new()) {
+            schema_type = SchemaType::Json(req.schema_data);
+        }
+
         let mut service = self.broker_service.lock().await;
 
-        let schema = Schema::new(format!("{}_schema", req.name), SchemaType::String);
+        let schema = Schema::new(format!("{}_schema", req.name), schema_type);
 
-        let success = match service.post_new_topic(&req.name, schema.into(), None).await {
+        let success = match service
+            .create_topic_cluster(&req.name, Some(schema.into()))
+            .await
+        {
             Ok(()) => true,
             Err(err) => {
                 let status = Status::not_found(format!(
