@@ -1,6 +1,6 @@
 use crate::proto::{
-    topic_admin_client::TopicAdminClient, NamespaceRequest, PartitionedTopicRequest,
-    SubscriptionRequest, TopicRequest,
+    topic_admin_client::TopicAdminClient, NamespaceRequest, NewTopicRequest,
+    PartitionedTopicRequest, SubscriptionRequest, TopicRequest,
 };
 use clap::{Args, Subcommand};
 
@@ -12,28 +12,33 @@ pub(crate) struct Topics {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum TopicsCommands {
-    List {
-        namespace: String,
-    },
+    #[command(about = "List topics in the specified namespace")]
+    List { namespace: String },
+    #[command(about = "Create a non-partitioned topic")]
     Create {
         topic: String,
+        #[arg(short, long, default_value = "String")]
+        schema_type: String,
+        #[arg(short = 'd', long, default_value = "{}")]
+        schema_data: String,
     },
+    #[command(about = "Create a partitioned topic")]
     CreatePartitionedTopic {
         topic: String,
         #[arg(short, long, default_value_t = 0)]
         partitions: i32,
     },
-    Delete {
-        topic: String,
-    },
+    #[command(about = "Delete an existing topic")]
+    Delete { topic: String },
+    #[command(about = "Delete a subscription from a topic")]
     Unsubscribe {
         topic: String,
         #[arg(short, long)]
         subscription: String,
     },
-    Subscriptions {
-        topic: String,
-    },
+    #[command(about = "List the subscriptions of the specified topic")]
+    Subscriptions { topic: String },
+    #[command(about = "Create a new subscription for the specified topic")]
     CreateSubscription {
         #[arg(short, long)]
         subscription: String,
@@ -43,7 +48,7 @@ pub(crate) enum TopicsCommands {
 
 #[allow(unreachable_code)]
 pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = TopicAdminClient::connect("http://[::1]:50051").await?;
+    let mut client = TopicAdminClient::connect("http://127.0.0.1:50051").await?;
 
     match topics.command {
         // Get the list of topics of a namespace
@@ -59,8 +64,19 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
         }
 
         // Creates a non-partitioned topic
-        TopicsCommands::Create { topic } => {
-            let request = TopicRequest { name: topic };
+        TopicsCommands::Create {
+            topic,
+            mut schema_type,
+            schema_data,
+        } => {
+            if schema_type.is_empty() {
+                schema_type = "String".into()
+            }
+            let request = NewTopicRequest {
+                name: topic,
+                schema_type,
+                schema_data,
+            };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
         }

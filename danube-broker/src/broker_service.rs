@@ -56,7 +56,7 @@ impl BrokerService {
         create_if_missing: bool,
     ) -> Result<bool, Status> {
         // The topic format is /{namespace_name}/{topic_name}
-        if !validate_topic(topic_name) {
+        if !validate_topic_format(topic_name) {
             let error_string =
                 "The topic has an invalid format, should be: /namespace_name/topic_name";
             let status = create_error_status(
@@ -103,6 +103,48 @@ impl BrokerService {
             return Err(status);
         };
 
+        match self.create_topic_cluster(topic_name, schema).await {
+            Ok(()) => {
+                let error_string =
+            "The topic metadata was created, need to redo the lookup to find the correct broker";
+                let status = create_error_status(
+                    Code::Unavailable,
+                    ErrorType::ServiceNotReady,
+                    error_string,
+                    None,
+                );
+                return Err(status);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    // get all the topics currently served by the Broker
+    pub(crate) fn get_topics(&self) -> Vec<&String> {
+        let topics: Vec<&String> = self.topics.iter().map(|topic| topic.0).collect();
+        topics
+    }
+
+    // Creates a topic on the cluster
+    // and leave to the Leader Broker to assign to one of the active brokers
+    pub(crate) async fn create_topic_cluster(
+        &mut self,
+        topic_name: &str,
+        schema: Option<ProtoSchema>,
+    ) -> Result<(), Status> {
+        // The topic format is /{namespace_name}/{topic_name}
+        if !validate_topic_format(topic_name) {
+            let error_string =
+                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
+            return Err(status);
+        }
+
         if schema.is_none() {
             let error_string = "Unable to create a topic without specifying the Schema";
             let status = create_error_status(
@@ -114,33 +156,26 @@ impl BrokerService {
             return Err(status);
         }
 
-        let status = match self.post_new_topic(topic_name, schema.unwrap(), None).await {
-            Ok(()) => {
-                let error_string = "The topic metadata was created, need to redo the lookup to find the correct broker";
-                let status = create_error_status(
-                    Code::Unavailable,
-                    ErrorType::ServiceNotReady,
-                    error_string,
-                    None,
-                );
-                status
-            }
+        let ns_name = get_nsname_from_topic(topic_name);
+
+        if let Ok(false) = self.resources.namespace.namespace_exist(ns_name).await {
+            let status = Status::unavailable(&format!(
+                "Unable to find the namespace {}, the topic can be created only for an exisiting namespace", ns_name
+            ));
+            return Err(status);
+        }
+
+        match self.post_new_topic(topic_name, schema.unwrap(), None).await {
+            Ok(()) => return Ok(()),
+
             Err(err) => {
                 let status = Status::internal(&format!(
                     "The broker unable to post the topic to metadata store, due to error: {}",
                     err,
                 ));
-                status
+                return Err(status);
             }
         };
-
-        return Err(status);
-    }
-
-    // get all the topics currently served by the Broker
-    pub(crate) fn get_topics(&self) -> Vec<&String> {
-        let topics: Vec<&String> = self.topics.iter().map(|topic| topic.0).collect();
-        topics
     }
 
     // post the Topic resources to Metadata Store
@@ -195,18 +230,27 @@ impl BrokerService {
             None => return Err(anyhow!("Unable to find topic")),
         };
 
-        // remove the topic from the metadata store
-        // that will trigger the watch event on the hosting broker to proceed with the deletion
-
+        // Remove the topic from the metadata store in three steps:
+        // 1. Remove from assigned broker:
+        // this will trigger the watch event on the hosting broker to proceed with the deletion
         self.resources
             .cluster
             .schedule_topic_deletion(&broker_id, topic_name)
             .await?;
 
+        // 2. delete the topic from the namespace (from /namespaces)
+        self.resources.namespace.delete_topic(topic_name).await?;
+
+        // 3. delete the topic schema (from /topics)
+        self.resources.topic.delete_topic_schema(topic_name).await?;
+
         Ok(())
     }
 
-    pub(crate) async fn create_topic(&mut self, topic_name: &str) -> Result<()> {
+    // creates the topic on the local broker
+    // assumes that it was received from legitimate sources, like ETCDWatchEvent
+    // so we know that the topic was checked before and assigned to this broker by load manager
+    pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
         // create the topic,
         let mut new_topic = Topic::new(topic_name);
 
@@ -505,7 +549,7 @@ impl BrokerService {
 }
 
 // Topics string representation:  /{namespace}/{topic-name}
-pub(crate) fn validate_topic(input: &str) -> bool {
+pub(crate) fn validate_topic_format(input: &str) -> bool {
     let parts: Vec<&str> = input.split('/').collect();
 
     if parts.len() != 3 {
@@ -524,6 +568,8 @@ pub(crate) fn validate_topic(input: &str) -> bool {
     true
 }
 
+// extract the namespace from a topic
+// example from topic /ns_name/topic_name returns the  ns_name
 fn get_nsname_from_topic(topic_name: &str) -> &str {
     // assuming that the topic name has already been validated.
     let parts: Vec<&str> = topic_name.split('/').collect();

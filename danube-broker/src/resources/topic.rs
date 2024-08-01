@@ -1,4 +1,4 @@
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
@@ -35,6 +35,11 @@ impl TopicResources {
         Ok(())
     }
 
+    pub(crate) async fn delete(&mut self, path: &str) -> Result<()> {
+        let _prev_value = self.store.delete(path).await?;
+        Ok(())
+    }
+
     pub(crate) async fn add_topic_policy(
         &mut self,
         topic_name: &str,
@@ -55,6 +60,13 @@ impl TopicResources {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
         let data = serde_json::to_value(&schema).unwrap();
         self.create(&path, data).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn delete_topic_schema(&mut self, topic_name: &str) -> Result<()> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
+        self.delete(&path).await?;
 
         Ok(())
     }

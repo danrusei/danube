@@ -17,6 +17,16 @@ pub struct NamespaceResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewTopicRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub schema_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub schema_data: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TopicRequest {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -565,7 +575,7 @@ pub mod topic_admin_client {
         }
         pub async fn create_topic(
             &mut self,
-            request: impl tonic::IntoRequest<super::TopicRequest>,
+            request: impl tonic::IntoRequest<super::NewTopicRequest>,
         ) -> std::result::Result<tonic::Response<super::TopicResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -1351,7 +1361,7 @@ pub mod topic_admin_server {
         >;
         async fn create_topic(
             &self,
-            request: tonic::Request<super::TopicRequest>,
+            request: tonic::Request<super::NewTopicRequest>,
         ) -> std::result::Result<tonic::Response<super::TopicResponse>, tonic::Status>;
         async fn create_partitioned_topic(
             &self,
@@ -1511,7 +1521,9 @@ pub mod topic_admin_server {
                 "/danube_admin.TopicAdmin/CreateTopic" => {
                     #[allow(non_camel_case_types)]
                     struct CreateTopicSvc<T: TopicAdmin>(pub Arc<T>);
-                    impl<T: TopicAdmin> tonic::server::UnaryService<super::TopicRequest>
+                    impl<
+                        T: TopicAdmin,
+                    > tonic::server::UnaryService<super::NewTopicRequest>
                     for CreateTopicSvc<T> {
                         type Response = super::TopicResponse;
                         type Future = BoxFuture<
@@ -1520,7 +1532,7 @@ pub mod topic_admin_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::TopicRequest>,
+                            request: tonic::Request<super::NewTopicRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {

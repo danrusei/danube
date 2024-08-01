@@ -11,8 +11,11 @@ pub(crate) struct Brokers {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum BrokersCommands {
+    #[command(about = "List all active brokers in the cluster")]
     List,
+    #[command(about = "List the cluster leader broker")]
     LeaderBroker,
+    #[command(about = "List all namespaces in the cluster")]
     Namespaces,
 }
 

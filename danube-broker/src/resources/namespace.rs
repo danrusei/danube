@@ -116,6 +116,16 @@ impl NamespaceResources {
         Ok(())
     }
 
+    pub(crate) async fn delete_topic(&mut self, topic_name: &str) -> Result<()> {
+        let parts: Vec<_> = topic_name.split("/").collect();
+        let ns_name = parts[1];
+        let path = join_path(&[BASE_NAMESPACES_PATH, ns_name, "topics", topic_name]);
+
+        self.delete(&path).await?;
+
+        Ok(())
+    }
+
     pub(crate) async fn get_topics_for_namespace(&self, ns_name: &str) -> Vec<String> {
         let path = join_path(&[BASE_NAMESPACES_PATH, ns_name]);
 

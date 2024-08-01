@@ -324,7 +324,7 @@ impl DanubeService {
                                 // wait a sec so the LocalCache receive the updates from the persistent metadata
                                 sleep(Duration::from_secs(2)).await;
                                 let mut broker_service = broker_service.lock().await;
-                                match broker_service.create_topic(&topic_name).await {
+                                match broker_service.create_topic_locally(&topic_name).await {
                                     Ok(()) => info!(
                                         "The topic {} , was successfully created on broker {}",
                                         topic_name, broker_id

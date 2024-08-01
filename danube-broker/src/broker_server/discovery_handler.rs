@@ -1,5 +1,5 @@
 use crate::broker_server::DanubeServerImpl;
-use crate::{broker_service::validate_topic, error_message::create_error_status};
+use crate::{broker_service::validate_topic_format, error_message::create_error_status};
 
 use crate::proto::{
     discovery_server::Discovery, topic_lookup_response::LookupType, ErrorType, SchemaRequest,
@@ -22,7 +22,7 @@ impl Discovery for DanubeServerImpl {
         trace!("Topic Lookup request for topic: {}", req.topic);
 
         // The topic format is /{namespace_name}/{topic_name}
-        if !validate_topic(&req.topic) {
+        if !validate_topic_format(&req.topic) {
             let error_string =
                 "The topic has an invalid format, should be: /namespace_name/topic_name";
             let status = create_error_status(
@@ -85,7 +85,7 @@ impl Discovery for DanubeServerImpl {
         trace!("Schema Lookup for the topic: {}", req.topic);
 
         // The topic format is /{namespace_name}/{topic_name}
-        if !validate_topic(&req.topic) {
+        if !validate_topic_format(&req.topic) {
             let error_string =
                 "The topic has an invalid format, should be: /namespace_name/topic_name";
             let status = create_error_status(
