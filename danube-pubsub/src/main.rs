@@ -8,7 +8,7 @@ use produce::Produce;
 
 #[derive(Debug, Parser)]
 #[command(name = "danube-pubsub")]
-#[command(about = "CLI for managing the Danube pub/sub platform")]
+#[command(about = "A command-line tool to interact with Danube service")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -16,7 +16,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    #[command(about = "produce messages for the topic")]
     Produce(Produce),
+    #[command(about = "consume messages from the topic")]
     Consume(Consume),
 }
 

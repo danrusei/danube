@@ -363,18 +363,18 @@ impl BrokerService {
         &self,
         topic_name: String,
         producer_name: String,
-    ) -> bool {
+    ) -> Option<u64> {
         // the topic is already checked
         let topic = match self.topics.get(&topic_name) {
-            None => return false,
+            None => return None,
             Some(topic) => topic,
         };
         for producer in topic.producers.values() {
             if producer.producer_name == producer_name {
-                return true;
+                return Some(producer.get_id());
             }
         }
-        false
+        return None;
     }
 
     pub(crate) fn health_producer(&mut self, producer_id: u64) -> bool {

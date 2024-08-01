@@ -1,12 +1,11 @@
 use crate::broker_server::DanubeServerImpl;
-use crate::error_message::create_error_status;
 use crate::proto::{
-    producer_service_server::ProducerService, ErrorType, MessageRequest, MessageResponse,
-    ProducerRequest, ProducerResponse,
+    producer_service_server::ProducerService, MessageRequest, MessageResponse, ProducerRequest,
+    ProducerResponse,
 };
 
 use std::collections::hash_map::Entry;
-use tonic::{Code, Request, Response, Status};
+use tonic::{Request, Response, Status};
 use tracing::{info, trace, Level};
 
 #[tonic::async_trait]
@@ -36,17 +35,22 @@ impl ProducerService for DanubeServerImpl {
 
         //Todo! Here insert the auth/authz, check if it is authorized to perform the Topic Operation, add a producer
 
-        // this check is on the local broker as the producer should be already connected to the correct broker
-        if service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone()) {
-            let error_string = "This producer is already present on the connection,\
-             a new producer with the same name is not allowed";
-            let status = create_error_status(
-                Code::AlreadyExists,
-                ErrorType::InvalidTopicName,
-                error_string,
-                None,
-            );
-            return Err(status);
+        // This check is on the local broker
+        // If exist, the producer should be already created to the correct broker
+        // as the above check with "get_topic" redirects the user to the broker that serve the topic
+        //
+        // should not throw an error here, even if the producer already exist,
+        // as the server should handle producer reconnections and reuses gracefully
+        if let Some(id) =
+            service.check_if_producer_exist(req.topic_name.clone(), req.producer_name.clone())
+        {
+            let response = ProducerResponse {
+                request_id: req.request_id,
+                producer_name: req.producer_name,
+                producer_id: id,
+            };
+
+            return Ok(tonic::Response::new(response));
         }
 
         let new_producer_id = match service.create_new_producer(
