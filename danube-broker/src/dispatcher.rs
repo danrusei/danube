@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::consumer::Consumer;
+use crate::consumer::{Consumer, MessageToSend};
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_single_consumer;
@@ -17,7 +17,7 @@ pub(crate) enum Dispatcher {
 }
 
 impl Dispatcher {
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>) -> Result<()> {
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.send_messages(messages).await?),
             Dispatcher::MultipleConsumers(dispatcher) => {

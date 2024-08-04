@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::trace;
 
-use crate::consumer::Consumer;
+use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -94,7 +94,7 @@ impl DispatcherMultipleConsumers {
         Err(anyhow!("Unable to find the next consumer"))
     }
 
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>) -> Result<()> {
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         // maybe wrap Vec<8> into a generic Message
         // selects the next available consumer based on available permits
         let consumer = self.get_next_consumer()?;

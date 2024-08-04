@@ -9,6 +9,7 @@ use crate::{
     DanubeClient,
 };
 
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
@@ -177,16 +178,27 @@ impl Producer {
     }
 
     // the Producer sends messages to the topic
-    pub async fn send(&self, data: Vec<u8>) -> Result<u64> {
+    pub async fn send(
+        &self,
+        data: Vec<u8>,
+        attributes: Option<HashMap<String, String>>,
+    ) -> Result<u64> {
         let publish_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_millis() as u64;
 
+        let attr = if let Some(attributes) = attributes {
+            attributes
+        } else {
+            HashMap::new()
+        };
+
         let meta_data = MessageMetadata {
             producer_name: self.producer_name.clone(),
             sequence_id: self.message_sequence_id.fetch_add(1, Ordering::SeqCst),
             publish_time: publish_time,
+            attributes: attr,
         };
 
         let send_message = SendMessage {

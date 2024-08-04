@@ -89,7 +89,7 @@ impl Syncronizer {
         let serialized_data = serde_json::to_vec(&event)?;
 
         if let Some(producer) = &self.producer {
-            let _message_id = producer.send(serialized_data).await?;
+            let _message_id = producer.send(serialized_data, None).await?;
             info!(
                 "Successfully sent the notification of the metadata change event {:?}",
                 event

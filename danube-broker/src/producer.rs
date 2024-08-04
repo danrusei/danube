@@ -40,7 +40,6 @@ impl Producer {
     pub(crate) async fn publish_message(
         &self,
         _producer_id: u64,
-        _message_sequence_id: u64,
         _message: &Vec<u8>,
     ) -> Result<()> {
         // it performs some checks in regards to checksum, encryption etc

@@ -29,28 +29,37 @@ pub struct ProducerResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageRequest {
+    /// Unique ID for tracking the message request
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    /// Identifies the producer, associated with a unique topic
     #[prost(uint64, tag = "2")]
     pub producer_id: u64,
-    #[prost(message, optional, tag = "3")]
+    /// The actual payload of the message
+    #[prost(bytes = "vec", tag = "3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Optional metadata for additional context
+    #[prost(message, optional, tag = "4")]
     pub metadata: ::core::option::Option<MessageMetadata>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub message: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageMetadata {
-    /// Identifies the name of the producer that sent the message.
+    /// Optional, identifies the producer’s name
     #[prost(string, tag = "1")]
     pub producer_name: ::prost::alloc::string::String,
-    /// Represents the sequence ID of the message within the topic
-    /// this is critical to maintain the messages order that are consumed by consumers
+    /// Optional, useful for maintaining order and deduplication
     #[prost(uint64, tag = "2")]
     pub sequence_id: u64,
-    /// Indicates the time when the message was published
+    /// Optional, timestamp for when the message was published
     #[prost(uint64, tag = "3")]
     pub publish_time: u64,
+    /// Optional, user-defined properties/attributes
+    #[prost(map = "string, string", tag = "4")]
+    pub attributes: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 /// Producer receive acknowledge for the sent message
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -143,10 +152,15 @@ pub struct ReceiveRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamMessage {
+    /// Unique ID for tracking the message request
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    /// The actual payload of the message
     #[prost(bytes = "vec", tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<u8>,
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Optional metadata for additional context
+    #[prost(message, optional, tag = "3")]
+    pub metadata: ::core::option::Option<MessageMetadata>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

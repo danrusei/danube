@@ -1,13 +1,14 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use danube_client::{DanubeClient, SchemaType};
+use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Parser)]
 pub struct Produce {
     #[arg(
         long,
-        short = 'a',
+        short = 's',
         help = "The service URL for the Danube broker. Example: http://127.0.0.1:6650"
     )]
     pub service_addr: String,
@@ -22,7 +23,7 @@ pub struct Produce {
 
     #[arg(
         long,
-        short = 's',
+        short = 'p',
         value_enum,
         help = "The schema type of the message."
     )]
@@ -53,6 +54,14 @@ pub struct Produce {
         help = "Interval between messages in milliseconds. Default: 500. Minimum: 100."
     )]
     pub interval: u64,
+
+    #[arg(
+        long,
+        short = 'a',
+        value_parser = parse_attributes,
+        help = "Attributes in the form 'parameter:value'. Example: 'key1:value1,key2:value2'"
+    )]
+    pub attributes: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
@@ -87,7 +96,10 @@ pub async fn handle_produce(produce: Produce) -> Result<()> {
     let encoded_data = produce.message.as_bytes().to_vec();
 
     for _ in 0..produce.count {
-        let message_id = producer.send(encoded_data.clone()).await?;
+        let cloned_attributes = produce.attributes.clone();
+        let message_id = producer
+            .send(encoded_data.clone(), cloned_attributes)
+            .await?;
         println!("The Message with ID {} was sent", message_id);
         if produce.count - 1 > 0 {
             sleep(Duration::from_millis(produce.interval)).await;
@@ -138,4 +150,23 @@ fn validate_schema(
         },
         None => return Ok(SchemaTypeArg::String.into()),
     };
+}
+
+fn parse_attributes(val: &str) -> Result<HashMap<String, String>, String> {
+    let mut map = HashMap::new();
+    for pair in val.split(',') {
+        let mut split = pair.splitn(2, ':');
+        let key = split
+            .next()
+            .ok_or("Invalid format: missing key")?
+            .trim()
+            .to_string();
+        let value = split
+            .next()
+            .ok_or("Invalid format: missing value")?
+            .trim()
+            .to_string();
+        map.insert(key, value);
+    }
+    Ok(map)
 }

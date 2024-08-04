@@ -77,14 +77,16 @@ async fn test_exclusive_subscription() -> Result<()> {
     let mut message_stream = consumer.receive().await?;
 
     // Produce a message after the consumer has subscribed
-    let _message_id = producer.send("Hello Danube".as_bytes().into()).await?;
+    let _message_id = producer
+        .send("Hello Danube".as_bytes().into(), None)
+        .await?;
     println!("Message sent");
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
         if let Some(message) = message_stream.next().await {
             let msg = message.unwrap();
-            let payload = String::from_utf8(msg.messages).unwrap();
+            let payload = String::from_utf8(msg.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();
@@ -121,14 +123,16 @@ async fn test_shared_subscription() -> Result<()> {
     let mut message_stream = consumer.receive().await?;
 
     // Produce a message after the consumer has subscribed
-    let _message_id = producer.send("Hello Danube".as_bytes().into()).await?;
+    let _message_id = producer
+        .send("Hello Danube".as_bytes().into(), None)
+        .await?;
     println!("Message sent");
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
         if let Some(message) = message_stream.next().await {
             let msg = message.unwrap();
-            let payload = String::from_utf8(msg.messages).unwrap();
+            let payload = String::from_utf8(msg.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();

@@ -3,14 +3,14 @@ use clap::{Parser, ValueEnum};
 use danube_client::{DanubeClient, SchemaType, SubType};
 use futures_util::stream::StreamExt;
 use serde_json::{from_slice, Value};
-use std::str::from_utf8;
+use std::{collections::HashMap, str::from_utf8};
 use valico::json_schema::{self, schema::ScopedSchema};
 
 #[derive(Debug, Parser)]
 pub struct Consume {
     #[arg(
         long,
-        short = 'a',
+        short = 's',
         help = "The service URL for the Danube broker. Example: http://127.0.0.1:6650"
     )]
     pub service_addr: String,
@@ -79,10 +79,21 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
     while let Some(message) = message_stream.next().await {
         match message {
             Ok(stream_message) => {
-                let payload = stream_message.messages;
+                let payload = stream_message.payload;
+                let (seq_id, attr) = if let Some(meta) = stream_message.metadata {
+                    (meta.sequence_id, meta.attributes)
+                } else {
+                    (0, HashMap::new())
+                };
 
                 // Process message based on the schema type
-                process_message(&payload, &schema.type_schema, &schema_validator)?;
+                process_message(
+                    &payload,
+                    seq_id,
+                    attr,
+                    &schema.type_schema,
+                    &schema_validator,
+                )?;
             }
             Err(e) => {
                 eprintln!("Error receiving message: {}", e);
@@ -96,28 +107,54 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
 
 fn process_message(
     payload: &[u8],
+    seq: u64,
+    attr: HashMap<String, String>,
     schema_type: &SchemaType,
     schema_validator: &Option<ScopedSchema>,
 ) -> Result<()> {
     match schema_type {
         SchemaType::Bytes => {
             let decoded_message = from_utf8(payload)?;
-            println!("Received bytes message: {}", decoded_message);
+            println!(
+                "Received bytes message: {} with payload {} and attributes {}",
+                seq,
+                decoded_message,
+                print_attr(&attr)
+            );
         }
         SchemaType::String => {
             let decoded_message = from_utf8(payload)?;
-            println!("Received string message: {}", decoded_message);
+            println!(
+                "Received string message: {} with payload {} and attributes {}",
+                seq,
+                decoded_message,
+                print_attr(&attr)
+            );
         }
         SchemaType::Int64 => {
             let message = std::str::from_utf8(payload)
                 .context("Invalid UTF-8 sequence")?
                 .parse::<i64>()
                 .context("Failed to parse Int64")?;
-            println!("Received Int64 message: {}", message);
+            println!(
+                "Received Int64 message: {} with payload {} and attributes {}",
+                seq,
+                message,
+                print_attr(&attr)
+            );
         }
         SchemaType::Json(_) => {
             if let Some(validator) = schema_validator {
-                process_json_message(payload, validator)?
+                process_json_message(payload, validator)?;
+
+                // If validation passes, handle the JSON message
+                let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
+                println!(
+                    "Received and validated JSON message: {} with payload {} and attributes {}",
+                    seq,
+                    json_str,
+                    print_attr(&attr)
+                );
             } else {
                 eprintln!("JSON schema validator is missing.");
             }
@@ -127,17 +164,12 @@ fn process_message(
 }
 
 fn process_json_message(payload: &[u8], schema_validator: &ScopedSchema) -> Result<()> {
-    let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
     let json_value: Value = from_slice(payload)?;
-
     // Validate the JSON message against the schema
     if !schema_validator.validate(&json_value).is_valid() {
         eprintln!("JSON message validation failed: {}", json_value);
         return Ok(()); // Continue processing other messages even if validation fails
     }
-
-    // If validation passes, handle the JSON message
-    println!("Received and validated JSON message: {}", json_str);
 
     Ok(())
 }
@@ -169,4 +201,14 @@ impl From<SubTypeArg> for SubType {
             SubTypeArg::FailOver => SubType::FailOver,
         }
     }
+}
+
+fn print_attr(attributes: &HashMap<String, String>) -> String {
+    let formatted: Vec<String> = attributes
+        .iter()
+        .map(|(key, value)| format!("{}={}", key, value))
+        .collect();
+
+    let result = formatted.join(", ");
+    result
 }

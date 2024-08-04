@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
-use crate::consumer::Consumer;
+use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -54,7 +54,7 @@ impl DispatcherSingleConsumer {
     }
 
     // sending messages to an active consumer
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>) -> Result<()> {
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         let current_consumer = if let Some(consumer) = &self.active_consumer {
             consumer
         } else {

@@ -3,8 +3,9 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::trace;
 
+use crate::proto::MessageMetadata;
 use crate::{
-    consumer::Consumer,
+    consumer::{Consumer, MessageToSend},
     policies::Policies,
     producer::Producer,
     schema::Schema,
@@ -72,8 +73,8 @@ impl Topic {
     pub(crate) async fn publish_message(
         &self,
         producer_id: u64,
-        message_sequence_id: u64,
-        message: Vec<u8>,
+        payload: Vec<u8>,
+        meta: Option<MessageMetadata>,
     ) -> Result<()> {
         let producer = if let Some(top) = self.producers.get(&producer_id) {
             top
@@ -86,28 +87,27 @@ impl Topic {
         };
 
         //TODO! this is doing nothing for now, and may not need to be async
-        match producer
-            .publish_message(producer_id, message_sequence_id, &message)
-            .await
-        {
+        match producer.publish_message(producer_id, &payload).await {
             Ok(_) => (),
             Err(err) => {
                 return Err(anyhow!("the Producer checks have failed: {}", err));
             }
         }
 
-        // let data: Bytes = message.into();
+        let message_to_send = MessageToSend {
+            payload,
+            metadata: meta,
+        };
 
         // Dispatch message to all consumers
-
         for (_name, subscription) in self.subscriptions.iter() {
-            let duplicate_data = message.clone();
+            let duplicate_message = message_to_send.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
                 trace!(
                     "A dispatcher was found for the subscription {}",
                     subscription.subscription_name
                 );
-                dispatcher.send_messages(duplicate_data).await?;
+                dispatcher.send_messages(duplicate_message).await?;
             } else {
                 trace!(
                     "No dispatcher has been found for subscription {}",

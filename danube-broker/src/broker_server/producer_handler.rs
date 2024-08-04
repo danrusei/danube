@@ -123,11 +123,8 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
-        //TODO! should not be an Option, as it is mandatory to be present in the message request
-        let meta = req.metadata.unwrap();
-
         match topic
-            .publish_message(req.producer_id, meta.sequence_id, req.message)
+            .publish_message(req.producer_id, req.payload, req.metadata.clone())
             .await
         {
             Ok(_) => (),
@@ -140,9 +137,15 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
+        let msg_seq_id: u64 = if let Some(msg_meta) = req.metadata {
+            msg_meta.sequence_id
+        } else {
+            0
+        };
+
         let response = MessageResponse {
             request_id: req.request_id,
-            sequence_id: meta.sequence_id,
+            sequence_id: msg_seq_id,
         };
 
         Ok(tonic::Response::new(response))

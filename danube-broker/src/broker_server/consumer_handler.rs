@@ -140,7 +140,8 @@ impl ConsumerService for DanubeServerImpl {
 
                     let stream_messages = StreamMessage {
                         request_id: request_id,
-                        messages: messages,
+                        payload: messages.payload,
+                        metadata: messages.metadata,
                     };
 
                     if tx.send(Ok(stream_messages)).await.is_err() {
