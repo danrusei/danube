@@ -6,7 +6,6 @@ mod danube_service;
 mod dispatcher;
 mod error_message;
 mod metadata_store;
-mod namespace;
 mod policies;
 mod producer;
 mod resources;

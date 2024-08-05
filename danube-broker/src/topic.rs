@@ -175,7 +175,7 @@ impl Topic {
         let subscription = self
             .subscriptions
             .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(topic_name, options.clone(), sub_metadata));
+            .or_insert(Subscription::new(options.clone(), sub_metadata));
 
         if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);

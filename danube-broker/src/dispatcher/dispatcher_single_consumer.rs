@@ -6,27 +6,16 @@ use tracing::{info, warn};
 use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct DispatcherSingleConsumer {
-    topic_name: String,
-    subscription_name: String,
-    subscription_type: i32, // should be SubscriptionType,
     consumers: Vec<Arc<Mutex<Consumer>>>,
     active_consumer: Option<Arc<Mutex<Consumer>>>,
 }
 
 impl DispatcherSingleConsumer {
-    pub(crate) fn new(
-        topic_name: impl Into<String>,
-        subscription_name: impl Into<String>,
-        subscription_type: i32, // should be SubscriptionType,
-    ) -> Self {
+    pub(crate) fn new() -> Self {
         DispatcherSingleConsumer {
-            topic_name: topic_name.into(),
-            subscription_name: subscription_name.into(),
-            subscription_type,
-            active_consumer: None,
             consumers: Vec::new(),
+            active_consumer: None,
         }
     }
 
@@ -68,11 +57,20 @@ impl DispatcherSingleConsumer {
 
         // maybe wrap Vec<Bytes> into a generic Message
 
-        current_consumer
-            .lock()
-            .await
-            .send_messages(messages, 1)
-            .await?;
+        let mut consumer_guard = current_consumer.lock().await;
+
+        // check if the consumer is active, if not remove from the dispatcher
+        if !consumer_guard.status {
+            // can't be removed for now, as it force alot of functions to be moved to mutable
+            // maybe use an backgroud process that remove unused resources
+            // like disconnected consumers and producers
+            // or maybe move to Arc<Mutex<Vec<Consumer>>> ??
+            //return self.remove_consumer(consumer_guard.consumer_id).await;
+
+            return Ok(());
+        }
+
+        consumer_guard.send_messages(messages, 1).await?;
 
         Ok(())
     }

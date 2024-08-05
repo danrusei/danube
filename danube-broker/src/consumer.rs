@@ -44,7 +44,7 @@ impl Consumer {
 
     // Dispatch a list of entries to the consumer.
     pub(crate) async fn send_messages(
-        &self,
+        &mut self,
         messages: MessageToSend,
         _batch_size: usize,
     ) -> Result<()> {
@@ -54,11 +54,20 @@ impl Consumer {
         // It attempts to send the message through the tx channel.
         // If sending fails (e.g., if the client disconnects), it breaks the loop.
         if let Some(tx) = &self.tx {
-            tx.send(messages).await?;
-            trace!("Consumer instace is sending the message over channel");
+            if let Err(err) = tx.send(messages).await {
+                // Log the error and handle the channel closure scenario
+                warn!(
+                    "Failed to send message to consumer with id: {}. Error: {:?}",
+                    self.consumer_id, err
+                );
+
+                self.status = false
+            } else {
+                trace!("Sending the message over channel to {}", self.consumer_id);
+            }
         } else {
             warn!(
-                "unable to send the message to consumer: {} with id: {}, as the tx is not found",
+                "Unable to send the message to consumer: {} with id: {}, as the tx is not found",
                 self.consumer_name, self.consumer_id
             );
         };

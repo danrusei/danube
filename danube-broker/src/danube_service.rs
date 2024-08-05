@@ -24,8 +24,9 @@ use crate::{
     broker_server,
     broker_service::BrokerService,
     metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
-    namespace::{DEFAULT_NAMESPACE, SYSTEM_NAMESPACE},
-    resources::{Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH},
+    resources::{
+        Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, DEFAULT_NAMESPACE, SYSTEM_NAMESPACE,
+    },
     service_configuration::ServiceConfiguration,
     topic::SYSTEM_TOPIC,
     utils::join_path,
