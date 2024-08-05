@@ -102,6 +102,24 @@ impl TopicResources {
         Ok(())
     }
 
+    pub(crate) async fn create_subscription(
+        &mut self,
+        subscription_name: &str,
+        topic_name: &str,
+        sub_options: Value,
+    ) -> Result<()> {
+        let path = join_path(&[
+            BASE_TOPICS_PATH,
+            topic_name,
+            "subscriptions",
+            subscription_name,
+        ]);
+
+        self.create(&path, sub_options).await?;
+
+        Ok(())
+    }
+
     pub(crate) fn get_schema(&self, topic_name: &str) -> Option<Schema> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
         let result = self.local_cache.get(&path);

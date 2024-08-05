@@ -52,6 +52,7 @@ impl Topic {
         }
     }
 
+    #[allow(unused_assignments)]
     pub(crate) fn create_producer(
         &mut self,
         producer_id: u64,
@@ -167,8 +168,10 @@ impl Topic {
         topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<Arc<Mutex<Consumer>>> {
-        //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
+        //Todo! sub_metadata is user-defined information to the subscription,
+        //maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
+
         let subscription = self
             .subscriptions
             .entry(options.subscription_name.clone())

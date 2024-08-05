@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::trace;
@@ -22,8 +23,7 @@ pub(crate) struct Subscription {
     pub(crate) dispatcher: Option<Dispatcher>,
 }
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SubscriptionOptions {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be moved to SubscriptionType

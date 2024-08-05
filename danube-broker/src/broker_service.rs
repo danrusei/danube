@@ -273,10 +273,11 @@ impl BrokerService {
             let ns_name = format!("/{}", parts[1]);
 
             let policies = self.resources.namespace.get_policies(&ns_name)?;
-            //TODO! for now the namespace polices == topic policies, if they will be different as number of values
-            // then I shoud copy field by field
             let _ = new_topic.policies_update(policies);
         }
+
+        // new producers and consumer subscriptions should be created again by the client
+        // if the topic is moved from one broker to another
 
         self.topics.insert(topic_name.to_string(), new_topic);
 
@@ -485,11 +486,9 @@ impl BrokerService {
         topic_name: &str,
         subscription_options: SubscriptionOptions,
     ) -> Result<u64> {
-        if let Some(topic) = self.topics.get_mut(topic_name) {
-            //TODO! checkTopicOwnership
-            // if it's owened by this instance continue,
-            // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
+        // the caller of this function should ensure that the topic is served by this broker
 
+        if let Some(topic) = self.topics.get_mut(topic_name) {
             let consumer = topic
                 .subscribe(topic_name, subscription_options.clone())
                 .await?;
@@ -500,9 +499,21 @@ impl BrokerService {
                 consumer_id,
                 (
                     topic_name.to_string(),
-                    subscription_options.subscription_name,
+                    subscription_options.subscription_name.clone(),
                 ),
             );
+
+            // create a metadata store entry for newly created subscription
+            let sub_options = serde_json::to_value(&subscription_options)?;
+            self.resources
+                .topic
+                .create_subscription(
+                    &subscription_options.subscription_name,
+                    topic_name,
+                    sub_options,
+                )
+                .await?;
+
             return Ok(consumer_id);
         } else {
             return Err(anyhow!("Unable to find the topic: {}", topic_name));
