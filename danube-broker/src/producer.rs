@@ -1,7 +1,8 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 // Represents the connected producer
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct Producer {
     pub(crate) producer_id: u64,
@@ -12,7 +13,7 @@ pub(crate) struct Producer {
     pub(crate) status: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub(crate) enum ProducerAccessMode {
     // multiple producers can concurrently produce messages to the same topic

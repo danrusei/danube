@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Result};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::proto::MessageMetadata;
 use crate::{
@@ -47,6 +50,36 @@ impl Topic {
             subscriptions: HashMap::new(),
             producers: HashMap::new(),
         }
+    }
+
+    pub(crate) fn create_producer(
+        &mut self,
+        producer_id: u64,
+        producer_name: &str,
+        producer_access_mode: i32,
+    ) -> Result<serde_json::Value> {
+        let mut producer_config = serde_json::Value::String(String::new());
+        match self.producers.entry(producer_id) {
+            Entry::Vacant(entry) => {
+                let new_producer = Producer::new(
+                    producer_id,
+                    producer_name.into(),
+                    self.topic_name.clone(),
+                    producer_access_mode,
+                );
+
+                producer_config = serde_json::to_value(&new_producer)?;
+
+                entry.insert(new_producer);
+            }
+            Entry::Occupied(entry) => {
+                //let current_producer = entry.get();
+                info!("the requested producer: {} already exists", entry.key());
+                return Err(anyhow!(" the producer already exist"));
+            }
+        }
+
+        Ok(producer_config)
     }
 
     // Close this topic - disconnect all producers and subscriptions associated with this topic

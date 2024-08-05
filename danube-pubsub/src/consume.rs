@@ -115,33 +115,18 @@ fn process_message(
     match schema_type {
         SchemaType::Bytes => {
             let decoded_message = from_utf8(payload)?;
-            println!(
-                "Received bytes message: {} with payload {} and attributes {}",
-                seq,
-                decoded_message,
-                print_attr(&attr)
-            );
+            print_to_console(seq, decoded_message, attr);
         }
         SchemaType::String => {
             let decoded_message = from_utf8(payload)?;
-            println!(
-                "Received string message: {} with payload {} and attributes {}",
-                seq,
-                decoded_message,
-                print_attr(&attr)
-            );
+            print_to_console(seq, decoded_message, attr);
         }
         SchemaType::Int64 => {
             let message = std::str::from_utf8(payload)
                 .context("Invalid UTF-8 sequence")?
                 .parse::<i64>()
                 .context("Failed to parse Int64")?;
-            println!(
-                "Received Int64 message: {} with payload {} and attributes {}",
-                seq,
-                message,
-                print_attr(&attr)
-            );
+            print_to_console(seq, &message.to_string(), attr);
         }
         SchemaType::Json(_) => {
             if let Some(validator) = schema_validator {
@@ -149,12 +134,7 @@ fn process_message(
 
                 // If validation passes, handle the JSON message
                 let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
-                println!(
-                    "Received and validated JSON message: {} with payload {} and attributes {}",
-                    seq,
-                    json_str,
-                    print_attr(&attr)
-                );
+                print_to_console(seq, json_str, attr);
             } else {
                 eprintln!("JSON schema validator is missing.");
             }
@@ -211,4 +191,17 @@ fn print_attr(attributes: &HashMap<String, String>) -> String {
 
     let result = formatted.join(", ");
     result
+}
+
+fn print_to_console(seq: u64, message: &str, attributes: HashMap<String, String>) {
+    if attributes.is_empty() {
+        println!("Received bytes message: {}, with payload: {}", seq, message);
+    } else {
+        println!(
+            "Received bytes message: {}, with payload: {}, with attributes: {}",
+            seq,
+            message,
+            print_attr(&attributes)
+        );
+    }
 }

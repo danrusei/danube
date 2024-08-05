@@ -77,11 +77,27 @@ impl TopicResources {
         num_partitions: usize,
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name]);
-        //TODO! all the partitions I guess should be added
-        let _ = self
-            .store
-            .put(&path, num_partitions.into(), MetaOptions::None)
-            .await;
+
+        //TODO! figure out how to support the partitions
+        self.create(&path, num_partitions.into()).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn create_producer(
+        &mut self,
+        producer_id: u64,
+        topic_name: &str,
+        producer_config: Value,
+    ) -> Result<()> {
+        let path = join_path(&[
+            BASE_TOPICS_PATH,
+            topic_name,
+            "producers",
+            &producer_id.to_string(),
+        ]);
+
+        self.create(&path, producer_config).await?;
 
         Ok(())
     }

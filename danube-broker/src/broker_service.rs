@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Code, Status};
@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
 use crate::{
-    consumer::Consumer, error_message::create_error_status, policies::Policies, producer::Producer,
+    consumer::Consumer, error_message::create_error_status, policies::Policies,
     resources::Resources, subscription::SubscriptionOptions, topic::Topic, utils::get_random_id,
 };
 
@@ -385,7 +385,7 @@ impl BrokerService {
     }
 
     // create a new producer and attach to the topic
-    pub(crate) fn create_new_producer(
+    pub(crate) async fn create_new_producer(
         &mut self,
         producer_name: &str,
         topic_name: &str,
@@ -394,25 +394,18 @@ impl BrokerService {
         let producer_id = get_random_id();
 
         if let Some(topic) = self.topics.get_mut(topic_name) {
-            match topic.producers.entry(producer_id) {
-                Entry::Vacant(entry) => {
-                    entry.insert(Producer::new(
-                        producer_id,
-                        producer_name.into(),
-                        topic_name.into(),
-                        producer_access_mode,
-                    ));
-                }
-                Entry::Occupied(entry) => {
-                    //let current_producer = entry.get();
-                    info!("the requested producer: {} already exists", entry.key());
-                    return Err(anyhow!(" the producer already exist"));
-                }
-            }
+            let producer_config =
+                topic.create_producer(producer_id, producer_name, producer_access_mode)?;
 
             // insert into producer_index for efficient searches and retrievals
             self.producer_index
                 .insert(producer_id, topic_name.to_string());
+
+            // create a metadata store entry for newly created producer
+            self.resources
+                .topic
+                .create_producer(producer_id, topic_name, producer_config)
+                .await?;
         } else {
             return Err(anyhow!("Unable to find the topic: {}", topic_name));
         }

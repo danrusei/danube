@@ -53,11 +53,14 @@ impl ProducerService for DanubeServerImpl {
             return Ok(tonic::Response::new(response));
         }
 
-        let new_producer_id = match service.create_new_producer(
-            &req.producer_name,
-            &req.topic_name,
-            req.producer_access_mode,
-        ) {
+        let new_producer_id = match service
+            .create_new_producer(
+                &req.producer_name,
+                &req.topic_name,
+                req.producer_access_mode,
+            )
+            .await
+        {
             Ok(prod_id) => prod_id,
             Err(err) => {
                 let status = Status::permission_denied(format!(
