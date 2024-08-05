@@ -1,10 +1,17 @@
+use std::collections::HashMap;
+
 use crate::proto::{MessageMetadata as ProtoMessageMeta, MessageRequest};
 
 #[derive(Clone, PartialEq)]
 pub struct MessageMetadata {
+    // Optional, identifies the producer’s name
     pub producer_name: String,
+    // Optional, useful for maintaining order and deduplication
     pub sequence_id: u64,
+    // Optional, timestamp for when the message was published
     pub publish_time: u64,
+    // Optional, user-defined properties/attributes
+    pub attributes: HashMap<String, String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -23,6 +30,7 @@ impl SendMessage {
                 producer_name: meta.producer_name.clone(),
                 sequence_id: meta.sequence_id,
                 publish_time: meta.publish_time,
+                attributes: meta.attributes.clone(),
             }),
             None => None,
         };
@@ -31,7 +39,7 @@ impl SendMessage {
             request_id: self.request_id,
             producer_id: self.producer_id,
             metadata,
-            message: self.message.clone(),
+            payload: self.message.clone(),
         }
     }
 }

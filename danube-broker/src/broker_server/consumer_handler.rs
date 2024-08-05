@@ -29,6 +29,7 @@ impl ConsumerService for DanubeServerImpl {
 
         let mut service = self.service.lock().await;
 
+        // the client is allowed to create the subscription only if the topic is served by this broker
         match service.get_topic(&req.topic_name, None, true).await {
             Ok(_) => trace!("topic_name: {} was found", &req.topic_name),
             Err(status) => {
@@ -140,7 +141,8 @@ impl ConsumerService for DanubeServerImpl {
 
                     let stream_messages = StreamMessage {
                         request_id: request_id,
-                        messages: messages,
+                        payload: messages.payload,
+                        metadata: messages.metadata,
                     };
 
                     if tx.send(Ok(stream_messages)).await.is_err() {

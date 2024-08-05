@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         let encoded_data = json_string.as_bytes().to_vec();
 
         // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
-        let message_id = producer.send(encoded_data).await?;
+        let message_id = producer.send(encoded_data, None).await?;
         println!("The Message with id {} was sent", message_id);
 
         thread::sleep(Duration::from_secs(1));

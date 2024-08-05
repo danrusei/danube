@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     while let Some(message) = message_stream.next().await {
         match message {
             Ok(stream_message) => {
-                let payload = stream_message.messages;
+                let payload = stream_message.payload;
                 // Deserialize the message using the schema
                 match serde_json::from_slice::<MyMessage>(&payload) {
                     Ok(decoded_message) => {

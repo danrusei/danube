@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::consumer::Consumer;
+use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -54,7 +54,7 @@ impl DispatcherSingleConsumer {
     }
 
     // sending messages to an active consumer
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>) -> Result<()> {
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         let current_consumer = if let Some(consumer) = &self.active_consumer {
             consumer
         } else {
@@ -94,6 +94,7 @@ impl DispatcherSingleConsumer {
 
             if consumer_subscription_type == 0 && !self.consumers.is_empty() {
                 // connect to active consumer self.active_consumer
+                warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer_guard.consumer_id);
                 return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
             }
         }

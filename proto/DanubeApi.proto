@@ -33,20 +33,25 @@ message ProducerResponse {
 
 // Producer send the message
 message MessageRequest {
+    // Unique ID for tracking the message request
     uint64 request_id =1;
+    // Identifies the producer, associated with a unique topic
     uint64 producer_id = 2;
-    MessageMetadata metadata = 3;
-    bytes message = 4;
+    // The actual payload of the message
+    bytes payload = 3;
+    // Optional metadata for additional context
+    MessageMetadata metadata = 4;
 }
 
 message MessageMetadata {
-    // Identifies the name of the producer that sent the message.
+    // Optional, identifies the producer’s name
     string producer_name = 1;
-    // Represents the sequence ID of the message within the topic
-    // this is critical to maintain the messages order that are consumed by consumers 
+    // Optional, useful for maintaining order and deduplication 
     uint64 sequence_id = 2;
-    // Indicates the time when the message was published
+    // Optional, timestamp for when the message was published
     uint64 publish_time = 3;
+    // Optional, user-defined properties/attributes
+    map<string, string> attributes = 4;
 }
 
 // Producer receive acknowledge for the sent message
@@ -95,8 +100,12 @@ message ReceiveRequest {
 }
 
 message StreamMessage {
+    // Unique ID for tracking the message request
     uint64 request_id = 1;
-    bytes messages = 2; 
+    // The actual payload of the message
+    bytes payload = 2;
+    // Optional metadata for additional context
+    MessageMetadata metadata = 3; 
 }
 
 message AckRequest {

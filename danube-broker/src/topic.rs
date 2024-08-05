@@ -1,10 +1,14 @@
 use anyhow::{anyhow, Result};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
-use tracing::trace;
+use tracing::{info, trace, warn};
 
+use crate::proto::MessageMetadata;
 use crate::{
-    consumer::Consumer,
+    consumer::{Consumer, MessageToSend},
     policies::Policies,
     producer::Producer,
     schema::Schema,
@@ -48,6 +52,37 @@ impl Topic {
         }
     }
 
+    #[allow(unused_assignments)]
+    pub(crate) fn create_producer(
+        &mut self,
+        producer_id: u64,
+        producer_name: &str,
+        producer_access_mode: i32,
+    ) -> Result<serde_json::Value> {
+        let mut producer_config = serde_json::Value::String(String::new());
+        match self.producers.entry(producer_id) {
+            Entry::Vacant(entry) => {
+                let new_producer = Producer::new(
+                    producer_id,
+                    producer_name.into(),
+                    self.topic_name.clone(),
+                    producer_access_mode,
+                );
+
+                producer_config = serde_json::to_value(&new_producer)?;
+
+                entry.insert(new_producer);
+            }
+            Entry::Occupied(entry) => {
+                //let current_producer = entry.get();
+                info!("the requested producer: {} already exists", entry.key());
+                return Err(anyhow!(" the producer already exist"));
+            }
+        }
+
+        Ok(producer_config)
+    }
+
     // Close this topic - disconnect all producers and subscriptions associated with this topic
     pub(crate) async fn close(&mut self) -> Result<(Vec<u64>, Vec<u64>)> {
         let mut disconnected_producers = Vec::new();
@@ -72,8 +107,8 @@ impl Topic {
     pub(crate) async fn publish_message(
         &self,
         producer_id: u64,
-        message_sequence_id: u64,
-        message: Vec<u8>,
+        payload: Vec<u8>,
+        meta: Option<MessageMetadata>,
     ) -> Result<()> {
         let producer = if let Some(top) = self.producers.get(&producer_id) {
             top
@@ -86,28 +121,27 @@ impl Topic {
         };
 
         //TODO! this is doing nothing for now, and may not need to be async
-        match producer
-            .publish_message(producer_id, message_sequence_id, &message)
-            .await
-        {
+        match producer.publish_message(producer_id, &payload).await {
             Ok(_) => (),
             Err(err) => {
                 return Err(anyhow!("the Producer checks have failed: {}", err));
             }
         }
 
-        // let data: Bytes = message.into();
+        let message_to_send = MessageToSend {
+            payload,
+            metadata: meta,
+        };
 
         // Dispatch message to all consumers
-
         for (_name, subscription) in self.subscriptions.iter() {
-            let duplicate_data = message.clone();
+            let duplicate_message = message_to_send.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
                 trace!(
                     "A dispatcher was found for the subscription {}",
                     subscription.subscription_name
                 );
-                dispatcher.send_messages(duplicate_data).await?;
+                dispatcher.send_messages(duplicate_message).await?;
             } else {
                 trace!(
                     "No dispatcher has been found for subscription {}",
@@ -134,16 +168,19 @@ impl Topic {
         topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<Arc<Mutex<Consumer>>> {
-        //Todo! sub_metadata is user-defined information to the subscription, maybe for user internal business, management and montoring
+        //Todo! sub_metadata is user-defined information to the subscription,
+        //maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
+
         let subscription = self
             .subscriptions
             .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(
-                topic_name,
-                options.subscription_name.clone(),
-                sub_metadata,
-            ));
+            .or_insert(Subscription::new(topic_name, options.clone(), sub_metadata));
+
+        if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
+            warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
+            return Err(anyhow!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name));
+        }
 
         let consumer_id = get_random_id();
 
@@ -157,7 +194,7 @@ impl Topic {
 
         //Todo! Check the topic policies with max_consumers per topic
 
-        // is it ok to clone , or I should return just the ID, or ARC?
+        // is it ok to clone ? .. or should return just the ID, or ARC
         subscription.add_consumer(consumer.clone()).await?;
 
         Ok(consumer)

@@ -53,11 +53,14 @@ impl ProducerService for DanubeServerImpl {
             return Ok(tonic::Response::new(response));
         }
 
-        let new_producer_id = match service.create_new_producer(
-            &req.producer_name,
-            &req.topic_name,
-            req.producer_access_mode,
-        ) {
+        let new_producer_id = match service
+            .create_new_producer(
+                &req.producer_name,
+                &req.topic_name,
+                req.producer_access_mode,
+            )
+            .await
+        {
             Ok(prod_id) => prod_id,
             Err(err) => {
                 let status = Status::permission_denied(format!(
@@ -123,11 +126,8 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
-        //TODO! should not be an Option, as it is mandatory to be present in the message request
-        let meta = req.metadata.unwrap();
-
         match topic
-            .publish_message(req.producer_id, meta.sequence_id, req.message)
+            .publish_message(req.producer_id, req.payload, req.metadata.clone())
             .await
         {
             Ok(_) => (),
@@ -140,9 +140,15 @@ impl ProducerService for DanubeServerImpl {
             }
         };
 
+        let msg_seq_id: u64 = if let Some(msg_meta) = req.metadata {
+            msg_meta.sequence_id
+        } else {
+            0
+        };
+
         let response = MessageResponse {
             request_id: req.request_id,
-            sequence_id: meta.sequence_id,
+            sequence_id: msg_seq_id,
         };
 
         Ok(tonic::Response::new(response))

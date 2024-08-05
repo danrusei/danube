@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Code, Status};
@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
 use crate::{
-    consumer::Consumer, error_message::create_error_status, policies::Policies, producer::Producer,
+    consumer::Consumer, error_message::create_error_status, policies::Policies,
     resources::Resources, subscription::SubscriptionOptions, topic::Topic, utils::get_random_id,
 };
 
@@ -273,10 +273,11 @@ impl BrokerService {
             let ns_name = format!("/{}", parts[1]);
 
             let policies = self.resources.namespace.get_policies(&ns_name)?;
-            //TODO! for now the namespace polices == topic policies, if they will be different as number of values
-            // then I shoud copy field by field
             let _ = new_topic.policies_update(policies);
         }
+
+        // new producers and consumer subscriptions should be created again by the client
+        // if the topic is moved from one broker to another
 
         self.topics.insert(topic_name.to_string(), new_topic);
 
@@ -385,7 +386,7 @@ impl BrokerService {
     }
 
     // create a new producer and attach to the topic
-    pub(crate) fn create_new_producer(
+    pub(crate) async fn create_new_producer(
         &mut self,
         producer_name: &str,
         topic_name: &str,
@@ -394,25 +395,18 @@ impl BrokerService {
         let producer_id = get_random_id();
 
         if let Some(topic) = self.topics.get_mut(topic_name) {
-            match topic.producers.entry(producer_id) {
-                Entry::Vacant(entry) => {
-                    entry.insert(Producer::new(
-                        producer_id,
-                        producer_name.into(),
-                        topic_name.into(),
-                        producer_access_mode,
-                    ));
-                }
-                Entry::Occupied(entry) => {
-                    //let current_producer = entry.get();
-                    info!("the requested producer: {} already exists", entry.key());
-                    return Err(anyhow!(" the producer already exist"));
-                }
-            }
+            let producer_config =
+                topic.create_producer(producer_id, producer_name, producer_access_mode)?;
 
             // insert into producer_index for efficient searches and retrievals
             self.producer_index
                 .insert(producer_id, topic_name.to_string());
+
+            // create a metadata store entry for newly created producer
+            self.resources
+                .topic
+                .create_producer(producer_id, topic_name, producer_config)
+                .await?;
         } else {
             return Err(anyhow!("Unable to find the topic: {}", topic_name));
         }
@@ -492,11 +486,9 @@ impl BrokerService {
         topic_name: &str,
         subscription_options: SubscriptionOptions,
     ) -> Result<u64> {
-        if let Some(topic) = self.topics.get_mut(topic_name) {
-            //TODO! checkTopicOwnership
-            // if it's owened by this instance continue,
-            // otherwise communicate to client that it has to do Lookup request, as the topic is not serve by this broker
+        // the caller of this function should ensure that the topic is served by this broker
 
+        if let Some(topic) = self.topics.get_mut(topic_name) {
             let consumer = topic
                 .subscribe(topic_name, subscription_options.clone())
                 .await?;
@@ -507,9 +499,22 @@ impl BrokerService {
                 consumer_id,
                 (
                     topic_name.to_string(),
-                    subscription_options.subscription_name,
+                    subscription_options.subscription_name.clone(),
                 ),
             );
+
+            // create a metadata store entry for newly created subscription
+            // TODO!, don't overwrite if not neccessary
+            let sub_options = serde_json::to_value(&subscription_options)?;
+            self.resources
+                .topic
+                .create_subscription(
+                    &subscription_options.subscription_name,
+                    topic_name,
+                    sub_options,
+                )
+                .await?;
+
             return Ok(consumer_id);
         } else {
             return Err(anyhow!("Unable to find the topic: {}", topic_name));

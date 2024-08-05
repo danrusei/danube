@@ -1,6 +1,8 @@
 use anyhow::Result;
 use tracing::{trace, warn};
 
+use crate::proto::MessageMetadata;
+
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -10,9 +12,15 @@ pub(crate) struct Consumer {
     pub(crate) consumer_name: String,
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be SubscriptionType,
-    pub(crate) tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
+    pub(crate) tx: Option<tokio::sync::mpsc::Sender<MessageToSend>>,
     // status = true -> consumer OK, status = false -> Close the consumer
     pub(crate) status: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MessageToSend {
+    pub(crate) payload: Vec<u8>,
+    pub(crate) metadata: Option<MessageMetadata>,
 }
 
 impl Consumer {
@@ -35,8 +43,12 @@ impl Consumer {
     }
 
     // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(&self, messages: Vec<u8>, _batch_size: usize) -> Result<()> {
-        let _unacked_messages = messages.len();
+    pub(crate) async fn send_messages(
+        &self,
+        messages: MessageToSend,
+        _batch_size: usize,
+    ) -> Result<()> {
+        // let _unacked_messages = messages.len();
         //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
 
         // It attempts to send the message through the tx channel.
@@ -54,7 +66,7 @@ impl Consumer {
         Ok(())
     }
 
-    pub(crate) fn set_tx(&mut self, tx: tokio::sync::mpsc::Sender<Vec<u8>>) -> () {
+    pub(crate) fn set_tx(&mut self, tx: tokio::sync::mpsc::Sender<MessageToSend>) -> () {
         self.tx = Some(tx);
     }
 
