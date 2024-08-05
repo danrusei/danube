@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 
 use crate::proto::MessageMetadata;
 use crate::{
@@ -175,11 +175,12 @@ impl Topic {
         let subscription = self
             .subscriptions
             .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(
-                topic_name,
-                options.subscription_name.clone(),
-                sub_metadata,
-            ));
+            .or_insert(Subscription::new(topic_name, options.clone(), sub_metadata));
+
+        if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
+            warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
+            return Err(anyhow!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name));
+        }
 
         let consumer_id = get_random_id();
 
@@ -193,7 +194,7 @@ impl Topic {
 
         //Todo! Check the topic policies with max_consumers per topic
 
-        // is it ok to clone , or I should return just the ID, or ARC?
+        // is it ok to clone ? .. or should return just the ID, or ARC
         subscription.add_consumer(consumer.clone()).await?;
 
         Ok(consumer)

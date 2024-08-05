@@ -18,6 +18,7 @@ use crate::{
 pub(crate) struct Subscription {
     pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
+    pub(crate) subscription_type: i32,
     // the consumers registered to the subscription, consumer_id -> Consumer
     pub(crate) consumers: HashMap<u64, Arc<Mutex<Consumer>>>,
     pub(crate) dispatcher: Option<Dispatcher>,
@@ -34,22 +35,20 @@ pub(crate) struct SubscriptionOptions {
 impl Subscription {
     // create new subscription
     pub(crate) fn new(
-        topic_name: impl Into<String>,
-        subscription_name: impl Into<String>,
+        topic_name: &str,
+        sub_options: SubscriptionOptions,
         _meta_properties: HashMap<String, String>,
     ) -> Self {
         Subscription {
             topic_name: topic_name.into(),
-            subscription_name: subscription_name.into(),
+            subscription_name: sub_options.subscription_name,
+            subscription_type: sub_options.subscription_type,
             consumers: HashMap::new(),
             dispatcher: None,
         }
     }
     // Adds a consumer to the subscription
     pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
-        // checks if there'a a dispatcher (responsible for distributing messages to consumers)
-        // If not initializes a new dispatcher based on the type of consumer: Exclusive, Shared, Failover
-
         // Retrieve the subscription type and consumer ID without holding the lock for too long
         let (subscription_type, consumer_id);
 
@@ -59,31 +58,41 @@ impl Subscription {
             consumer_id = consumer_guard.consumer_id;
         }
 
-        // Initialize the appropriate dispatcher based on the subscription type
-        let mut dispatcher = match subscription_type {
-            // Exclusive
-            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
-                &self.topic_name,
-                &self.subscription_name,
-                0,
-            )),
+        // checks if there'a a dispatcher (responsible for distributing messages to consumers)
+        // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
+        let dispatcher = if let Some(dispatcher) = self.dispatcher.as_mut() {
+            dispatcher
+        } else {
+            let new_dispatcher = match subscription_type {
+                // Exclusive
+                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
+                    &self.topic_name,
+                    &self.subscription_name,
+                    0,
+                )),
 
-            // Shared
-            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(
-                &self.topic_name,
-                &self.subscription_name,
-            )),
+                // Shared
+                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(
+                    &self.topic_name,
+                    &self.subscription_name,
+                )),
 
-            // Failover
-            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
-                &self.topic_name,
-                &self.subscription_name,
-                2,
-            )),
+                // Failover
+                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
+                    &self.topic_name,
+                    &self.subscription_name,
+                    2,
+                )),
 
-            _ => {
-                return Err(anyhow!("Should not get here"));
-            }
+                _ => {
+                    return Err(anyhow!("Should not get here"));
+                }
+            };
+
+            // Set the dispatcher for the subscription
+            self.dispatcher = Some(new_dispatcher);
+
+            self.dispatcher.as_mut().unwrap()
         };
 
         // Insert the consumer into the subscription's consumer list
@@ -97,9 +106,6 @@ impl Subscription {
             dispatcher,
             self.subscription_name
         );
-
-        // Set the dispatcher for the subscription
-        self.dispatcher = Some(dispatcher);
 
         Ok(())
     }
@@ -144,11 +150,17 @@ impl Subscription {
         }
         None
     }
+
     // Get Consumers
-    #[allow(dead_code)]
-    pub(crate) fn get_consumers() -> Result<Vec<Consumer>> {
-        // ask dispatcher
-        todo!()
+    pub(crate) fn get_consumers(&self) -> Vec<u64> {
+        self.consumers.keys().cloned().collect()
+    }
+
+    pub(crate) fn is_exclusive(&self) -> bool {
+        if self.subscription_type == 0 {
+            return true;
+        }
+        return false;
     }
 
     // Get Dispatcher

@@ -69,6 +69,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             mut schema_type,
             schema_data,
         } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             if schema_type.is_empty() {
                 schema_type = "String".into()
             }
@@ -83,6 +87,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
 
         // Create a partitioned topic (--partitions #)
         TopicsCommands::CreatePartitionedTopic { topic, partitions } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             let _topic = topic;
             let _partitions = partitions;
             // to implement
@@ -100,6 +108,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
 
         // Delete the topic
         TopicsCommands::Delete { topic } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             let request = TopicRequest { name: topic };
             let response = client.delete_topic(request).await?;
             println!("Topic Deleted: {:?}", response.into_inner().success);
@@ -110,6 +122,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             topic,
             subscription,
         } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             let _topic = topic;
             let _subscription = subscription;
             // to implement
@@ -124,6 +140,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
 
         // Get the list of subscriptions on the topic
         TopicsCommands::Subscriptions { topic } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             let request = TopicRequest { name: topic };
             let response = client.list_subscriptions(request).await?;
             println!("Subscriptions: {:?}", response.into_inner().subscriptions);
@@ -134,6 +154,10 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             subscription,
             topic,
         } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
             let _topic = topic;
             let _subscription = subscription;
             // to implement
@@ -148,4 +172,24 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
     }
 
     Ok(())
+}
+
+// Topics string representation:  /{namespace}/{topic-name}
+pub(crate) fn validate_topic_format(input: &str) -> bool {
+    let parts: Vec<&str> = input.split('/').collect();
+
+    if parts.len() != 3 {
+        return false;
+    }
+
+    for part in parts.iter() {
+        if !part
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return false;
+        }
+    }
+
+    true
 }

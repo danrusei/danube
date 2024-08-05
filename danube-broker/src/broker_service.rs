@@ -504,6 +504,7 @@ impl BrokerService {
             );
 
             // create a metadata store entry for newly created subscription
+            // TODO!, don't overwrite if not neccessary
             let sub_options = serde_json::to_value(&subscription_options)?;
             self.resources
                 .topic
