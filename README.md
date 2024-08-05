@@ -12,17 +12,22 @@ Allows single or multiple Producers to publish on the Topic and multiple Subscri
 
 ![Producers  Consumers](https://dev-state.com/danube_docs/architecture/img/producers_consumers.png "Producers Consumers")
 
-You can combine the [Subscription Type mechanisms](docs/04-Queuing_PubSub_messaging.md) in order to obtain message queueing or fan-out pub-sub messaging systems.
+You can combine the [Subscription Type mechanisms](https://dev-state.com/danube_docs/architecture/Queuing_PubSub_messaging/) in order to obtain message queueing or fan-out pub-sub messaging systems.
 
-Check-out [the examples](danube-client/examples/) on how to create and use Producers and Consumers.  The client is written in Rust. A GO client may arive soon.
+Currently, the Danube client libraries are written in:
 
-**⚠️ The messsaging platform is currently under active development and may have missing or incomplete functionalities. Use with caution.**
+* [Rust Client](https://crates.io/crates/danube-client) - the Rust [examples](danube-client/examples/) on how to create and use the Producers / Consumers
+* [Go Client](https://pkg.go.dev/github.com/danrusei/danube-go) - the Go [examples](https://github.com/danrusei/danube-go/tree/main/examples) on how to create and use the Producers / Consumers
+
+### Community supported clients
+
+Contributions in other languages, such as Python, Java, etc., are also greatly appreciated. If there are any I'll add in this section.
 
 ## Development environment
 
-I'm continuously working on enhancing and adding new features. **Contributions are welcome**, and you can also report any issues you encounter. The client library is currently written in Rust, with a Go client potentially coming soon. Contributions in other languages, such as Python, Java, etc., are also greatly appreciated.
+I'm continuously working on enhancing and adding new features. **Contributions are welcome**, and you can also report any issues you encounter.
 
-If you want to contribute to any of the following crates:
+The crates part of the Danube workspace:
 
 * danube-broker - The main crate, danube pubsub platform
 * danube-admin - Admin CLI designed for interacting with and managing the Danube cluster
@@ -30,3 +35,5 @@ If you want to contribute to any of the following crates:
 * danube-pubsub - CLI to handle message publishing and consumption,
 
 [Follow the instructions](https://dev-state.com/danube_docs/development/dev_environment/) on how to setup the development environment.
+
+**⚠️ The messsaging platform is currently under active development and may have missing or incomplete functionalities. Use with caution.**
