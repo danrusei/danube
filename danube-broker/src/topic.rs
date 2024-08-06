@@ -133,23 +133,34 @@ impl Topic {
             metadata: meta,
         };
 
-        // Dispatch message to all consumers
-        for (_name, subscription) in self.subscriptions.lock().await.iter() {
-            let duplicate_message = message_to_send.clone();
-            if let Some(dispatcher) = subscription.get_dispatcher() {
-                if let Err(err) = dispatcher.send_messages(duplicate_message).await {
-                    info!(
-                        "The subscription {}, has no active consumers, got error: {} ",
-                        subscription.subscription_name, err
+        // Collect subscriptions that need to be unsubscribed, if contain no active consumers
+        let subscriptions_to_remove: Vec<String> = {
+            let subscriptions = self.subscriptions.lock().await;
+            let mut to_remove = Vec::new();
+
+            for (_name, subscription) in subscriptions.iter() {
+                let duplicate_message = message_to_send.clone();
+                if let Some(dispatcher) = subscription.get_dispatcher() {
+                    if let Err(err) = dispatcher.send_messages(duplicate_message).await {
+                        info!(
+                            "The subscription {}, has no active consumers, got error: {} ",
+                            subscription.subscription_name, err
+                        );
+                        to_remove.push(subscription.subscription_name.clone());
+                    }
+                } else {
+                    trace!(
+                        "No dispatcher has been found for subscription {}",
+                        subscription.subscription_name
                     );
-                    self.unsubscribe(&subscription.subscription_name).await;
                 }
-            } else {
-                trace!(
-                    "No dispatcher has been found for subscription {}",
-                    subscription.subscription_name
-                )
             }
+
+            to_remove
+        };
+
+        for subscription_name in subscriptions_to_remove {
+            self.unsubscribe(&subscription_name).await;
         }
 
         Ok(())
