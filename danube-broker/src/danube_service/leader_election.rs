@@ -77,8 +77,10 @@ impl LeaderElection {
             return Err(anyhow!("unable to get the etcd_client"));
         };
 
-        // should be user configurable
-        let ttl = 54;
+        //TODO! make this user configurable, this should be half of the broker register TTL
+        // we want the broker to become the leader first,
+        // before another broker unregister in order for leader broker to alocate/ delete resources
+        let ttl = 14;
 
         let payload = self.broker_id.clone();
         let lease_id = client.lease_grant(ttl, None).await?.id();

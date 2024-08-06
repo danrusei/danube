@@ -44,15 +44,14 @@ impl MetadataStore for EtcdMetadataStore {
 
         // Retrieve all keys with the specified prefix
         let range_resp = kv_client
-            .get(path, Some(GetOptions::new().with_keys_only()))
+            .get(path, Some(GetOptions::new().with_keys_only().with_prefix()))
             .await?;
 
         let mut child_paths: Vec<String> = Vec::new();
 
         for kv in range_resp.kvs() {
-            // Deserialize the byte array (value) into a serde_json::Value
-            let value = kv.key_str()?.to_owned();
-            child_paths.push(value);
+            let key = kv.key_str()?.to_owned();
+            child_paths.push(key);
         }
 
         Ok(child_paths)
@@ -94,6 +93,7 @@ impl MetadataStore for EtcdMetadataStore {
 
     // Deletes all keys that are prefixed with the specified path.
     // For example, if path is /foo, it will delete keys like /foo/bar, /foo/baz
+    // this doesn't work, as with_from_key or with_prefix are not working as intended
     async fn delete_recursive(&mut self, path: &str) -> Result<()> {
         let mut kv_client = self.client.kv_client();
 

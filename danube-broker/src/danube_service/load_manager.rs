@@ -16,7 +16,8 @@ use crate::{
         etcd_watch_prefixes, ETCDWatchEvent, MetaOptions, MetadataStorage, MetadataStore,
     },
     resources::{
-        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_REGISTER_PATH, BASE_UNASSIGNED_PATH,
+        BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_NAMESPACES_PATH, BASE_REGISTER_PATH,
+        BASE_UNASSIGNED_PATH,
     },
     utils::join_path,
 };
@@ -166,7 +167,13 @@ impl LoadManager {
                             let mut rankings_lock = self.rankings.lock().await;
                             rankings_lock.retain(|&(entry_id, _)| entry_id != remove_broker);
                         }
-                        // BIG TODO! - reallocate the resources to another broker
+
+                        // TODO! - reallocate the resources to another broker
+                        // for now I will delete from metadata store all the topics assigned to /cluster/brokers/removed_broker/*
+                        match  self.delete_topic_allocation(remove_broker).await {
+                        Ok(_) => {},
+                        Err(err) => error!("Unable to delete resources of the unregistered broker {}, due to error {}", remove_broker, err)
+                       }
                     }
                 }
 
@@ -257,6 +264,30 @@ impl LoadManager {
             .swap(first_in_list, std::sync::atomic::Ordering::SeqCst);
 
         next_broker
+    }
+
+    pub async fn delete_topic_allocation(&mut self, broker_id: u64) -> Result<()> {
+        let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
+        let childrens = self.meta_store.get_childrens(&path).await?;
+
+        // should delete the paths like this /cluster/brokers/6719542140305601108/namespace_name/topic_name
+        // so the topics are not allocated with unregistered broker
+        for children in childrens {
+            self.meta_store.delete(&children).await?;
+
+            // delete the topic from the /namespace path as well
+            let parts: Vec<&str> = children.split('/').collect();
+            let path_ns = join_path(&[
+                BASE_NAMESPACES_PATH,
+                &parts[4],
+                "topics",
+                &parts[4],
+                &parts[5],
+            ]);
+            self.meta_store.delete(&path_ns).await?;
+        }
+
+        Ok(())
     }
 
     #[allow(dead_code)]
