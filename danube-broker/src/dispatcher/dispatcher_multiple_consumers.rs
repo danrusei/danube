@@ -66,51 +66,58 @@ impl DispatcherMultipleConsumers {
         Ok(consumers)
     }
 
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
+        // Attempt to get an active consumer and send messages
+        if let Ok(consumer) = self.find_next_active_consumer().await {
+            let mut consumer_guard = consumer.lock().await;
+            let batch_size = 1; // to be calculated
+            consumer_guard.send_messages(messages, batch_size).await?;
+            trace!(
+                "Dispatcher is sending the message to consumer: {}",
+                consumer_guard.consumer_id
+            );
+            Ok(())
+        } else {
+            Err(anyhow!("There are no active consumers on this dispatcher"))
+        }
+    }
+
+    async fn find_next_active_consumer(&self) -> Result<Arc<Mutex<Consumer>>> {
+        let num_consumers = self.consumers.len();
+
+        for _ in 0..num_consumers {
+            let consumer = self.get_next_consumer()?;
+            let consumer_guard = consumer.lock().await;
+
+            if !consumer_guard.status {
+                continue;
+            }
+
+            drop(consumer_guard);
+
+            return Ok(consumer);
+        }
+
+        return Err(anyhow!("unable to find an active consumer"));
+    }
+
     pub(crate) fn get_next_consumer(&self) -> Result<Arc<Mutex<Consumer>>> {
-        if self.consumers.is_empty() {
+        let num_consumers = self.consumers.len();
+
+        if num_consumers == 0 {
             return Err(anyhow!("There are no consumers left"));
         }
 
+        // Use modulo to ensure index wraps around
         let index = self
             .index_consumer
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            % num_consumers;
 
-        if index == self.consumers.len() - 1 {
-            let _ = self
-                .index_consumer
-                .swap(0, std::sync::atomic::Ordering::SeqCst);
-        }
-
-        // find a way to sort the self.consumers based on priority or anything else
-        if let Some(consumer) = self.consumers.get(index) {
-            return Ok(consumer.clone());
-        }
-
-        Err(anyhow!("Unable to find the next consumer"))
-    }
-
-    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-        // selects the next available consumer based on available permits
-        let consumer = self.get_next_consumer()?;
-        let mut consumer_guard = consumer.lock().await;
-        let batch_size = 1; // to be calculated
-
-        // check if the consumer is active, if not remove from the dispatcher
-        if !consumer_guard.status {
-            // can't be removed for now, as it force alot of functions to be moved to mutable
-            // maybe use an backgroud process that remove unused resources
-            // like disconnected consumers and producers
-            // or maybe move to Arc<Mutex<Vec<Consumer>>> ??
-            //return self.remove_consumer(consumer_guard.consumer_id).await;
-
-            return Ok(());
-        }
-
-        consumer_guard.send_messages(messages, batch_size).await?;
-        trace!(
-            "Dispatcher is sending the message to consumer: {}",
-            consumer_guard.consumer_id
-        );
-        Ok(())
+        // Get the consumer at the computed index
+        self.consumers
+            .get(index)
+            .cloned() // Clone the Arc<Mutex<Consumer>> to return
+            .ok_or_else(|| anyhow!("Unable to find the next consumer"))
     }
 }

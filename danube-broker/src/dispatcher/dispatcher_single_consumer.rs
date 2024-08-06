@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn};
 
 use crate::consumer::{Consumer, MessageToSend};
@@ -8,19 +8,19 @@ use crate::consumer::{Consumer, MessageToSend};
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
     consumers: Vec<Arc<Mutex<Consumer>>>,
-    active_consumer: Option<Arc<Mutex<Consumer>>>,
+    active_consumer: RwLock<Option<Arc<Mutex<Consumer>>>>,
 }
 
 impl DispatcherSingleConsumer {
     pub(crate) fn new() -> Self {
         DispatcherSingleConsumer {
             consumers: Vec::new(),
-            active_consumer: None,
+            active_consumer: RwLock::new(None),
         }
     }
 
     // Pick an active consumer for a topic for subscription.
-    pub(crate) async fn pick_active_consumer(&mut self) -> bool {
+    pub(crate) async fn pick_active_consumer(&self) -> bool {
         // sort the self.consumers ,after a specific logic, maybe highest priority
 
         let mut candidate = None;
@@ -35,7 +35,8 @@ impl DispatcherSingleConsumer {
         }
 
         if let Some(consumer) = candidate {
-            self.active_consumer = Some(consumer);
+            let mut active_consumer = self.active_consumer.write().await;
+            *active_consumer = Some(consumer);
             true
         } else {
             false
@@ -44,10 +45,13 @@ impl DispatcherSingleConsumer {
 
     // sending messages to an active consumer
     pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-        let current_consumer = if let Some(consumer) = &self.active_consumer {
-            consumer
-        } else {
-            return Err(anyhow!("There is no active Consumer"));
+        // Try to acquire the read lock on the active consumer
+        let active_consumer = {
+            let guard = self.active_consumer.read().await;
+            match &*guard {
+                Some(consumer) => consumer.clone(),
+                None => return Err(anyhow::anyhow!("There is no active Consumer")),
+            }
         };
 
         //Todo!
@@ -55,22 +59,21 @@ impl DispatcherSingleConsumer {
         // 2. filter the messages for consumers
         // 3. other permits like dispatch rate limiter, quota etc
 
-        // maybe wrap Vec<Bytes> into a generic Message
+        let mut consumer_guard = active_consumer.lock().await;
 
-        let mut consumer_guard = current_consumer.lock().await;
-
-        // check if the consumer is active, if not remove from the dispatcher
+        // check if the consumer is active
         if !consumer_guard.status {
-            // can't be removed for now, as it force alot of functions to be moved to mutable
-            // maybe use an backgroud process that remove unused resources
-            // like disconnected consumers and producers
-            // or maybe move to Arc<Mutex<Vec<Consumer>>> ??
-            //return self.remove_consumer(consumer_guard.consumer_id).await;
+            drop(consumer_guard);
 
-            return Ok(());
+            // Pick a new active consumer
+            if !self.pick_active_consumer().await {
+                return Err(anyhow!(
+                    "There is no active consumer to dispatch the message"
+                ));
+            }
+        } else {
+            consumer_guard.send_messages(messages, 1).await?;
         }
-
-        consumer_guard.send_messages(messages, 1).await?;
 
         Ok(())
     }
@@ -98,7 +101,7 @@ impl DispatcherSingleConsumer {
         }
 
         if self.consumers.is_empty() {
-            self.active_consumer = Some(consumer.clone())
+            self.active_consumer = Some(consumer.clone()).into()
         } else {
             if !self.pick_active_consumer().await {
                 return Err(anyhow!("Unable to pick an active Consumer"));
@@ -145,7 +148,7 @@ impl DispatcherSingleConsumer {
 
         // Check if the consumers list is empty and update the active consumer
         if self.consumers.is_empty() {
-            self.active_consumer = None;
+            self.active_consumer = None.into();
         }
 
         let _ = self.pick_active_consumer();
