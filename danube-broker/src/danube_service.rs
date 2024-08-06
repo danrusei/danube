@@ -134,7 +134,7 @@ impl DanubeService {
             .await;
 
         // register the local broker to cluster
-        let ttl = 40; // Time to live for the lease in seconds
+        let ttl = 32; // Time to live for the lease in seconds
         register_broker(
             self.meta_store.clone(),
             &self.broker_id.to_string(),

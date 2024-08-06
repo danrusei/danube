@@ -28,7 +28,7 @@ impl DispatcherSingleConsumer {
         for consumer in &self.consumers {
             let guard = consumer.lock().await;
             // validates that the consumer has called the receive methods which populates the Consumer tx field
-            if guard.tx.is_some() {
+            if guard.tx.is_some() && guard.status {
                 candidate = Some(consumer.clone());
                 break;
             }
