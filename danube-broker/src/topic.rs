@@ -34,7 +34,7 @@ pub(crate) struct Topic {
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
     // subscription_name -> Subscription
-    pub(crate) subscriptions: HashMap<String, Subscription>,
+    pub(crate) subscriptions: Mutex<HashMap<String, Subscription>>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
 }
@@ -47,7 +47,7 @@ impl Topic {
             topic_name: topic_name.into(),
             schema: None,
             topic_policies: None,
-            subscriptions: HashMap::new(),
+            subscriptions: Mutex::new(HashMap::new()),
             producers: HashMap::new(),
         }
     }
@@ -95,7 +95,7 @@ impl Topic {
         }
 
         // Disconnect all the topic subscriptions
-        for (_, subscription) in self.subscriptions.iter_mut() {
+        for (_, subscription) in self.subscriptions.lock().await.iter_mut() {
             let mut consumers = subscription.disconnect().await?;
             disconnected_consumers.append(&mut consumers);
         }
@@ -134,14 +134,16 @@ impl Topic {
         };
 
         // Dispatch message to all consumers
-        for (_name, subscription) in self.subscriptions.iter() {
+        for (_name, subscription) in self.subscriptions.lock().await.iter() {
             let duplicate_message = message_to_send.clone();
             if let Some(dispatcher) = subscription.get_dispatcher() {
-                trace!(
-                    "A dispatcher was found for the subscription {}",
-                    subscription.subscription_name
-                );
-                dispatcher.send_messages(duplicate_message).await?;
+                if let Err(err) = dispatcher.send_messages(duplicate_message).await {
+                    info!(
+                        "The subscription {}, has no active consumers, got error: {} ",
+                        subscription.subscription_name, err
+                    );
+                    self.unsubscribe(&subscription.subscription_name).await;
+                }
             } else {
                 trace!(
                     "No dispatcher has been found for subscription {}",
@@ -164,7 +166,7 @@ impl Topic {
 
     // Subscribe to the topic and create a consumer for receiving messages
     pub(crate) async fn subscribe(
-        &mut self,
+        &self,
         topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<Arc<Mutex<Consumer>>> {
@@ -172,8 +174,9 @@ impl Topic {
         //maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
 
-        let subscription = self
-            .subscriptions
+        // Lock the subscriptions and get the entry
+        let mut subscriptions_lock = self.subscriptions.lock().await;
+        let subscription = subscriptions_lock
             .entry(options.subscription_name.clone())
             .or_insert(Subscription::new(options.clone(), sub_metadata));
 
@@ -201,13 +204,28 @@ impl Topic {
     }
 
     // Unsubscribes the specified subscription from the topic
-    #[allow(dead_code)]
-    pub(crate) fn unsubscribe(&self, _subscription_name: &str) -> Result<()> {
-        todo!()
+    // should be called if all consumers are disconnected
+    pub(crate) async fn unsubscribe(&self, subscription_name: &str) {
+        let _ = self.subscriptions.lock().await.remove(subscription_name);
     }
 
-    pub(crate) fn get_subscription(&self, subscription_name: &str) -> Option<&Subscription> {
-        self.subscriptions.get(subscription_name)
+    pub(crate) async fn validate_consumer(
+        &self,
+        subscription_name: &str,
+        consumer_name: &str,
+    ) -> Option<u64> {
+        let sub_guard = self.subscriptions.lock().await;
+        let subscription = match sub_guard.get(subscription_name) {
+            Some(subscr) => subscr,
+            None => return None,
+        };
+
+        let consumer_id = match subscription.validate_consumer(consumer_name).await {
+            Some(id) => id,
+            None => return None,
+        };
+
+        Some(consumer_id)
     }
 
     // Update Topic Policies

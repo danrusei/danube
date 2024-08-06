@@ -424,10 +424,14 @@ impl BrokerService {
     }
 
     // finding a Consumer by Consumer ID
-    pub(crate) fn find_consumer_by_id(&self, consumer_id: u64) -> Option<Arc<Mutex<Consumer>>> {
+    pub(crate) async fn find_consumer_by_id(
+        &self,
+        consumer_id: u64,
+    ) -> Option<Arc<Mutex<Consumer>>> {
         if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
             if let Some(topic) = self.topics.get(topic_name) {
-                if let Some(subscription) = topic.subscriptions.get(subscription_name) {
+                if let Some(subscription) = topic.subscriptions.lock().await.get(subscription_name)
+                {
                     return subscription.consumers.get(&consumer_id).cloned();
                 }
             }
@@ -436,7 +440,7 @@ impl BrokerService {
     }
 
     pub(crate) async fn health_consumer(&mut self, consumer_id: u64) -> bool {
-        if let Some(consumer) = self.find_consumer_by_id(consumer_id) {
+        if let Some(consumer) = self.find_consumer_by_id(consumer_id).await {
             let consumer = consumer.lock().await;
             return consumer.get_status();
         }
@@ -454,12 +458,10 @@ impl BrokerService {
             Some(topic) => topic,
         };
 
-        let subscription = match topic.get_subscription(subscription_name) {
-            Some(subscr) => subscr,
-            None => return None,
-        };
-
-        let consumer_id = match subscription.validate_consumer(consumer_name).await {
+        let consumer_id = match topic
+            .validate_consumer(subscription_name, consumer_name)
+            .await
+        {
             Some(id) => id,
             None => return None,
         };

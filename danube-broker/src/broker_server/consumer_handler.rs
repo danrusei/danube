@@ -121,7 +121,7 @@ impl ConsumerService for DanubeServerImpl {
 
         let service = self.service.lock().await;
 
-        let consumer = if let Some(consumer) = service.find_consumer_by_id(consumer_id) {
+        let consumer = if let Some(consumer) = service.find_consumer_by_id(consumer_id).await {
             consumer
         } else {
             let status = Status::not_found(format!(
