@@ -7,19 +7,14 @@ use tracing::trace;
 use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct DispatcherMultipleConsumers {
-    topic_name: String,
-    subscription_name: String,
     consumers: Vec<Arc<Mutex<Consumer>>>,
     index_consumer: AtomicUsize,
 }
 
 impl DispatcherMultipleConsumers {
-    pub(crate) fn new(topic_name: &str, subscription_name: &str) -> Self {
+    pub(crate) fn new() -> Self {
         DispatcherMultipleConsumers {
-            topic_name: topic_name.into(),
-            subscription_name: subscription_name.into(),
             consumers: Vec::new(),
             index_consumer: AtomicUsize::new(0),
         }
@@ -34,13 +29,13 @@ impl DispatcherMultipleConsumers {
     }
 
     // manage the removal of consumers from the dispatcher
-    #[allow(dead_code)]
-    pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
         // Find the position asynchronously
         let pos = {
             let mut pos = None;
             for (index, x) in self.consumers.iter().enumerate() {
-                if x.lock().await.consumer_id == consumer.consumer_id {
+                let consumer = x.lock().await;
+                if consumer.consumer_id == consumer_id {
                     pos = Some(index);
                     break;
                 }
@@ -95,15 +90,26 @@ impl DispatcherMultipleConsumers {
     }
 
     pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-        // maybe wrap Vec<8> into a generic Message
         // selects the next available consumer based on available permits
         let consumer = self.get_next_consumer()?;
-        let consumer = consumer.lock().await;
+        let mut consumer_guard = consumer.lock().await;
         let batch_size = 1; // to be calculated
-        consumer.send_messages(messages, batch_size).await?;
+
+        // check if the consumer is active, if not remove from the dispatcher
+        if !consumer_guard.status {
+            // can't be removed for now, as it force alot of functions to be moved to mutable
+            // maybe use an backgroud process that remove unused resources
+            // like disconnected consumers and producers
+            // or maybe move to Arc<Mutex<Vec<Consumer>>> ??
+            //return self.remove_consumer(consumer_guard.consumer_id).await;
+
+            return Ok(());
+        }
+
+        consumer_guard.send_messages(messages, batch_size).await?;
         trace!(
             "Dispatcher is sending the message to consumer: {}",
-            consumer.consumer_id
+            consumer_guard.consumer_id
         );
         Ok(())
     }

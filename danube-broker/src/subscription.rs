@@ -16,7 +16,6 @@ use crate::{
 // They also handle dispatchers that manage the distribution of messages to these consumers.
 #[derive(Debug)]
 pub(crate) struct Subscription {
-    pub(crate) topic_name: String,
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32,
     // the consumers registered to the subscription, consumer_id -> Consumer
@@ -35,12 +34,10 @@ pub(crate) struct SubscriptionOptions {
 impl Subscription {
     // create new subscription
     pub(crate) fn new(
-        topic_name: &str,
         sub_options: SubscriptionOptions,
         _meta_properties: HashMap<String, String>,
     ) -> Self {
         Subscription {
-            topic_name: topic_name.into(),
             subscription_name: sub_options.subscription_name,
             subscription_type: sub_options.subscription_type,
             consumers: HashMap::new(),
@@ -65,24 +62,13 @@ impl Subscription {
         } else {
             let new_dispatcher = match subscription_type {
                 // Exclusive
-                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
-                    &self.topic_name,
-                    &self.subscription_name,
-                    0,
-                )),
+                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
                 // Shared
-                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(
-                    &self.topic_name,
-                    &self.subscription_name,
-                )),
+                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
 
                 // Failover
-                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(
-                    &self.topic_name,
-                    &self.subscription_name,
-                    2,
-                )),
+                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
                 _ => {
                     return Err(anyhow!("Should not get here"));
@@ -141,11 +127,19 @@ impl Subscription {
         todo!()
     }
 
-    // Get Consumer - returns consumer ID
-    pub(crate) async fn get_consumer_id(&self, consumer_name: &str) -> Option<u64> {
+    // Validate Consumer - returns consumer ID
+    pub(crate) async fn validate_consumer(&self, consumer_name: &str) -> Option<u64> {
         for consumer in self.consumers.values() {
-            if consumer.lock().await.consumer_name == consumer_name {
-                return Some(consumer.lock().await.consumer_id);
+            let mut consumer_guard = consumer.lock().await;
+
+            if consumer_guard.consumer_name == consumer_name {
+                // if consumer exist and its status is false, then the consumer has disconnected
+                // the consumer client may try to reconnect
+                // then set the status to true and use the consumer
+                if !consumer_guard.status {
+                    consumer_guard.status = true
+                }
+                return Some(consumer_guard.consumer_id);
             }
         }
         None

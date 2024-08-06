@@ -29,6 +29,9 @@ pub(crate) static LOADBALANCE_DECISION_PATH: &str = "/cluster/load_balance";
 // Cluster Leader broker_id, posted by Leader Election Service
 pub(crate) static LEADER_ELECTION_PATH: &str = "/cluster/leader";
 
+pub(crate) static DEFAULT_NAMESPACE: &str = "default";
+pub(crate) static SYSTEM_NAMESPACE: &str = "system";
+
 // Resources provides the mechanisms to store and retrieve specific information from MetadataStore
 //
 // The docs/internal_resources.md document describe how the resources are organized in Metadata Store

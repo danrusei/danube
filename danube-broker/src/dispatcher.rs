@@ -48,7 +48,7 @@ impl Dispatcher {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.remove_consumer(consumer).await?),
             Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.remove_consumer(consumer).await?)
+                Ok(dispatcher.remove_consumer(consumer.consumer_id).await?)
             }
         }
     }

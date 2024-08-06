@@ -38,6 +38,7 @@ impl ConsumerService for DanubeServerImpl {
             }
         }
 
+        // checks if the consumer exist and it is connected
         match service
             .check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name)
             .await

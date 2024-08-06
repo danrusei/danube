@@ -459,7 +459,7 @@ impl BrokerService {
             None => return None,
         };
 
-        let consumer_id = match subscription.get_consumer_id(consumer_name).await {
+        let consumer_id = match subscription.validate_consumer(consumer_name).await {
             Some(id) => id,
             None => return None,
         };
