@@ -161,6 +161,8 @@ impl Topic {
 
         for subscription_name in subscriptions_to_remove {
             self.unsubscribe(&subscription_name).await;
+
+            //TODO! delete the subscription from the metadata store
         }
 
         Ok(())
