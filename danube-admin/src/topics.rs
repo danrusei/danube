@@ -1,6 +1,6 @@
 use crate::proto::{
-    topic_admin_client::TopicAdminClient, NamespaceRequest, NewTopicRequest,
-    PartitionedTopicRequest, SubscriptionRequest, TopicRequest,
+    topic_admin_client::TopicAdminClient, NamespaceRequest, NewTopicRequest, SubscriptionRequest,
+    TopicRequest,
 };
 use clap::{Args, Subcommand};
 
@@ -21,12 +21,6 @@ pub(crate) enum TopicsCommands {
         schema_type: String,
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
-    },
-    #[command(about = "Create a partitioned topic")]
-    CreatePartitionedTopic {
-        topic: String,
-        #[arg(short, long, default_value_t = 0)]
-        partitions: i32,
     },
     #[command(about = "Delete an existing topic")]
     Delete { topic: String },
@@ -83,27 +77,6 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
-        }
-
-        // Create a partitioned topic (--partitions #)
-        TopicsCommands::CreatePartitionedTopic { topic, partitions } => {
-            if !validate_topic_format(&topic) {
-                return Err("wrong topic format, should be /namespace/topic".into());
-            }
-
-            let _topic = topic;
-            let _partitions = partitions;
-            // to implement
-            todo!();
-            let request = PartitionedTopicRequest {
-                name: topic,
-                partitions,
-            };
-            let response = client.create_partitioned_topic(request).await?;
-            println!(
-                "Partitioned Topic Created: {:?}",
-                response.into_inner().success
-            );
         }
 
         // Delete the topic

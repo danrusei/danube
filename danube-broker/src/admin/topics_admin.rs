@@ -1,8 +1,7 @@
 use crate::admin::DanubeAdminImpl;
 use crate::admin_proto::{
-    topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, PartitionedTopicRequest,
-    SubscriptionListResponse, SubscriptionRequest, SubscriptionResponse, TopicListResponse,
-    TopicRequest, TopicResponse,
+    topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, SubscriptionListResponse,
+    SubscriptionRequest, SubscriptionResponse, TopicListResponse, TopicRequest, TopicResponse,
 };
 use crate::schema::{Schema, SchemaType};
 
@@ -72,14 +71,6 @@ impl TopicAdmin for DanubeAdminImpl {
 
         let response = TopicResponse { success };
         Ok(tonic::Response::new(response))
-    }
-
-    #[tracing::instrument(level = Level::INFO, skip_all)]
-    async fn create_partitioned_topic(
-        &self,
-        _request: Request<PartitionedTopicRequest>,
-    ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
-        todo!()
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
