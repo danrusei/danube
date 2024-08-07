@@ -1,8 +1,7 @@
 use crate::admin::DanubeAdminImpl;
 use crate::admin_proto::{
-    topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, PartitionedTopicRequest,
-    SubscriptionListResponse, SubscriptionRequest, SubscriptionResponse, TopicListResponse,
-    TopicRequest, TopicResponse,
+    topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, SubscriptionListResponse,
+    SubscriptionRequest, SubscriptionResponse, TopicListResponse, TopicRequest, TopicResponse,
 };
 use crate::schema::{Schema, SchemaType};
 
@@ -75,14 +74,6 @@ impl TopicAdmin for DanubeAdminImpl {
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
-    async fn create_partitioned_topic(
-        &self,
-        _request: Request<PartitionedTopicRequest>,
-    ) -> std::result::Result<Response<TopicResponse>, tonic::Status> {
-        todo!()
-    }
-
-    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn delete_topic(
         &self,
         request: Request<TopicRequest>,
@@ -109,14 +100,6 @@ impl TopicAdmin for DanubeAdminImpl {
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
-    async fn unsubscribe(
-        &self,
-        _request: Request<SubscriptionRequest>,
-    ) -> std::result::Result<Response<SubscriptionResponse>, tonic::Status> {
-        todo!()
-    }
-
-    #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn list_subscriptions(
         &self,
         request: Request<TopicRequest>,
@@ -139,10 +122,32 @@ impl TopicAdmin for DanubeAdminImpl {
     }
 
     #[tracing::instrument(level = Level::INFO, skip_all)]
-    async fn create_subscription(
+    async fn unsubscribe(
         &self,
-        _request: Request<SubscriptionRequest>,
+        request: Request<SubscriptionRequest>,
     ) -> std::result::Result<Response<SubscriptionResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!(
+            "Admin: Unsubscribe subscription {} from topic: {}",
+            req.subscription,
+            req.topic
+        );
+
+        let mut service = self.broker_service.lock().await;
+
+        let success = match service.unsubscribe(&req.subscription, &req.topic).await {
+            Ok(()) => true,
+            Err(err) => {
+                let status = Status::not_found(format!(
+                    "Unable to unsubscribe the subscription {} due to error: {}",
+                    req.subscription, err
+                ));
+                return Err(status);
+            }
+        };
+
+        let response = SubscriptionResponse { success };
+        Ok(tonic::Response::new(response))
     }
 }

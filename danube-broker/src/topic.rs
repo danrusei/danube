@@ -161,6 +161,8 @@ impl Topic {
 
         for subscription_name in subscriptions_to_remove {
             self.unsubscribe(&subscription_name).await;
+
+            //TODO! delete the subscription from the metadata store
         }
 
         Ok(())
@@ -237,6 +239,24 @@ impl Topic {
         };
 
         Some(consumer_id)
+    }
+
+    // check_subscription checks if the subscription is activelly used by any consumer
+    pub(crate) async fn check_subscription(&self, subscription: &str) -> Option<bool> {
+        let sub_guard = self.subscriptions.lock().await;
+        let subs = sub_guard.get(subscription)?;
+
+        let disp = subs.get_dispatcher()?;
+        let consumers = disp.get_consumers();
+
+        for consumer in consumers {
+            let cons_guard = consumer.lock().await;
+            if cons_guard.status {
+                return Some(true);
+            }
+        }
+
+        Some(false)
     }
 
     // Update Topic Policies

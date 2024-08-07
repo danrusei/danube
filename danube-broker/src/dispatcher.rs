@@ -52,11 +52,11 @@ impl Dispatcher {
             }
         }
     }
-    #[allow(dead_code)]
-    pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
+
+    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
         match self {
-            Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers().await,
-            Dispatcher::MultipleConsumers(dispatcher) => dispatcher.get_consumers().await,
+            Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers(),
+            Dispatcher::MultipleConsumers(dispatcher) => dispatcher.get_consumers(),
         }
     }
     // pub(crate) fn additional_method(&self) {

@@ -22,11 +22,9 @@ service TopicAdmin {
   // Topic related RPCs
   rpc ListTopics(NamespaceRequest) returns (TopicListResponse);
   rpc CreateTopic(NewTopicRequest) returns (TopicResponse);
-  rpc CreatePartitionedTopic(PartitionedTopicRequest) returns (TopicResponse);
   rpc DeleteTopic(TopicRequest) returns (TopicResponse);
-  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
   rpc ListSubscriptions(TopicRequest) returns (SubscriptionListResponse);
-  rpc CreateSubscription(SubscriptionRequest) returns (SubscriptionResponse);
+  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
 }
 
 // Common Messages
@@ -52,11 +50,6 @@ message TopicRequest {
 
 message TopicResponse {
   bool success = 1;
-}
-
-message PartitionedTopicRequest {
-  string name = 1;
-  int32 partitions = 2;
 }
 
 message SubscriptionRequest {

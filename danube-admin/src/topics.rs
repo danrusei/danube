@@ -1,6 +1,6 @@
 use crate::proto::{
-    topic_admin_client::TopicAdminClient, NamespaceRequest, NewTopicRequest,
-    PartitionedTopicRequest, SubscriptionRequest, TopicRequest,
+    topic_admin_client::TopicAdminClient, NamespaceRequest, NewTopicRequest, SubscriptionRequest,
+    TopicRequest,
 };
 use clap::{Args, Subcommand};
 
@@ -22,27 +22,15 @@ pub(crate) enum TopicsCommands {
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
     },
-    #[command(about = "Create a partitioned topic")]
-    CreatePartitionedTopic {
-        topic: String,
-        #[arg(short, long, default_value_t = 0)]
-        partitions: i32,
-    },
     #[command(about = "Delete an existing topic")]
     Delete { topic: String },
+    #[command(about = "List the subscriptions of the specified topic")]
+    Subscriptions { topic: String },
     #[command(about = "Delete a subscription from a topic")]
     Unsubscribe {
         topic: String,
         #[arg(short, long)]
         subscription: String,
-    },
-    #[command(about = "List the subscriptions of the specified topic")]
-    Subscriptions { topic: String },
-    #[command(about = "Create a new subscription for the specified topic")]
-    CreateSubscription {
-        #[arg(short, long)]
-        subscription: String,
-        topic: String,
     },
 }
 
@@ -85,27 +73,6 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             println!("Topic Created: {:?}", response.into_inner().success);
         }
 
-        // Create a partitioned topic (--partitions #)
-        TopicsCommands::CreatePartitionedTopic { topic, partitions } => {
-            if !validate_topic_format(&topic) {
-                return Err("wrong topic format, should be /namespace/topic".into());
-            }
-
-            let _topic = topic;
-            let _partitions = partitions;
-            // to implement
-            todo!();
-            let request = PartitionedTopicRequest {
-                name: topic,
-                partitions,
-            };
-            let response = client.create_partitioned_topic(request).await?;
-            println!(
-                "Partitioned Topic Created: {:?}",
-                response.into_inner().success
-            );
-        }
-
         // Delete the topic
         TopicsCommands::Delete { topic } => {
             if !validate_topic_format(&topic) {
@@ -115,27 +82,6 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             let request = TopicRequest { name: topic };
             let response = client.delete_topic(request).await?;
             println!("Topic Deleted: {:?}", response.into_inner().success);
-        }
-
-        // Delete a subscription from a topic
-        TopicsCommands::Unsubscribe {
-            topic,
-            subscription,
-        } => {
-            if !validate_topic_format(&topic) {
-                return Err("wrong topic format, should be /namespace/topic".into());
-            }
-
-            let _topic = topic;
-            let _subscription = subscription;
-            // to implement
-            todo!();
-            let request = SubscriptionRequest {
-                topic,
-                subscription,
-            };
-            let response = client.unsubscribe(request).await?;
-            println!("Unsubscribed: {:?}", response.into_inner().success);
         }
 
         // Get the list of subscriptions on the topic
@@ -149,25 +95,21 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             println!("Subscriptions: {:?}", response.into_inner().subscriptions);
         }
 
-        // Create a new subscription for the topic
-        TopicsCommands::CreateSubscription {
-            subscription,
+        // Delete a subscription from a topic
+        TopicsCommands::Unsubscribe {
             topic,
+            subscription,
         } => {
             if !validate_topic_format(&topic) {
                 return Err("wrong topic format, should be /namespace/topic".into());
             }
 
-            let _topic = topic;
-            let _subscription = subscription;
-            // to implement
-            todo!();
             let request = SubscriptionRequest {
                 topic,
                 subscription,
             };
-            let response = client.create_subscription(request).await?;
-            println!("Subscription Created: {:?}", response.into_inner().success);
+            let response = client.unsubscribe(request).await?;
+            println!("Unsubscribed: {:?}", response.into_inner().success);
         }
     }
 
