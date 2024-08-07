@@ -166,8 +166,7 @@ impl DispatcherSingleConsumer {
         Ok(consumers)
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
-        todo!()
+    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
+        &self.consumers
     }
 }

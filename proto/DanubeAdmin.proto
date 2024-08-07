@@ -23,9 +23,8 @@ service TopicAdmin {
   rpc ListTopics(NamespaceRequest) returns (TopicListResponse);
   rpc CreateTopic(NewTopicRequest) returns (TopicResponse);
   rpc DeleteTopic(TopicRequest) returns (TopicResponse);
-  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
   rpc ListSubscriptions(TopicRequest) returns (SubscriptionListResponse);
-  rpc CreateSubscription(SubscriptionRequest) returns (SubscriptionResponse);
+  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionResponse);
 }
 
 // Common Messages

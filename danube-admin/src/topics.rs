@@ -24,19 +24,13 @@ pub(crate) enum TopicsCommands {
     },
     #[command(about = "Delete an existing topic")]
     Delete { topic: String },
+    #[command(about = "List the subscriptions of the specified topic")]
+    Subscriptions { topic: String },
     #[command(about = "Delete a subscription from a topic")]
     Unsubscribe {
         topic: String,
         #[arg(short, long)]
         subscription: String,
-    },
-    #[command(about = "List the subscriptions of the specified topic")]
-    Subscriptions { topic: String },
-    #[command(about = "Create a new subscription for the specified topic")]
-    CreateSubscription {
-        #[arg(short, long)]
-        subscription: String,
-        topic: String,
     },
 }
 
@@ -90,27 +84,6 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             println!("Topic Deleted: {:?}", response.into_inner().success);
         }
 
-        // Delete a subscription from a topic
-        TopicsCommands::Unsubscribe {
-            topic,
-            subscription,
-        } => {
-            if !validate_topic_format(&topic) {
-                return Err("wrong topic format, should be /namespace/topic".into());
-            }
-
-            let _topic = topic;
-            let _subscription = subscription;
-            // to implement
-            todo!();
-            let request = SubscriptionRequest {
-                topic,
-                subscription,
-            };
-            let response = client.unsubscribe(request).await?;
-            println!("Unsubscribed: {:?}", response.into_inner().success);
-        }
-
         // Get the list of subscriptions on the topic
         TopicsCommands::Subscriptions { topic } => {
             if !validate_topic_format(&topic) {
@@ -122,25 +95,21 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             println!("Subscriptions: {:?}", response.into_inner().subscriptions);
         }
 
-        // Create a new subscription for the topic
-        TopicsCommands::CreateSubscription {
-            subscription,
+        // Delete a subscription from a topic
+        TopicsCommands::Unsubscribe {
             topic,
+            subscription,
         } => {
             if !validate_topic_format(&topic) {
                 return Err("wrong topic format, should be /namespace/topic".into());
             }
 
-            let _topic = topic;
-            let _subscription = subscription;
-            // to implement
-            todo!();
             let request = SubscriptionRequest {
                 topic,
                 subscription,
             };
-            let response = client.create_subscription(request).await?;
-            println!("Subscription Created: {:?}", response.into_inner().success);
+            let response = client.unsubscribe(request).await?;
+            println!("Unsubscribed: {:?}", response.into_inner().success);
         }
     }
 

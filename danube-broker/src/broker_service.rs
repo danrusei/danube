@@ -523,6 +523,29 @@ impl BrokerService {
         }
     }
 
+    // unsubscribe subscription from topic
+    // only if subscription is empty, so no consumers attached
+    pub(crate) async fn unsubscribe(
+        &mut self,
+        subscription_name: &str,
+        topic_name: &str,
+    ) -> Result<()> {
+        // works if topic is local
+        if let Some(topic) = self.topics.get_mut(topic_name) {
+            if let Some(value) = topic.check_subscription(subscription_name).await {
+                if value == false {
+                    topic.unsubscribe(subscription_name).await;
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(anyhow!(
+            "Unable to unsubscribe as the subscription {} has active consumers",
+            subscription_name
+        ))
+    }
+
     pub(crate) async fn create_namespace_if_absent(&mut self, namespace_name: &str) -> Result<()> {
         match self
             .resources

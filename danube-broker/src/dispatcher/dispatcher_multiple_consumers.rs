@@ -51,9 +51,8 @@ impl DispatcherMultipleConsumers {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn get_consumers(&self) -> Option<&Vec<Arc<Mutex<Consumer>>>> {
-        Some(&self.consumers)
+    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
+        &self.consumers
     }
 
     pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {

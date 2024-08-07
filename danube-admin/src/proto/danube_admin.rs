@@ -609,31 +609,6 @@ pub mod topic_admin_client {
                 .insert(GrpcMethod::new("danube_admin.TopicAdmin", "DeleteTopic"));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn unsubscribe(
-            &mut self,
-            request: impl tonic::IntoRequest<super::SubscriptionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SubscriptionResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/danube_admin.TopicAdmin/Unsubscribe",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("danube_admin.TopicAdmin", "Unsubscribe"));
-            self.inner.unary(req, path, codec).await
-        }
         pub async fn list_subscriptions(
             &mut self,
             request: impl tonic::IntoRequest<super::TopicRequest>,
@@ -659,7 +634,7 @@ pub mod topic_admin_client {
                 .insert(GrpcMethod::new("danube_admin.TopicAdmin", "ListSubscriptions"));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn create_subscription(
+        pub async fn unsubscribe(
             &mut self,
             request: impl tonic::IntoRequest<super::SubscriptionRequest>,
         ) -> std::result::Result<
@@ -677,13 +652,11 @@ pub mod topic_admin_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/danube_admin.TopicAdmin/CreateSubscription",
+                "/danube_admin.TopicAdmin/Unsubscribe",
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("danube_admin.TopicAdmin", "CreateSubscription"),
-                );
+                .insert(GrpcMethod::new("danube_admin.TopicAdmin", "Unsubscribe"));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -1335,13 +1308,6 @@ pub mod topic_admin_server {
             &self,
             request: tonic::Request<super::TopicRequest>,
         ) -> std::result::Result<tonic::Response<super::TopicResponse>, tonic::Status>;
-        async fn unsubscribe(
-            &self,
-            request: tonic::Request<super::SubscriptionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SubscriptionResponse>,
-            tonic::Status,
-        >;
         async fn list_subscriptions(
             &self,
             request: tonic::Request<super::TopicRequest>,
@@ -1349,7 +1315,7 @@ pub mod topic_admin_server {
             tonic::Response<super::SubscriptionListResponse>,
             tonic::Status,
         >;
-        async fn create_subscription(
+        async fn unsubscribe(
             &self,
             request: tonic::Request<super::SubscriptionRequest>,
         ) -> std::result::Result<
@@ -1572,52 +1538,6 @@ pub mod topic_admin_server {
                     };
                     Box::pin(fut)
                 }
-                "/danube_admin.TopicAdmin/Unsubscribe" => {
-                    #[allow(non_camel_case_types)]
-                    struct UnsubscribeSvc<T: TopicAdmin>(pub Arc<T>);
-                    impl<
-                        T: TopicAdmin,
-                    > tonic::server::UnaryService<super::SubscriptionRequest>
-                    for UnsubscribeSvc<T> {
-                        type Response = super::SubscriptionResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::SubscriptionRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as TopicAdmin>::unsubscribe(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = UnsubscribeSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/danube_admin.TopicAdmin/ListSubscriptions" => {
                     #[allow(non_camel_case_types)]
                     struct ListSubscriptionsSvc<T: TopicAdmin>(pub Arc<T>);
@@ -1662,13 +1582,13 @@ pub mod topic_admin_server {
                     };
                     Box::pin(fut)
                 }
-                "/danube_admin.TopicAdmin/CreateSubscription" => {
+                "/danube_admin.TopicAdmin/Unsubscribe" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateSubscriptionSvc<T: TopicAdmin>(pub Arc<T>);
+                    struct UnsubscribeSvc<T: TopicAdmin>(pub Arc<T>);
                     impl<
                         T: TopicAdmin,
                     > tonic::server::UnaryService<super::SubscriptionRequest>
-                    for CreateSubscriptionSvc<T> {
+                    for UnsubscribeSvc<T> {
                         type Response = super::SubscriptionResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -1680,8 +1600,7 @@ pub mod topic_admin_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as TopicAdmin>::create_subscription(&inner, request)
-                                    .await
+                                <T as TopicAdmin>::unsubscribe(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1693,7 +1612,7 @@ pub mod topic_admin_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = CreateSubscriptionSvc(inner);
+                        let method = UnsubscribeSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
