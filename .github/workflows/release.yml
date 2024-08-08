@@ -109,6 +109,8 @@ jobs:
 
       - name: Upload danube-broker
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-broker
@@ -117,6 +119,8 @@ jobs:
           
       - name: Upload danube-admin
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-admin
@@ -125,6 +129,8 @@ jobs:
           
       - name: Upload danube-pubsub
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-pubsub
