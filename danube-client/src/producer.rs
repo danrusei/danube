@@ -27,7 +27,7 @@ impl Producer {
         schema: Option<Schema>,
         producer_name: String,
         num_partitions: Option<usize>,
-        message_router: MessageRouter,
+        message_router: Option<MessageRouter>,
         producer_options: ProducerOptions,
     ) -> Self {
         // get the number of partitions, if not provided the default is 1 partition
@@ -39,11 +39,16 @@ impl Producer {
         };
 
         // default schema is String if not specified
-
         let schema = if let Some(sch) = schema {
             sch
         } else {
             Schema::new("string_schema".into(), SchemaType::String)
+        };
+
+        let message_router = if let Some(m_router) = message_router {
+            m_router
+        } else {
+            MessageRouter::new(partitions)
         };
 
         Producer {
@@ -88,7 +93,7 @@ impl Producer {
         data: Vec<u8>,
         attributes: Option<HashMap<String, String>>,
     ) -> Result<u64> {
-        let partition = self.message_router.get_partition();
+        let partition = self.message_router.round_robin();
         let producers = self.producers.lock().await;
 
         let sequence_id = producers[partition].send(data, attributes).await?;
@@ -153,14 +158,14 @@ impl ProducerBuilder {
         let producer_name = self
             .producer_name
             .expect("you should provide a name to the created producer");
-        let message_router = MessageRouter::new();
+
         Producer::new(
             self.client,
             topic_name,
             self.schema,
             producer_name,
             self.num_partitions,
-            message_router,
+            None,
             self.producer_options,
         )
     }
