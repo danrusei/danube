@@ -109,6 +109,25 @@ mod tests {
     }
 
     #[test]
+    fn test_search_partitions() {
+        let mut trie = Trie::new();
+        trie.insert("/namespaces/default/topics/default/topic1-part-1");
+        trie.insert("/namespaces/default/topics/default/topic1-part-2");
+        trie.insert("/namespaces/default/topics/default/topic2-part-1");
+        trie.insert("/namespaces/default/topics/default/topic2-part-2");
+
+        let mut result = trie.search("/namespaces/default/topics/default/topic1");
+        result.sort();
+        assert_eq!(
+            result,
+            vec![
+                "/namespaces/default/topics/default/topic1-part-1",
+                "/namespaces/default/topics/default/topic1-part-2"
+            ]
+        );
+    }
+
+    #[test]
     fn test_remove() {
         let mut trie = Trie::new();
         trie.insert("/cluster/brokers/load/broker1");

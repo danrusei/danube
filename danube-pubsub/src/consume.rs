@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use danube_client::{DanubeClient, SchemaType, SubType};
-use futures_util::stream::StreamExt;
 use serde_json::{from_slice, Value};
 use std::{collections::HashMap, str::from_utf8};
 use valico::json_schema::{self, schema::ScopedSchema};
@@ -76,30 +75,22 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
     consumer.subscribe().await?;
     let mut message_stream = consumer.receive().await?;
 
-    while let Some(message) = message_stream.next().await {
-        match message {
-            Ok(stream_message) => {
-                let payload = stream_message.payload;
-                let (seq_id, attr) = if let Some(meta) = stream_message.metadata {
-                    (meta.sequence_id, meta.attributes)
-                } else {
-                    (0, HashMap::new())
-                };
+    while let Some(stream_message) = message_stream.recv().await {
+        let payload = stream_message.payload;
+        let (seq_id, attr) = if let Some(meta) = stream_message.metadata {
+            (meta.sequence_id, meta.attributes)
+        } else {
+            (0, HashMap::new())
+        };
 
-                // Process message based on the schema type
-                process_message(
-                    &payload,
-                    seq_id,
-                    attr,
-                    &schema.type_schema,
-                    &schema_validator,
-                )?;
-            }
-            Err(e) => {
-                eprintln!("Error receiving message: {}", e);
-                break;
-            }
-        }
+        // Process message based on the schema type
+        process_message(
+            &payload,
+            seq_id,
+            attr,
+            &schema.type_schema,
+            &schema_validator,
+        )?;
     }
 
     Ok(())

@@ -236,6 +236,14 @@ pub mod topic_lookup_response {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TopicPartitionsResponse {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(string, repeated, tag = "2")]
+    pub partitions: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchemaRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
@@ -870,7 +878,7 @@ pub mod discovery_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /// Query the Pulsar cluster for information about a specific topic.
+        /// Query the Danube broker for information about a specific topic.
         /// returns metadata about the topic, including the broker(s) responsible for it.
         pub async fn topic_lookup(
             &mut self,
@@ -895,6 +903,33 @@ pub mod discovery_client {
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("danube.Discovery", "TopicLookup"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Query the Danube broker for information about topic partitions.
+        /// returns an array with the topic partitions names
+        pub async fn topic_partitions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TopicLookupRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::TopicPartitionsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/danube.Discovery/TopicPartitions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("danube.Discovery", "TopicPartitions"));
             self.inner.unary(req, path, codec).await
         }
         /// Get the schema associated with the topic
@@ -1569,13 +1604,22 @@ pub mod discovery_server {
     /// Generated trait containing gRPC methods that should be implemented for use with DiscoveryServer.
     #[async_trait]
     pub trait Discovery: Send + Sync + 'static {
-        /// Query the Pulsar cluster for information about a specific topic.
+        /// Query the Danube broker for information about a specific topic.
         /// returns metadata about the topic, including the broker(s) responsible for it.
         async fn topic_lookup(
             &self,
             request: tonic::Request<super::TopicLookupRequest>,
         ) -> std::result::Result<
             tonic::Response<super::TopicLookupResponse>,
+            tonic::Status,
+        >;
+        /// Query the Danube broker for information about topic partitions.
+        /// returns an array with the topic partitions names
+        async fn topic_partitions(
+            &self,
+            request: tonic::Request<super::TopicLookupRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::TopicPartitionsResponse>,
             tonic::Status,
         >;
         /// Get the schema associated with the topic
@@ -1694,6 +1738,52 @@ pub mod discovery_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = TopicLookupSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/danube.Discovery/TopicPartitions" => {
+                    #[allow(non_camel_case_types)]
+                    struct TopicPartitionsSvc<T: Discovery>(pub Arc<T>);
+                    impl<
+                        T: Discovery,
+                    > tonic::server::UnaryService<super::TopicLookupRequest>
+                    for TopicPartitionsSvc<T> {
+                        type Response = super::TopicPartitionsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::TopicLookupRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Discovery>::topic_partitions(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = TopicPartitionsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

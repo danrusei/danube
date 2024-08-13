@@ -3,7 +3,6 @@ extern crate futures_util;
 
 use anyhow::Result;
 use danube_client::{Consumer, DanubeClient, Producer, SchemaType, SubType};
-use futures_util::stream::StreamExt;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
@@ -84,9 +83,8 @@ async fn test_exclusive_subscription() -> Result<()> {
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
-        if let Some(message) = message_stream.next().await {
-            let msg = message.unwrap();
-            let payload = String::from_utf8(msg.payload).unwrap();
+        if let Some(stream_message) = message_stream.recv().await {
+            let payload = String::from_utf8(stream_message.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();
@@ -130,9 +128,8 @@ async fn test_shared_subscription() -> Result<()> {
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
-        if let Some(message) = message_stream.next().await {
-            let msg = message.unwrap();
-            let payload = String::from_utf8(msg.payload).unwrap();
+        if let Some(stream_message) = message_stream.recv().await {
+            let payload = String::from_utf8(stream_message.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();

@@ -3,7 +3,7 @@ use crate::{broker_service::validate_topic_format, error_message::create_error_s
 
 use crate::proto::{
     discovery_server::Discovery, topic_lookup_response::LookupType, ErrorType, SchemaRequest,
-    SchemaResponse, TopicLookupRequest, TopicLookupResponse,
+    SchemaResponse, TopicLookupRequest, TopicLookupResponse, TopicPartitionsResponse,
 };
 
 use tonic::{Code, Request, Response};
@@ -74,6 +74,42 @@ impl Discovery for DanubeServerImpl {
 
         Ok(tonic::Response::new(response))
     }
+
+    // Retrieves the topic partitions names from the cluster
+    #[tracing::instrument(level = Level::INFO, skip_all)]
+    async fn topic_partitions(
+        &self,
+        request: Request<TopicLookupRequest>,
+    ) -> std::result::Result<Response<TopicPartitionsResponse>, tonic::Status> {
+        let req = request.into_inner();
+
+        trace!("Topic Lookup request for topic: {}", req.topic);
+
+        // The topic format is /{namespace_name}/{topic_name}
+        if !validate_topic_format(&req.topic) {
+            let error_string =
+                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::InvalidTopicName,
+                error_string,
+                None,
+            );
+            return Err(status);
+        }
+
+        let service = self.service.lock().await;
+
+        let result = service.topic_partitions(&req.topic).await;
+
+        let response = TopicPartitionsResponse {
+            request_id: req.request_id,
+            partitions: result,
+        };
+
+        Ok(tonic::Response::new(response))
+    }
+
     // Retrieve message schema from Metadata Store
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn get_schema(

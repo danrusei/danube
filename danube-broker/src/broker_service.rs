@@ -352,6 +352,37 @@ impl BrokerService {
         None
     }
 
+    // retrieves the topic partitions names for a topic, if topic is partioned
+    // so for /default/topic1 , returns all partitions like /default/topic1-part-1, /default/topic1-part-2 etc..
+    pub(crate) async fn topic_partitions(&self, topic_name: &str) -> Vec<String> {
+        let mut topics = Vec::new();
+        let ns_name = get_nsname_from_topic(topic_name);
+
+        // check if the topic exist in the Metadata Store
+        // if true, means that it is not a partitioned topic
+        match self
+            .resources
+            .namespace
+            .check_if_topic_exist(ns_name, topic_name)
+        {
+            true => {
+                topics.push(topic_name.to_owned());
+                return topics;
+            }
+            false => {}
+        };
+
+        // if not, we should look for any topic starting with topic_name
+
+        topics = self
+            .resources
+            .namespace
+            .get_topic_partitions(ns_name, topic_name)
+            .await;
+
+        topics
+    }
+
     pub(crate) fn get_schema(&self, topic_name: &str) -> Option<ProtoSchema> {
         let result = self.resources.topic.get_schema(topic_name);
         if let Some(schema) = result {

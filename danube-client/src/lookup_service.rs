@@ -1,6 +1,7 @@
 use crate::{
     connection_manager::ConnectionManager,
     errors::{DanubeError, Result},
+    proto::TopicPartitionsResponse,
 };
 
 use crate::proto::{
@@ -69,6 +70,38 @@ impl LookupService {
         };
 
         Ok(lookup_result)
+    }
+
+    pub(crate) async fn topic_partitions(
+        &self,
+        addr: &Uri,
+        topic: impl Into<String>,
+    ) -> Result<Vec<String>> {
+        let grpc_cnx = self.cnx_manager.get_connection(addr, addr).await?;
+
+        let mut client = DiscoveryClient::new(grpc_cnx.grpc_cnx.clone());
+
+        let lookup_request = TopicLookupRequest {
+            request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            topic: topic.into(),
+        };
+
+        let request = tonic::Request::new(lookup_request);
+
+        let response: std::result::Result<Response<TopicPartitionsResponse>, Status> =
+            client.topic_partitions(request).await;
+
+        let topic_partitions = match response {
+            Ok(resp) => {
+                let lookup_resp = resp.into_inner();
+                lookup_resp.partitions
+            }
+            Err(status) => {
+                return Err(DanubeError::FromStatus(status, None));
+            }
+        };
+
+        Ok(topic_partitions)
     }
 
     // for SERVICE_NOT_READY error received from broker retry the topic_lookup request

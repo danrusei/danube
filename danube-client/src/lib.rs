@@ -19,6 +19,8 @@ mod topic_producer;
 mod consumer;
 pub use consumer::{Consumer, ConsumerBuilder, ConsumerOptions, SubType};
 
+mod topic_consumer;
+
 mod message_router;
 
 mod schema;

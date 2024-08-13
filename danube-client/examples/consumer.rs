@@ -1,6 +1,5 @@
 use anyhow::Result;
 use danube_client::{DanubeClient, SubType};
-use futures_util::stream::StreamExt;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -39,23 +38,15 @@ async fn main() -> Result<()> {
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
-    while let Some(message) = message_stream.next().await {
-        match message {
-            Ok(stream_message) => {
-                let payload = stream_message.payload;
-                // Deserialize the message using the schema
-                match serde_json::from_slice::<MyMessage>(&payload) {
-                    Ok(decoded_message) => {
-                        println!("Received message: {:?}", decoded_message);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to decode message: {}", e);
-                    }
-                }
+    while let Some(message) = message_stream.recv().await {
+        let payload = message.payload;
+        // Deserialize the message using the schema
+        match serde_json::from_slice::<MyMessage>(&payload) {
+            Ok(decoded_message) => {
+                println!("Received message: {:?}", decoded_message);
             }
             Err(e) => {
-                eprintln!("Error receiving message: {}", e);
-                break;
+                eprintln!("Failed to decode message: {}", e);
             }
         }
     }
