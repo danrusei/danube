@@ -3,9 +3,8 @@ extern crate futures_util;
 
 use anyhow::Result;
 use danube_client::{Consumer, DanubeClient, Producer, SchemaType, SubType};
-use futures_util::stream::StreamExt;
 use std::sync::Arc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{sleep, timeout, Duration};
 
 struct TestSetup {
     client: Arc<DanubeClient>,
@@ -76,6 +75,8 @@ async fn test_exclusive_subscription() -> Result<()> {
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
+    sleep(Duration::from_millis(500)).await;
+
     // Produce a message after the consumer has subscribed
     let _message_id = producer
         .send("Hello Danube".as_bytes().into(), None)
@@ -84,9 +85,8 @@ async fn test_exclusive_subscription() -> Result<()> {
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
-        if let Some(message) = message_stream.next().await {
-            let msg = message.unwrap();
-            let payload = String::from_utf8(msg.payload).unwrap();
+        if let Some(stream_message) = message_stream.recv().await {
+            let payload = String::from_utf8(stream_message.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();
@@ -122,6 +122,8 @@ async fn test_shared_subscription() -> Result<()> {
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
+    sleep(Duration::from_millis(500)).await;
+
     // Produce a message after the consumer has subscribed
     let _message_id = producer
         .send("Hello Danube".as_bytes().into(), None)
@@ -130,9 +132,8 @@ async fn test_shared_subscription() -> Result<()> {
 
     // Add a timeout to avoid blocking indefinitely
     let receive_future = async {
-        if let Some(message) = message_stream.next().await {
-            let msg = message.unwrap();
-            let payload = String::from_utf8(msg.payload).unwrap();
+        if let Some(stream_message) = message_stream.recv().await {
+            let payload = String::from_utf8(stream_message.payload).unwrap();
             assert_eq!(payload, "Hello Danube");
             println!("Message received: {}", payload);
             // consumer.ack(&msg).await.unwrap();

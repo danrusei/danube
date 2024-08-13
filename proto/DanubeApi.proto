@@ -119,9 +119,12 @@ message AckResponse {
 // ============================================================================================
 
 service Discovery {
-    // Query the Pulsar cluster for information about a specific topic.
+    // Query the Danube broker for information about a specific topic.
     // returns metadata about the topic, including the broker(s) responsible for it.
     rpc TopicLookup(TopicLookupRequest) returns (TopicLookupResponse);
+    // Query the Danube broker for information about topic partitions.
+    // returns an array with the topic partitions names
+    rpc TopicPartitions(TopicLookupRequest) returns (TopicPartitionsResponse);
     // Get the schema associated with the topic
     rpc GetSchema(SchemaRequest) returns (SchemaResponse);
 }
@@ -140,6 +143,12 @@ message TopicLookupResponse {
     uint64 request_id = 3;
     LookupType response_type = 4;
     string brokerServiceUrl = 5;
+}
+
+message TopicPartitionsResponse {
+    uint64 request_id = 1;
+    repeated string partitions = 2;
+
 }
 
 message SchemaRequest {
