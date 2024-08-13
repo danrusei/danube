@@ -11,7 +11,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let client = DanubeClient::builder()
-        .service_url("http://[::1]:6650")
+        .service_url("http://127.0.0.1:6650")
         .build()
         .unwrap();
 
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
 
     let mut i = 0;
 
-    while i < 20 {
+    while i < 100 {
         let data = json!({
             "field1": format!{"value{}", i},
             "field2": 2020+i,

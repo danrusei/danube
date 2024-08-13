@@ -49,7 +49,7 @@ etcd-clean:
 	@echo "ETCD instance and data removed"
 
 # Set log level based on RUST_LOG value (if provided)
-LOG_LEVEL = $(if $(RUST_LOG),$(RUST_LOG),warn)
+LOG_LEVEL = $(if $(RUST_LOG),$(RUST_LOG),info)
 
 brokers:
 	@echo "Building Danube brokers..."
@@ -57,14 +57,14 @@ brokers:
 		log_file="broker_$$port.log"; \
 		echo "Starting broker on port $$port, logging to $$log_file"; \
 		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 cargo build --release --package danube-broker --bin danube-broker && \
-		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 ./target/release/danube-broker --broker-addr "[::1]:$$port" --cluster-name "MY_CLUSTER" --meta-store-addr "[::1]:2379" > temp/$$log_file 2>&1 & \
+		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 ./target/release/danube-broker --broker-addr "0.0.0.0:$$port" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379" > temp/$$log_file 2>&1 & \
 		sleep 2; \
 	done
 	@echo "Danube brokers started on ports: $(BROKER_PORTS)"
 
 brokers-clean:
 	@echo "Cleaning up Brokers instances..."
-	@pids=$$(ps aux | grep '[d]anube-broker --broker-addr \[::1\]:'); \
+	@pids=$$(ps aux | grep '[d]anube-broker --broker-addr \0.0.0.0:'); \
 	if [ -n "$$pids" ]; then \
 		echo "$$pids" | awk '{print $$2}' | xargs -r kill; \
 		echo "Danube brokers cleaned up."; \

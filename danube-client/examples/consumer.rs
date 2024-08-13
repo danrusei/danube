@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let client = DanubeClient::builder()
-        .service_url("http://[::1]:6650")
+        .service_url("http://127.0.0.1:6650")
         .build()
         .unwrap();
 

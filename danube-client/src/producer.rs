@@ -97,16 +97,19 @@ impl Producer {
         data: Vec<u8>,
         attributes: Option<HashMap<String, String>>,
     ) -> Result<u64> {
-        let next_partition = &self
-            .message_router
-            .as_ref()
-            .expect("already initialized")
-            .round_robin();
+        let next_partition = match self.partitions {
+            Some(_) => self
+                .message_router
+                .as_ref()
+                .expect("already initialized")
+                .round_robin(),
+
+            None => 0,
+        };
+
         let producers = self.producers.lock().await;
 
-        let sequence_id = producers[next_partition.to_owned()]
-            .send(data, attributes)
-            .await?;
+        let sequence_id = producers[next_partition].send(data, attributes).await?;
 
         Ok(sequence_id)
     }
