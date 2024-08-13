@@ -23,12 +23,14 @@ impl Discovery for DanubeServerImpl {
 
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic_format(&req.topic) {
-            let error_string =
-                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let error_string = format!(
+                "The topic: {} has an invalid format, should be: /namespace_name/topic_name",
+                &req.topic
+            );
             let status = create_error_status(
                 Code::InvalidArgument,
                 ErrorType::InvalidTopicName,
-                error_string,
+                &error_string,
                 None,
             );
             return Err(status);
@@ -87,12 +89,14 @@ impl Discovery for DanubeServerImpl {
 
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic_format(&req.topic) {
-            let error_string =
-                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let error_string = format!(
+                "The topic: {} has an invalid format, should be: /namespace_name/topic_name",
+                &req.topic
+            );
             let status = create_error_status(
                 Code::InvalidArgument,
                 ErrorType::InvalidTopicName,
-                error_string,
+                &error_string,
                 None,
             );
             return Err(status);
@@ -122,12 +126,14 @@ impl Discovery for DanubeServerImpl {
 
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic_format(&req.topic) {
-            let error_string =
-                "The topic has an invalid format, should be: /namespace_name/topic_name";
+            let error_string = format!(
+                "The topic: {} has an invalid format, should be: /namespace_name/topic_name",
+                &req.topic
+            );
             let status = create_error_status(
                 Code::InvalidArgument,
                 ErrorType::InvalidTopicName,
-                error_string,
+                &error_string,
                 None,
             );
             return Err(status);

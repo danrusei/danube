@@ -4,7 +4,7 @@ extern crate futures_util;
 use anyhow::Result;
 use danube_client::{Consumer, DanubeClient, Producer, SchemaType, SubType};
 use std::sync::Arc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{sleep, timeout, Duration};
 
 struct TestSetup {
     client: Arc<DanubeClient>,
@@ -75,6 +75,8 @@ async fn test_exclusive_subscription() -> Result<()> {
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
+    sleep(Duration::from_millis(500)).await;
+
     // Produce a message after the consumer has subscribed
     let _message_id = producer
         .send("Hello Danube".as_bytes().into(), None)
@@ -119,6 +121,8 @@ async fn test_shared_subscription() -> Result<()> {
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
+
+    sleep(Duration::from_millis(500)).await;
 
     // Produce a message after the consumer has subscribed
     let _message_id = producer

@@ -160,7 +160,7 @@ impl NamespaceResources {
             let parts: Vec<&str> = key.split('/').collect();
 
             if let (Some(namespace), Some(topic)) = (parts.get(4), parts.get(5)) {
-                let topic_name = join_path(&[namespace, topic]);
+                let topic_name = join_path(&["/", namespace, topic]);
                 topics.push(topic_name);
             }
         }

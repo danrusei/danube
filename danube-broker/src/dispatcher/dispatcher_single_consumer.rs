@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, warn};
+use tracing::{trace, warn};
 
 use crate::consumer::{Consumer, MessageToSend};
 
@@ -118,9 +118,9 @@ impl DispatcherSingleConsumer {
             consumer_name = consumer_guard.consumer_name.clone();
         }
 
-        info!(
-            "The dispatcher {:?} has added the consumer {}",
-            self, consumer_name
+        trace!(
+            "The dispatcher DispatcherSingleConsumer has added the consumer {}",
+            consumer_name
         );
 
         Ok(())
