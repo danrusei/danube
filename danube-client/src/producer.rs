@@ -14,8 +14,8 @@ pub struct Producer {
     topic_name: String,
     schema: Schema,
     producer_name: String,
-    partitions: usize,
-    message_router: MessageRouter,
+    partitions: Option<usize>,
+    message_router: Option<MessageRouter>,
     producers: Arc<Mutex<Vec<TopicProducer>>>,
     producer_options: ProducerOptions,
 }
@@ -26,29 +26,15 @@ impl Producer {
         topic_name: String,
         schema: Option<Schema>,
         producer_name: String,
-        num_partitions: Option<usize>,
+        partitions: Option<usize>,
         message_router: Option<MessageRouter>,
         producer_options: ProducerOptions,
     ) -> Self {
-        // get the number of partitions, if not provided the default is 1 partition
-        // often called (non-partitioned topic)
-        let partitions = if let Some(part) = num_partitions {
-            part
-        } else {
-            1
-        };
-
         // default schema is String if not specified
         let schema = if let Some(sch) = schema {
             sch
         } else {
             Schema::new("string_schema".into(), SchemaType::String)
-        };
-
-        let message_router = if let Some(m_router) = message_router {
-            m_router
-        } else {
-            MessageRouter::new(partitions)
         };
 
         Producer {
@@ -64,18 +50,36 @@ impl Producer {
     }
 
     pub async fn create(&mut self) -> Result<()> {
-        let mut topic_producers: Vec<_> = (0..self.partitions)
-            .map(|partition_id| {
-                let topic = format!("{}-part-{}", self.topic_name, partition_id);
-                TopicProducer::new(
+        let mut topic_producers: Vec<_> = match self.partitions {
+            None => {
+                // Create a single TopicProducer for non-partitioned topic
+                vec![TopicProducer::new(
                     self.client.clone(),
-                    topic,
-                    format!("{}-{}", self.producer_name, partition_id),
+                    self.topic_name.clone(),
+                    self.producer_name.clone(),
                     self.schema.clone(),
                     self.producer_options.clone(),
-                )
-            })
-            .collect();
+                )]
+            }
+            Some(partitions) => {
+                if self.message_router.is_none() {
+                    self.message_router = Some(MessageRouter::new(partitions));
+                };
+
+                (0..partitions)
+                    .map(|partition_id| {
+                        let topic = format!("{}-part-{}", self.topic_name, partition_id);
+                        TopicProducer::new(
+                            self.client.clone(),
+                            topic,
+                            format!("{}-{}", self.producer_name, partition_id),
+                            self.schema.clone(),
+                            self.producer_options.clone(),
+                        )
+                    })
+                    .collect()
+            }
+        };
 
         for topic_producer in &mut topic_producers {
             let _prod_id = topic_producer.create().await?;
@@ -93,10 +97,16 @@ impl Producer {
         data: Vec<u8>,
         attributes: Option<HashMap<String, String>>,
     ) -> Result<u64> {
-        let partition = self.message_router.round_robin();
+        let next_partition = &self
+            .message_router
+            .as_ref()
+            .expect("already initialized")
+            .round_robin();
         let producers = self.producers.lock().await;
 
-        let sequence_id = producers[partition].send(data, attributes).await?;
+        let sequence_id = producers[next_partition.to_owned()]
+            .send(data, attributes)
+            .await?;
 
         Ok(sequence_id)
     }
