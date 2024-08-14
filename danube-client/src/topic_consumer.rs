@@ -43,7 +43,7 @@ pub(crate) struct TopicConsumer {
 }
 
 impl TopicConsumer {
-    pub fn new(
+    pub(crate) fn new(
         client: DanubeClient,
         topic_name: String,
         consumer_name: String,
@@ -70,7 +70,7 @@ impl TopicConsumer {
             stop_signal: Arc::new(AtomicBool::new(false)),
         }
     }
-    pub async fn subscribe(&mut self) -> Result<u64> {
+    pub(crate) async fn subscribe(&mut self) -> Result<u64> {
         let broker_addr = self.client.uri.clone();
 
         match self
@@ -160,7 +160,7 @@ impl TopicConsumer {
     }
 
     // receive messages
-    pub async fn receive(
+    pub(crate) async fn receive(
         &mut self,
     ) -> Result<impl Stream<Item = std::result::Result<StreamMessage, Status>>> {
         let stream_client = self.stream_client.as_mut().ok_or_else(|| {

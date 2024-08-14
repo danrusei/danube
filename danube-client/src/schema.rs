@@ -3,6 +3,14 @@ use std::convert::TryFrom;
 
 use crate::proto::{schema::TypeSchema as ProtoTypeSchema, Schema as ProtoSchema};
 
+/// Represents a schema for data, including its type and associated schema data.
+///
+/// This struct is used to define how data should be serialized, deserialized, and validated.
+///
+/// Fields:
+/// - `name`: The name of the schema, typically used for identification purposes.
+/// - `schema_data`: The schema data itself, which contains the schema's definition. This is only used when `type_schema` is `Json`.
+/// - `type_schema`: The type of schema that determines the format of the data (e.g., JSON, STRING).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Schema {
     pub name: String,
@@ -24,6 +32,15 @@ impl Schema {
     }
 }
 
+/// Represents the type of schema used for data serialization and validation.
+///
+/// This enum defines the possible types of schemas that can be applied to data.
+///
+/// Variants:
+/// - `Bytes`: Represents a schema where data is in raw bytes format.
+/// - `String`: Represents a schema where data is in string format.
+/// - `Int64`: Represents a schema where data is in 64-bit integer format.
+/// - `Json`: Represents a schema where data is in JSON format. The associated string holds the JSON schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SchemaType {
     Bytes,

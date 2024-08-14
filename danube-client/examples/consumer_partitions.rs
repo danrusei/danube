@@ -32,24 +32,20 @@ async fn main() -> Result<()> {
         .build();
 
     // Subscribe to the topic
-    let consumer_id = consumer.subscribe().await?;
-    println!("The Consumer with ID: {:?} was created", consumer_id);
-
-    let _schema = client.get_schema(topic).await.unwrap();
+    consumer.subscribe().await?;
+    println!("The Consumer {} was created", consumer_name);
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
     while let Some(message) = message_stream.recv().await {
         let payload = message.payload;
-        // Deserialize the message using the schema
-        match serde_json::from_slice::<MyMessage>(&payload) {
-            Ok(decoded_message) => {
-                println!("Received message: {:?}", decoded_message);
-            }
-            Err(e) => {
-                eprintln!("Failed to decode message: {}", e);
-            }
+
+        let result = String::from_utf8(payload);
+
+        match result {
+            Ok(message) => println!("Received message: {:?}", message),
+            Err(e) => println!("Failed to convert Payload to String: {}", e),
         }
     }
 

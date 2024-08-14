@@ -32,8 +32,8 @@ async fn main() -> Result<()> {
         .build();
 
     // Subscribe to the topic
-    let consumer_id = consumer.subscribe().await?;
-    println!("The Consumer with ID: {:?} was created", consumer_id);
+    consumer.subscribe().await?;
+    println!("The Consumer {} was created", consumer_name);
 
     let _schema = client.get_schema(topic).await.unwrap();
 

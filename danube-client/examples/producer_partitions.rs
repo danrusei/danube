@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = "/default/partitioned_topic".to_string();
+    let topic = "/default/partitioned_topic";
     let producer_name = "prod_part";
 
     let mut producer = client
@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
         .with_partitions(3)
         .build();
 
-    let prod_id = producer.create().await?;
-    info!("The Producer was created with ID: {:?}", prod_id);
+    producer.create().await?;
+    info!("The Producer {} was created", producer_name);
 
     let mut i = 0;
 

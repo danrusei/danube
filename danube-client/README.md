@@ -2,11 +2,9 @@
 
 An async Rust client library for interacting with Danube Pub/Sub messaging platform.
 
-[Danube](https://github.com/danrusei/danube) is an open-source **distributed** Pub/Sub messaging platform written in Rust.
+[Danube](https://github.com/danrusei/danube) is an open-source **distributed** Pub/Sub messaging platform written in Rust. Consult [the documentation](https://dev-state.com/danube_docs/) for supported concepts and the platform architecture.
 
-**⚠️ This library is currently under active development and may have missing or incomplete functionalities. Use with caution.**
-
-I'm working on improving and adding new features. Please feel free to contribute or report any issues you encounter.
+I'm working on improving it and adding new features. Please feel free to contribute or report any issues you encounter.
 
 ## Example usage
 
@@ -15,126 +13,68 @@ Check out the [example files](https://github.com/danrusei/danube/tree/main/danub
 ### Producer
 
 ```rust
-use anyhow::Result;
-use danube_client::{DanubeClient, SchemaType};
-use serde_json::json;
-use std::thread;
-use std::time::Duration;
-use tracing::info;
+let client = DanubeClient::builder()
+    .service_url("http://127.0.0.1:6650")
+    .build()
+    .unwrap();
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Setup tracing
-    tracing_subscriber::fmt::init();
+let topic_name = "/default/test_topic";
+let producer_name = "test_prod";
 
-    let client = DanubeClient::builder()
-        .service_url("http://[::1]:6650")
-        .build()
-        .unwrap();
+let mut producer = client
+    .new_producer()
+    .with_topic(topic_name)
+    .with_name(producer_name)
+    .build();
 
-    let topic = "/default/test_topic".to_string();
+producer.create().await?;
+println!("The Producer {} was created", producer_name);
 
-    let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
+let encoded_data = "Hello Danube".as_bytes().to_vec();
 
-    let mut producer = client
-        .new_producer()
-        .with_topic(topic)
-        .with_name("test_producer1")
-        .with_schema("my_app".into(), SchemaType::Json(json_schema))
-        .build();
-
-    let prod_id = producer.create().await?;
-    info!("The Producer was created with ID: {:?}", prod_id);
-
-    let mut i = 0;
-
-    while i < 20 {
-        let data = json!({
-            "field1": format!{"value{}", i},
-            "field2": 2020+i,
-        });
-
-        // Convert to string and encode to bytes
-        let json_string = serde_json::to_string(&data).unwrap();
-        let encoded_data = json_string.as_bytes().to_vec();
-
-        // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
-        let message_id = producer.send(encoded_data).await?;
-        println!("The Message with id {} was sent", message_id);
-
-        thread::sleep(Duration::from_secs(1));
-        i += 1;
-    }
-
-    Ok(())
-}
+let message_id = producer.send(encoded_data, None).await?;
+println!("The Message with id {} was sent", message_id);
 ```
 
 ### Consumer
 
 ```rust
-use anyhow::Result;
-use danube_client::{DanubeClient, SubType};
-use futures_util::stream::StreamExt;
-use serde::Deserialize;
-
-#[derive(Deserialize, Debug)]
-#[allow(dead_code)]
-struct MyMessage {
-    field1: String,
-    field2: i32,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Setup tracing
-    tracing_subscriber::fmt::init();
-
-    let client = DanubeClient::builder()
-        .service_url("http://[::1]:6650")
+let client = DanubeClient::builder()
+        .service_url("http://127.0.0.1:6650")
         .build()
         .unwrap();
 
-    let topic = "/default/test_topic".to_string();
+    let topic = "/default/test_topic";
+    let consumer_name = "test_cons";
+    let subscription_name = "test_subs";
 
     let mut consumer = client
         .new_consumer()
-        .with_topic(topic.clone())
-        .with_consumer_name("test_consumer")
-        .with_subscription("test_subscription")
+        .with_topic(topic)
+        .with_consumer_name(consumer_name)
+        .with_subscription(subscription_name)
         .with_subscription_type(SubType::Exclusive)
         .build();
 
     // Subscribe to the topic
-    let consumer_id = consumer.subscribe().await?;
-    println!("The Consumer with ID: {:?} was created", consumer_id);
-
-    let _schema = client.get_schema(topic).await.unwrap();
+    consumer.subscribe().await?;
+    println!("The Consumer {} was created", consumer_name);
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
 
-    while let Some(message) = message_stream.next().await {
-        match message {
-            Ok(stream_message) => {
-                let payload = stream_message.messages;
-                // Deserialize the message using the schema
-                match serde_json::from_slice::<MyMessage>(&payload) {
-                    Ok(decoded_message) => {
-                        println!("Received message: {:?}", decoded_message);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to decode message: {}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Error receiving message: {}", e);
-                break;
-            }
+    while let Some(message) = message_stream.recv().await {
+        let payload = message.payload;
+
+        let result = String::from_utf8(payload);
+
+        match result {
+            Ok(message) => println!("Received message: {:?}", message),
+            Err(e) => println!("Failed to convert Payload to String: {}", e),
         }
     }
-
-    Ok(())
-}
 ```
+
+## Contribution
+
+Check [the documentation](https://dev-state.com/danube_docs/) on how to setup a Danube Broker.
