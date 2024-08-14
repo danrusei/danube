@@ -19,13 +19,15 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = "/default/test_topic".to_string();
+    let topic = "/default/test_topic";
+    let consumer_name = "cons_json";
+    let subscription_name = "subs_json";
 
     let mut consumer = client
         .new_consumer()
-        .with_topic(topic.clone())
-        .with_consumer_name("test_consumer")
-        .with_subscription("test_subscription")
+        .with_topic(topic)
+        .with_consumer_name(consumer_name)
+        .with_subscription(subscription_name)
         .with_subscription_type(SubType::Exclusive)
         .build();
 

@@ -27,10 +27,6 @@ tonic = { workspace = true }
 tonic-types = { workspace = true }
 tracing = { workspace = true }
 
-[[example]]
-name = "producer"
-path = "examples/producer.rs"
-
 [lints]
 workspace = true
 

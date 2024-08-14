@@ -1,6 +1,5 @@
 use anyhow::Result;
-use danube_client::{DanubeClient, SchemaType};
-use serde_json::json;
+use danube_client::DanubeClient;
 use std::thread;
 use std::time::Duration;
 use tracing::info;
@@ -15,15 +14,14 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = "/default/test_topic".to_string();
-
-    let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
+    let topic = "/default/partitioned_topic".to_string();
+    let producer_name = "prod_part";
 
     let mut producer = client
         .new_producer()
         .with_topic(topic)
-        .with_name("test_producer1")
-        .with_schema("my_app".into(), SchemaType::Json(json_schema))
+        .with_name(producer_name)
+        .with_partitions(3)
         .build();
 
     let prod_id = producer.create().await?;
@@ -32,16 +30,8 @@ async fn main() -> Result<()> {
     let mut i = 0;
 
     while i < 100 {
-        let data = json!({
-            "field1": format!{"value{}", i},
-            "field2": 2020+i,
-        });
+        let encoded_data = format!("Hello Danube {}", i).as_bytes().to_vec();
 
-        // Convert to string and encode to bytes
-        let json_string = serde_json::to_string(&data).unwrap();
-        let encoded_data = json_string.as_bytes().to_vec();
-
-        // let json_message = r#"{"field1": "value", "field2": 123}"#.as_bytes().to_vec();
         let message_id = producer.send(encoded_data, None).await?;
         println!("The Message with id {} was sent", message_id);
 
