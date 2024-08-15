@@ -71,7 +71,7 @@ impl TopicConsumer {
         }
     }
     pub(crate) async fn subscribe(&mut self) -> Result<u64> {
-        let broker_addr = self.client.uri.clone();
+        let mut broker_addr = self.client.uri.clone();
 
         match self
             .client
@@ -83,7 +83,9 @@ impl TopicConsumer {
                 //broker_addr = addr.clone();
                 self.connect(&addr).await?;
                 // update the client URI with the latest connection
-                self.client.uri = addr;
+                self.client.uri = addr.clone();
+                // update the broker_addr with new addr
+                broker_addr = addr;
             }
 
             Err(err) => {
