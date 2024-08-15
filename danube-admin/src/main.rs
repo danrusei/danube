@@ -23,8 +23,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    #[command(about = "Manage and view brokers information from the Danube cluster")]
     Brokers(Brokers),
+    #[command(about = "Manage the namespaces from the Danube cluster")]
     Namespaces(Namespaces),
+    #[command(about = "Manage the topics from the Danube cluster")]
     Topics(Topics),
 }
 

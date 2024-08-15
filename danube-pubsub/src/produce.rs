@@ -15,15 +15,26 @@ pub struct Produce {
 
     #[arg(
         long,
+        short = 'n',
+        default_value = "test_producer",
+        help = "The producer name"
+    )]
+    pub producer_name: String,
+
+    #[arg(
+        long,
         short = 't',
         default_value = "/default/test_topic",
         help = "The topic to produce messages to."
     )]
     pub topic: String,
 
+    #[arg(long, short = 'p', help = "The number of topic partitions.")]
+    pub partitions: Option<u32>,
+
     #[arg(
         long,
-        short = 'p',
+        short = 'y',
         value_enum,
         help = "The schema type of the message."
     )]
@@ -84,12 +95,17 @@ pub async fn handle_produce(produce: Produce) -> Result<()> {
 
     let schema_type = validate_schema(produce.schema, produce.json_schema)?;
 
-    let mut producer = client
+    let mut producer_builder = client
         .new_producer()
         .with_topic(produce.topic)
-        .with_name("test_producer")
-        .with_schema("my_app".into(), schema_type) // Pass the correct schema type
-        .build();
+        .with_name(produce.producer_name)
+        .with_schema("my_app".into(), schema_type); // Pass the correct schema type
+
+    if let Some(partitions) = produce.partitions {
+        producer_builder = producer_builder.with_partitions(partitions as usize)
+    }
+
+    let mut producer = producer_builder.build();
 
     let _ = producer.create().await?;
 

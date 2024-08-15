@@ -24,7 +24,7 @@ pub struct Consume {
 
     #[arg(
         long,
-        short = 'c',
+        short = 'n',
         default_value = "consumer_pubsub",
         help = "The consumer name"
     )]

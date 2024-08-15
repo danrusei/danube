@@ -141,7 +141,12 @@ impl Discovery for DanubeServerImpl {
 
         let service = self.service.lock().await;
 
-        let proto_schema = service.get_schema(&req.topic);
+        // if it's non-partitioned topic, then the Vec should contain only one element
+        // if it's partitoned, then the Vec should contain more than one element
+        // we are interested on the first element, as in the partitioned topic, all partitions should use the same schema
+        let result = service.topic_partitions(&req.topic).await;
+
+        let proto_schema = service.get_schema(result.get(0).unwrap());
 
         // should I inform the client that the topic is not served by this broker ?
         // as the get_schema is local to this broker

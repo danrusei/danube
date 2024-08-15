@@ -22,6 +22,15 @@ pub(crate) enum TopicsCommands {
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
     },
+    #[command(about = "Create a partitioned topic")]
+    CreatePartitioned {
+        topic: String,
+        partitions: usize,
+        #[arg(short, long, default_value = "String")]
+        schema_type: String,
+        #[arg(short = 'd', long, default_value = "{}")]
+        schema_data: String,
+    },
     #[command(about = "Delete an existing topic")]
     Delete { topic: String },
     #[command(about = "List the subscriptions of the specified topic")]
@@ -71,6 +80,38 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
+        }
+
+        // Creates a partitioned topic (should specify the number of partitions)
+        TopicsCommands::CreatePartitioned {
+            topic,
+            partitions,
+            mut schema_type,
+            schema_data,
+        } => {
+            if !validate_topic_format(&topic) {
+                return Err("wrong topic format, should be /namespace/topic".into());
+            }
+
+            if schema_type.is_empty() {
+                schema_type = "String".into()
+            }
+
+            let topic_requests: Vec<NewTopicRequest> = (0..partitions)
+                .map(|partition_id| {
+                    let topic = format!("{}-part-{}", topic, partition_id);
+                    NewTopicRequest {
+                        name: topic,
+                        schema_type: schema_type.clone(),
+                        schema_data: schema_data.clone(),
+                    }
+                })
+                .collect();
+
+            for topic_req in topic_requests {
+                let response = client.create_topic(topic_req).await?;
+                println!("Topic Created: {:?}", response.into_inner().success);
+            }
         }
 
         // Delete the topic
