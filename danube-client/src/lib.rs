@@ -7,7 +7,7 @@ pub mod proto {
 }
 
 mod client;
-pub use client::DanubeClient;
+pub use client::{DanubeClient, DanubeClientBuilder};
 
 pub mod errors;
 
