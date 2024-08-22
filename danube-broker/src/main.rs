@@ -61,6 +61,10 @@ struct Args {
     #[arg(short = 'a', long, default_value = "0.0.0.0:50051")]
     admin_addr: String,
 
+    /// Prometheus exporter address
+    #[arg(short = 'p', long, default_value = "0.0.0.0:3000")]
+    prom_exporter: Option<String>,
+
     /// Metadata store address
     #[arg(short = 'm', long)]
     meta_store_addr: Option<String>,
@@ -84,7 +88,13 @@ async fn main() -> Result<()> {
     let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
     let admin_addr: std::net::SocketAddr = args.admin_addr.parse()?;
 
-    init_metrics(&3000);
+    // init metrics with or without prometheus exporter
+    if let Some(prometheus_exporter) = args.prom_exporter {
+        let prom_addr: std::net::SocketAddr = prometheus_exporter.parse()?;
+        init_metrics(Some(prom_addr));
+    } else {
+        init_metrics(None)
+    }
 
     // configuration settings for a Danube broker service
     // includes various parameters that control the behavior and performance of the broker

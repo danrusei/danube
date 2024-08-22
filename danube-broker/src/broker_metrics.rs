@@ -1,6 +1,4 @@
 use metrics_exporter_prometheus::PrometheusBuilder;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
 pub(crate) struct Metric {
     pub name: &'static str,
     description: &'static str,
@@ -78,16 +76,15 @@ pub(crate) const CONSUMER_MSG_OUT_RATE: Metric = Metric {
     description: "Message rate sent to consumer",
 };
 
-pub(crate) fn init_metrics(port: &u16) {
+pub(crate) fn init_metrics(prom_addr: Option<std::net::SocketAddr>) {
     println!("initializing metrics exporter");
 
-    PrometheusBuilder::new()
-        .with_http_listener(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            port.to_owned(),
-        ))
-        .install()
-        .expect("failed to install Prometheus recorder");
+    if let Some(addr) = prom_addr {
+        PrometheusBuilder::new()
+            .with_http_listener(addr)
+            .install()
+            .expect("failed to install Prometheus recorder");
+    }
 
     for name in COUNTERS {
         register_counter(name)

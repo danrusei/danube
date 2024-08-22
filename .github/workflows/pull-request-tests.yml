@@ -69,7 +69,7 @@ jobs:
         env:
           RUST_LOG: danube_broker=trace
         run: |
-          docker run --network host -d --name broker1 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
+          docker run --network host -d --name broker1 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379" --prom_exporter "0.0.0.0:3000"
       
       - name: Run Broker 2
         env:
