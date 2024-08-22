@@ -1,5 +1,8 @@
 use anyhow::Result;
+use metrics::gauge;
 use serde::{Deserialize, Serialize};
+
+use crate::broker_metrics::TOPIC_PRODUCERS;
 
 // Represents the connected producer
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,6 +57,9 @@ impl Producer {
     // closes the producer from server-side and inform the client through health_check mechanism
     // to disconnect producer
     pub(crate) fn disconnect(&mut self) -> u64 {
+        //metrics, number of producers per topic
+        gauge!(TOPIC_PRODUCERS.name, "topic" => self.topic_name.to_string()).decrement(1);
+
         self.status = false;
         self.producer_id
     }

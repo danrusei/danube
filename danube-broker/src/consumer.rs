@@ -1,7 +1,11 @@
 use anyhow::Result;
+use metrics::{counter, gauge};
 use tracing::{trace, warn};
 
-use crate::proto::MessageMetadata;
+use crate::{
+    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER, TOPIC_CONSUMERS},
+    proto::MessageMetadata,
+};
 
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug)]
@@ -54,6 +58,8 @@ impl Consumer {
         // It attempts to send the message through the tx channel.
         // If sending fails (e.g., if the client disconnects), it breaks the loop.
         if let Some(tx) = &self.tx {
+            // Since u8 is exactly 1 byte, the size in bytes will be equal to the number of elements in the vector.
+            let payload_size = messages.payload.len();
             if let Err(err) = tx.send(messages).await {
                 // Log the error and handle the channel closure scenario
                 warn!(
@@ -64,6 +70,8 @@ impl Consumer {
                 self.status = false
             } else {
                 trace!("Sending the message over channel to {}", self.consumer_id);
+                counter!(CONSUMER_MSG_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(1);
+                counter!(CONSUMER_BYTES_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(payload_size as u64);
             }
         } else {
             warn!(
@@ -107,6 +115,7 @@ impl Consumer {
     // closes the consumer from server-side and inform the client through health_check mechanism
     // to disconnect consumer
     pub(crate) fn disconnect(&mut self) -> u64 {
+        gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
         self.status = false;
         self.consumer_id
     }

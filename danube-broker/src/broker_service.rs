@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use metrics::gauge;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -8,8 +9,14 @@ use tracing::{info, warn};
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
 use crate::{
-    consumer::Consumer, error_message::create_error_status, policies::Policies,
-    resources::Resources, subscription::SubscriptionOptions, topic::Topic, utils::get_random_id,
+    broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
+    consumer::Consumer,
+    error_message::create_error_status,
+    policies::Policies,
+    resources::Resources,
+    subscription::SubscriptionOptions,
+    topic::Topic,
+    utils::get_random_id,
 };
 
 // BrokerService - owns the topics and manages their lifecycle.
@@ -285,6 +292,8 @@ impl BrokerService {
 
         self.topics.insert(topic_name.to_string(), new_topic);
 
+        gauge!(BROKER_TOPICS.name, "broker" => self.broker_id.to_string()).increment(1);
+
         Ok(())
     }
 
@@ -321,6 +330,9 @@ impl BrokerService {
                     "The topic {} was removed from the broker {}",
                     topic.topic_name, self.broker_id
                 );
+
+                gauge!(BROKER_TOPICS.name, "broker" => self.broker_id.to_string()).decrement(1);
+
                 Ok(topic)
             }
             None => Err(anyhow!(
@@ -437,6 +449,9 @@ impl BrokerService {
             self.producer_index
                 .insert(producer_id, topic_name.to_string());
 
+            //metrics, number of producers per topic
+            gauge!(TOPIC_PRODUCERS.name, "topic" => topic_name.to_string()).increment(1);
+
             // create a metadata store entry for newly created producer
             self.resources
                 .topic
@@ -539,6 +554,8 @@ impl BrokerService {
                     subscription_options.subscription_name.clone(),
                 ),
             );
+
+            gauge!(TOPIC_CONSUMERS.name, "topic" => topic_name.to_string()).increment(1);
 
             // create a metadata store entry for newly created subscription
             // TODO!, don't overwrite if not neccessary
