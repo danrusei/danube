@@ -1,4 +1,5 @@
 mod admin;
+mod broker_metrics;
 mod broker_server;
 mod broker_service;
 mod consumer;
@@ -19,6 +20,7 @@ mod utils;
 use std::sync::Arc;
 
 use crate::{
+    broker_metrics::init_metrics,
     broker_service::BrokerService,
     danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
     metadata_store::{EtcdMetadataStore, MetadataStorage, MetadataStoreConfig},
@@ -81,6 +83,8 @@ async fn main() -> Result<()> {
 
     let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
     let admin_addr: std::net::SocketAddr = args.admin_addr.parse()?;
+
+    init_metrics(&3000);
 
     // configuration settings for a Danube broker service
     // includes various parameters that control the behavior and performance of the broker

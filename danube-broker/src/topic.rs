@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use metrics::counter;
 use std::{
     collections::{hash_map::Entry, HashMap},
     sync::Arc,
@@ -8,6 +9,7 @@ use tracing::{info, trace, warn};
 
 use crate::proto::MessageMetadata;
 use crate::{
+    broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
     consumer::{Consumer, MessageToSend},
     policies::Policies,
     producer::Producer,
@@ -122,7 +124,10 @@ impl Topic {
 
         //TODO! this is doing nothing for now, and may not need to be async
         match producer.publish_message(producer_id, &payload).await {
-            Ok(_) => (),
+            Ok(_) => {
+                counter!(TOPIC_MSG_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => producer_id.to_string()).increment(1);
+                counter!(TOPIC_BYTES_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => producer_id.to_string()).increment(payload.len() as u64);
+            }
             Err(err) => {
                 return Err(anyhow!("the Producer checks have failed: {}", err));
             }

@@ -24,6 +24,8 @@ rand = "0.8.5"
 tokio-stream = "0.1.15"
 futures = "0.3.30"
 base64 = "0.22.1"
+metrics = "0.23.0"
+metrics-exporter-prometheus = "0.15.3"
 
 [build-dependencies]
 tonic-build = "0.11"
