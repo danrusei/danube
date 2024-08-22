@@ -62,7 +62,7 @@ struct Args {
     admin_addr: String,
 
     /// Prometheus exporter address
-    #[arg(short = 'p', long, default_value = "0.0.0.0:3000")]
+    #[arg(short = 'p', long)]
     prom_exporter: Option<String>,
 
     /// Metadata store address
