@@ -11,7 +11,7 @@ pub(crate) const COUNTERS: [Metric; 4] = [
     CONSUMER_BYTES_OUT_COUNTER,
 ];
 pub(crate) const GAUGES: [Metric; 3] = [BROKER_TOPICS, TOPIC_PRODUCERS, TOPIC_CONSUMERS];
-pub(crate) const HISTOGRAMS: [Metric; 0] = [];
+pub(crate) const HISTOGRAMS: [Metric; 1] = [PRODUCER_MSG_OUT_RATE];
 
 // BROKER Metrics --------------------------
 
@@ -40,6 +40,13 @@ pub(crate) const TOPIC_PRODUCERS: Metric = Metric {
 pub(crate) const TOPIC_CONSUMERS: Metric = Metric {
     name: "danube_topic_consumers",
     description: "Total number of consumers per topic",
+};
+
+// PRODUCER Metrics --------------------------
+
+pub(crate) const PRODUCER_MSG_OUT_RATE: Metric = Metric {
+    name: "danube_producer_msg_out_rate",
+    description: "Histogram with the messages delivered per producer.",
 };
 
 // CONSUMER Metrics --------------------------

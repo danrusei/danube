@@ -1,10 +1,12 @@
-use crate::broker_server::DanubeServerImpl;
 use crate::proto::{
     producer_service_server::ProducerService, MessageRequest, MessageResponse, ProducerRequest,
     ProducerResponse,
 };
+use crate::{broker_metrics::PRODUCER_MSG_OUT_RATE, broker_server::DanubeServerImpl};
 
+use metrics::histogram;
 use std::collections::hash_map::Entry;
+use std::time::Instant;
 use tonic::{Request, Response, Status};
 use tracing::{info, trace, Level};
 
@@ -92,6 +94,9 @@ impl ProducerService for DanubeServerImpl {
             req.metadata
         );
 
+        // Get the start time before sending the message
+        let start_time = Instant::now();
+
         let arc_service = self.service.clone();
         let mut service = arc_service.lock().await;
 
@@ -122,6 +127,13 @@ impl ProducerService for DanubeServerImpl {
             .map_err(|err| {
                 Status::permission_denied(format!("Unable to publish the message: {}", err))
             })?;
+
+        // Measure the elapsed time
+        let elapsed_time = start_time.elapsed().as_secs_f64();
+
+        // Record the producer rate (messages per second) into the histogram
+        histogram!(PRODUCER_MSG_OUT_RATE.name, "producer" => req.producer_id.to_string())
+            .record(elapsed_time);
 
         let msg_seq_id: u64 = if let Some(msg_meta) = req.metadata {
             msg_meta.sequence_id
