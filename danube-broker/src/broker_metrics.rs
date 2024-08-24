@@ -4,76 +4,54 @@ pub(crate) struct Metric {
     description: &'static str,
 }
 
-pub(crate) const COUNTERS: [Metric; 6] = [
-    TOPIC_BYTES_IN_COUNTER,
-    TOPIC_BYTES_OUT_COUNTER,
+pub(crate) const COUNTERS: [Metric; 4] = [
     TOPIC_MSG_IN_COUNTER,
-    TOPIC_MSG_OUT_COUNTER,
-    CONSUMER_BYTES_OUT_COUNTER,
+    TOPIC_BYTES_IN_COUNTER,
     CONSUMER_MSG_OUT_COUNTER,
+    CONSUMER_BYTES_OUT_COUNTER,
 ];
-pub(crate) const GAUGES: [Metric; 3] = [TOPIC_PRODUCERS, TOPIC_CONSUMERS, BROKER_TOPICS];
-pub(crate) const HISTOGRAMS: [Metric; 2] = [TOPIC_MSG_IN_RATE, CONSUMER_MSG_OUT_RATE];
+pub(crate) const GAUGES: [Metric; 3] = [BROKER_TOPICS, TOPIC_PRODUCERS, TOPIC_CONSUMERS];
+pub(crate) const HISTOGRAMS: [Metric; 0] = [];
 
 // BROKER Metrics --------------------------
 
 pub(crate) const BROKER_TOPICS: Metric = Metric {
-    name: "broker_topics",
+    name: "danube_broker_topics",
     description: "Total number of topics served by broker",
 };
 
 // TOPIC Metrics --------------------------
 
-pub(crate) const TOPIC_BYTES_IN_COUNTER: Metric = Metric {
-    name: "topic_bytes_in_counter",
-    description: "Total bytes published to the topic (bytes)",
-};
-
-pub(crate) const TOPIC_BYTES_OUT_COUNTER: Metric = Metric {
-    name: "topic_bytes_out_counter",
-    description: "Total bytes delivered to consumer (bytes)",
-};
-
 pub(crate) const TOPIC_MSG_IN_COUNTER: Metric = Metric {
-    name: "topic_msg_in_counter",
+    name: "danube_topic_msg_in_counter",
     description: "Total messages published to the topic (msg).",
 };
 
-pub(crate) const TOPIC_MSG_OUT_COUNTER: Metric = Metric {
-    name: "topic_msg_out_counter",
-    description: "Total messages delivered to consumer (msg).",
-};
-
-pub(crate) const TOPIC_MSG_IN_RATE: Metric = Metric {
-    name: "topic_msg_in_rate",
-    description: "Message publishing time to topic",
+pub(crate) const TOPIC_BYTES_IN_COUNTER: Metric = Metric {
+    name: "danube_topic_bytes_in_counter",
+    description: "Total bytes published to the topic (bytes)",
 };
 
 pub(crate) const TOPIC_PRODUCERS: Metric = Metric {
-    name: "topic_producers",
-    description: "Total number of producers for topic",
+    name: "danube_topic_producers",
+    description: "Total number of producers per topic",
 };
 
 pub(crate) const TOPIC_CONSUMERS: Metric = Metric {
-    name: "topic_consumers",
-    description: "Total number od consumers for topic",
+    name: "danube_topic_consumers",
+    description: "Total number of consumers per topic",
 };
 
 // CONSUMER Metrics --------------------------
 
-pub(crate) const CONSUMER_BYTES_OUT_COUNTER: Metric = Metric {
-    name: "consumer_bytes_out_counter",
-    description: "Total bytes delivered to consumer (bytes)",
-};
-
 pub(crate) const CONSUMER_MSG_OUT_COUNTER: Metric = Metric {
-    name: "consumer_msg_out_counter",
+    name: "danube_consumer_msg_out_counter",
     description: "Total messages delivered to consumer (msg).",
 };
 
-pub(crate) const CONSUMER_MSG_OUT_RATE: Metric = Metric {
-    name: "consumer_msg_out_rate",
-    description: "Message rate sent to consumer",
+pub(crate) const CONSUMER_BYTES_OUT_COUNTER: Metric = Metric {
+    name: "danube_consumer_bytes_out_counter",
+    description: "Total bytes delivered to consumer (bytes)",
 };
 
 pub(crate) fn init_metrics(prom_addr: Option<std::net::SocketAddr>) {

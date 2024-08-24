@@ -53,23 +53,16 @@ impl ProducerService for DanubeServerImpl {
             return Ok(tonic::Response::new(response));
         }
 
-        let new_producer_id = match service
+        let new_producer_id = service
             .create_new_producer(
                 &req.producer_name,
                 &req.topic_name,
                 req.producer_access_mode,
             )
             .await
-        {
-            Ok(prod_id) => prod_id,
-            Err(err) => {
-                let status = Status::permission_denied(format!(
-                    "Not able to create the Producer: {}",
-                    err.to_string(),
-                ));
-                return Err(status);
-            }
-        };
+            .map_err(|err| {
+                Status::permission_denied(format!("Not able to create the Producer: {}", err))
+            })?;
 
         info!(
             "The Producer with name: {} and with id: {}, has been created",
@@ -114,31 +107,21 @@ impl ProducerService for DanubeServerImpl {
             Entry::Occupied(_) => (),
         };
 
-        let topic = match service.find_topic_by_producer(req.producer_id) {
-            Some(topic) => topic,
-            None => {
-                // Should not happen, as the Producer can only be created if it's associated with the Topic
-                let status = Status::internal(format!(
+        let topic = service
+            .find_topic_by_producer(req.producer_id)
+            .ok_or_else(|| {
+                Status::internal(format!(
                     "Unable to get the topic for the producer: {}",
-                    req.producer_id,
-                ));
-                return Err(status);
-            }
-        };
+                    req.producer_id
+                ))
+            })?;
 
-        match topic
+        topic
             .publish_message(req.producer_id, req.payload, req.metadata.clone())
             .await
-        {
-            Ok(_) => (),
-            Err(err) => {
-                let status = Status::permission_denied(format!(
-                    "Unable to publish the message: {}",
-                    err.to_string()
-                ));
-                return Err(status);
-            }
-        };
+            .map_err(|err| {
+                Status::permission_denied(format!("Unable to publish the message: {}", err))
+            })?;
 
         let msg_seq_id: u64 = if let Some(msg_meta) = req.metadata {
             msg_meta.sequence_id

@@ -38,23 +38,20 @@ impl ConsumerService for DanubeServerImpl {
             }
         }
 
-        // checks if the consumer exist and it is connected
-        match service
+        // Checks if the consumer exists and is connected
+        if let Some(consumer_id) = service
             .check_if_consumer_exist(&req.consumer_name, &req.subscription, &req.topic_name)
             .await
         {
-            Some(consumer_id) => {
-                let response = ConsumerResponse {
-                    request_id: req.request_id,
-                    consumer_id: consumer_id,
-                    consumer_name: req.consumer_name,
-                };
-                return Ok(tonic::Response::new(response));
-            }
-            None => {
-                // if the consumer doesn't exist it attempts to create below
-            }
+            let response = ConsumerResponse {
+                request_id: req.request_id,
+                consumer_id,
+                consumer_name: req.consumer_name.clone(),
+            };
+            return Ok(tonic::Response::new(response));
         }
+
+        // If the consumer doesn't exist, attempt to create it below
 
         // check if the topic policies allow the creation of the subscription
         if !service.allow_subscription_creation(&req.topic_name) {
@@ -75,20 +72,15 @@ impl ConsumerService for DanubeServerImpl {
 
         let sub_name = subscription_options.subscription_name.clone();
 
-        let consumer_id = match service
+        let consumer_id = service
             .subscribe(&req.topic_name, subscription_options)
             .await
-        {
-            Ok(id) => id,
-            Err(err) => {
-                let status = Status::permission_denied(format!(
+            .map_err(|err| {
+                Status::permission_denied(format!(
                     "Not able to subscribe to the topic {} due to {}",
-                    &req.topic_name,
-                    err.to_string()
-                ));
-                return Err(status);
-            }
-        };
+                    &req.topic_name, err
+                ))
+            })?;
 
         info!(
             "The Consumer with id: {} for subscription: {}, has been created.",
