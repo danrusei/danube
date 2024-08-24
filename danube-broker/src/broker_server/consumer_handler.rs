@@ -7,7 +7,7 @@ use crate::{proto::consumer_service_server::ConsumerService, subscription::Subsc
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::{info, trace, Level};
+use tracing::{info, trace, warn, Level};
 
 #[tonic::async_trait]
 impl ConsumerService for DanubeServerImpl {
@@ -128,25 +128,33 @@ impl ConsumerService for DanubeServerImpl {
 
         //for each consumer spawn a task to send messages
         tokio::spawn(async move {
-            loop {
-                if let Some(messages) = rx_consumer.recv().await {
-                    let request_id = 1;
+            while let Some(messages) = rx_consumer.recv().await {
+                // TODO! should I respond with request id ??
+                let request_id = 1;
 
-                    let stream_messages = StreamMessage {
-                        request_id: request_id,
-                        payload: messages.payload,
-                        metadata: messages.metadata,
-                    };
+                let stream_messages = StreamMessage {
+                    request_id: request_id,
+                    payload: messages.payload,
+                    metadata: messages.metadata,
+                };
 
-                    if tx.send(Ok(stream_messages)).await.is_err() {
-                        break;
-                    }
-                    trace!(
-                        "The message with request_id: {} was sent to consumer",
-                        request_id
-                    );
+                if tx.send(Ok(stream_messages)).await.is_err() {
+                    // Consumer is disconnected or error occurred while sending.
+                    break;
                 }
+
+                trace!(
+                    "The message with request_id: {} was sent to consumer {}",
+                    request_id,
+                    consumer_id
+                );
             }
+
+            // Exit the loop if rx_consumer is closed or if tx fails to send.
+            warn!(
+                "Consumer {} has disconnected or a message send failure occurred.",
+                consumer_id
+            );
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
