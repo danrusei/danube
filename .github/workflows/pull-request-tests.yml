@@ -71,7 +71,7 @@ jobs:
         run: |
             docker run --network host -d --name broker1 \
               danube_broker_image:latest \
-              --config-file "/path/to/config/danube_broker.yml" \
+              --config-file "/etc/danube_broker.yml" \
               --broker-addr "0.0.0.0:6650" \
               --admin-addr "0.0.0.0:50051" \
               --prom-exporter "0.0.0.0:3000"
@@ -82,7 +82,7 @@ jobs:
         run: |
             docker run --network host -d --name broker2 \
               danube_broker_image:latest \
-              --config-file "/path/to/config/danube_broker.yml" \
+              --config-file "/etc/danube_broker.yml" \
               --broker-addr "0.0.0.0:6651" \
               --admin-addr "0.0.0.0:50052" \
               --prom-exporter "0.0.0.0:3001"
