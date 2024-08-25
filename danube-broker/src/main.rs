@@ -52,6 +52,14 @@ struct Args {
     /// Danube Broker advertised address (optional, overrides config file)
     #[arg(short = 'b', long)]
     broker_addr: Option<String>,
+
+    /// Danube Broker Admin address (optional, overrides config file)
+    #[arg(short = 'a', long)]
+    admin_addr: Option<String>,
+
+    /// Prometheus Exporter http address (optional, overrides config file)
+    #[arg(short = 'p', long)]
+    prom_exporter: Option<String>,
 }
 
 #[tokio::main]
@@ -69,6 +77,16 @@ async fn main() -> Result<()> {
     // If `broker_addr` is provided via command-line args, override the value from the config file
     if let Some(broker_addr) = args.broker_addr {
         service_config.broker_addr = broker_addr;
+    }
+
+    // If `admin_addr` is provided via command-line args, override the value from the config file
+    if let Some(admin_addr) = args.admin_addr {
+        service_config.admin_addr = admin_addr;
+    }
+
+    // If `prom_exporter` is provided via command-line args, override the value from the config file
+    if let Some(prom_exporter) = args.prom_exporter {
+        service_config.prom_exporter = Some(prom_exporter);
     }
 
     // Init metrics with or without prometheus exporter

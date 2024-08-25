@@ -14,7 +14,7 @@ meta_store_addr: "127.0.0.1:2379"
 prom_exporter: "0.0.0.0:9040"
 
 # Namespaces to be created on boot
-namespaces:
+bootstrap_namespaces:
   - "default"
 
 # Broker policies, that can be overwritten by namespace / topic policies
