@@ -166,11 +166,9 @@ impl DanubeService {
 
         // Start the Broker GRPC server
         //==========================================================================
+        let broker_addr: std::net::SocketAddr = self.service_config.broker_addr.parse()?;
 
-        let grpc_server = broker_server::DanubeServerImpl::new(
-            self.broker.clone(),
-            self.service_config.broker_addr,
-        );
+        let grpc_server = broker_server::DanubeServerImpl::new(self.broker.clone(), broker_addr);
 
         // Create a oneshot channel for readiness signaling
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
@@ -246,13 +244,12 @@ impl DanubeService {
         // Start the Danube Admin GRPC server
         //==========================================================================
 
+        let admin_addr: std::net::SocketAddr = self.service_config.admin_addr.parse()?;
+
         let broker_service_cloned = Arc::clone(&self.broker);
 
-        let admin_server = DanubeAdminImpl::new(
-            self.service_config.admin_addr,
-            broker_service_cloned,
-            self.resources.clone(),
-        );
+        let admin_server =
+            DanubeAdminImpl::new(admin_addr, broker_service_cloned, self.resources.clone());
 
         let admin_handle: tokio::task::JoinHandle<()> = admin_server.start().await;
 

@@ -26,6 +26,7 @@ futures = "0.3.30"
 base64 = "0.22.1"
 metrics = "0.23.0"
 metrics-exporter-prometheus = "0.15.3"
+serde_yaml = "0.9.34"
 
 [build-dependencies]
 tonic-build = "0.11"

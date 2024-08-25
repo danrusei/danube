@@ -17,7 +17,7 @@ mod subscription;
 mod topic;
 mod utils;
 
-use std::sync::Arc;
+use std::{fs::read_to_string, path::Path, sync::Arc};
 
 use crate::{
     broker_metrics::init_metrics,
@@ -45,67 +45,39 @@ pub(crate) mod admin_proto {
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Cluster Name
-    #[arg(short = 'x', long)]
-    cluster_name: String,
-
-    /// Path to config file
+    /// Path to config file (required)
     #[arg(short = 'c', long)]
-    config_file: Option<String>,
+    config_file: String,
 
-    /// Danube Broker advertised address
-    #[arg(short = 'b', long, default_value = "0.0.0.0:6650")]
-    broker_addr: String,
-
-    /// Danube Admin address
-    #[arg(short = 'a', long, default_value = "0.0.0.0:50051")]
-    admin_addr: String,
-
-    /// Prometheus exporter address
-    #[arg(short = 'p', long)]
-    prom_exporter: Option<String>,
-
-    /// Metadata store address
-    #[arg(short = 'm', long)]
-    meta_store_addr: Option<String>,
-
-    /// List of namespaces (comma-separated)
-    #[arg(short = 'n', long, value_parser = parse_namespaces_list)]
-    namespaces: Vec<String>,
+    /// Danube Broker advertised address (optional, overrides config file)
+    #[arg(short = 'b', long)]
+    broker_addr: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // install global collector configured based on RUST_LOG env var.
-    //tracing_subscriber::fmt()
-    //    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-    //    .init();
-
+    // Initialize logging
     tracing_subscriber::fmt::init();
 
+    // Parse command line arguments
     let args = Args::parse();
 
-    let broker_addr: std::net::SocketAddr = args.broker_addr.parse()?;
-    let admin_addr: std::net::SocketAddr = args.admin_addr.parse()?;
+    // Load the configuration from the specified YAML file
+    let config_content = read_to_string(Path::new(&args.config_file))?;
+    let mut service_config: ServiceConfiguration = serde_yaml::from_str(&config_content)?;
 
-    // init metrics with or without prometheus exporter
-    if let Some(prometheus_exporter) = args.prom_exporter {
+    // If `broker_addr` is provided via command-line args, override the value from the config file
+    if let Some(broker_addr) = args.broker_addr {
+        service_config.broker_addr = broker_addr;
+    }
+
+    // Init metrics with or without prometheus exporter
+    if let Some(prometheus_exporter) = service_config.prom_exporter.clone() {
         let prom_addr: std::net::SocketAddr = prometheus_exporter.parse()?;
         init_metrics(Some(prom_addr));
     } else {
         init_metrics(None)
     }
-
-    // configuration settings for a Danube broker service
-    // includes various parameters that control the behavior and performance of the broker
-    // TODO! read from a config file, like danube.conf
-    let service_config = ServiceConfiguration {
-        cluster_name: args.cluster_name,
-        broker_addr: broker_addr,
-        admin_addr: admin_addr,
-        meta_store_addr: args.meta_store_addr,
-        bootstrap_namespaces: args.namespaces,
-    };
 
     // initialize the storage layer for Danube Metadata
     let store_config = MetadataStoreConfig::new();
@@ -165,10 +137,4 @@ async fn main() -> Result<()> {
     info!("The Danube Service has started succesfully");
 
     Ok(())
-}
-
-fn parse_namespaces_list(s: &str) -> Result<Vec<String>> {
-    Ok(s.split(',')
-        .map(|nam| nam.trim().to_string())
-        .collect::<Vec<String>>())
 }
