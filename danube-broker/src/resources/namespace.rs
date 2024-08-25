@@ -32,9 +32,10 @@ impl NamespaceResources {
     pub(crate) async fn create_namespace(
         &mut self,
         ns_name: &str,
-        policies: Option<Policies>,
+        policies: Option<&Policies>,
     ) -> Result<()> {
-        let pol = policies.unwrap_or_else(|| Policies::new());
+        let new_pol = Policies::new();
+        let pol = policies.unwrap_or_else(|| &new_pol);
         self.create_policies(ns_name, pol).await?;
 
         Ok(())
@@ -65,7 +66,7 @@ impl NamespaceResources {
     pub(crate) async fn create_policies(
         &mut self,
         namespace_name: &str,
-        policies: Policies,
+        policies: &Policies,
     ) -> Result<()> {
         let path = join_path(&[BASE_NAMESPACES_PATH, namespace_name, "policy"]);
         let value = serde_json::to_value(policies)?;
