@@ -69,13 +69,23 @@ jobs:
         env:
           RUST_LOG: danube_broker=trace
         run: |
-          docker run --network host -d --name broker1 danube_broker_image:latest --broker-addr "0.0.0.0:6650" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379" --prom-exporter "0.0.0.0:3000"
-      
+            docker run --network host -d --name broker1 \
+              danube_broker_image:latest \
+              --config-file "/path/to/config/danube_broker.yml" \
+              --broker-addr "0.0.0.0:6650" \
+              --admin-addr "0.0.0.0:50051" \
+              --prom-exporter "0.0.0.0:3000"
+  
       - name: Run Broker 2
         env:
           RUST_LOG: danube_broker=trace  
         run: |
-          docker run --network host -d --name broker2 danube_broker_image:latest --broker-addr "0.0.0.0:6651" --cluster-name "MY_CLUSTER" --meta-store-addr "127.0.0.1:2379"
+            docker run --network host -d --name broker2 \
+              danube_broker_image:latest \
+              --config-file "/path/to/config/danube_broker.yml" \
+              --broker-addr "0.0.0.0:6651" \
+              --admin-addr "0.0.0.0:50052" \
+              --prom-exporter "0.0.0.0:3001"
 
       - name: Wait for Brokers to be Ready
         run: |
