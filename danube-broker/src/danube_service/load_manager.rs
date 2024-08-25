@@ -214,6 +214,10 @@ impl LoadManager {
         if event.event_type != EventType::Put {
             return;
         }
+
+        // recalculate the rankings after the topic was assigned, as the load report events comes on fix intervals
+        self.calculate_rankings_simple().await;
+
         let parts: Vec<_> = event.key.split(BASE_UNASSIGNED_PATH).collect();
         let topic_name = parts[1];
 
@@ -233,6 +237,14 @@ impl LoadManager {
                 "Unable to assign topic {} to the broker {}, due to error: {}",
                 topic_name, broker_id, err
             ),
+        }
+
+        // once the broker was notified, update internaly as well
+        // in order to use somehow more accurate information until the new load reports are received
+        let mut brokers_usage = self.brokers_usage.lock().await;
+        if let Some(load_report) = brokers_usage.get_mut(&broker_id) {
+            load_report.topics_len += 1;
+            load_report.topic_list.push(topic_name.to_string());
         }
     }
 
@@ -257,11 +269,11 @@ impl LoadManager {
 
     pub async fn get_next_broker(&mut self) -> u64 {
         let rankings = self.rankings.lock().await;
-        let first_in_list = rankings.get(0).unwrap().0;
+        let next_broker = rankings.get(0).unwrap().0;
 
-        let next_broker = self
+        let _ = self
             .next_broker
-            .swap(first_in_list, std::sync::atomic::Ordering::SeqCst);
+            .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
 
         next_broker
     }
