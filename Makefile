@@ -1,7 +1,15 @@
 .DEFAULT_GOAL := no_target_specified
 
-# Define broker ports
-BROKER_PORTS := 6650 6651 6652
+# Base ports for broker_addr, admin_addr, and prom_exporter
+BASE_BROKER_PORT := 6650
+BASE_ADMIN_PORT := 50051
+BASE_PROM_PORT := 9040
+
+# Number of broker instances
+NUM_BROKERS := 3
+
+# Path to configuration file
+CONFIG_FILE := ./config/danube_broker.yml
 
 # ETCD configuration
 ETCD_NAME := etcd-danube
@@ -11,9 +19,6 @@ ETCD_PORT := 2379
 # HAProxy configuration
 HAPROXY_CONFIG := haproxy.cfg
 HAPROXY_PORT := 50051
-
-# Rust build command
-#BUILD_CMD := cargo build --release
 
 .PHONY: all brokers etcd haproxy etcd-clean brokers-clean haproxy-clean
 
@@ -53,18 +58,26 @@ LOG_LEVEL = $(if $(RUST_LOG),$(RUST_LOG),info)
 
 brokers:
 	@echo "Building Danube brokers..."
-	@for port in $(BROKER_PORTS); do \
-		log_file="broker_$$port.log"; \
-		echo "Starting broker on port $$port, logging to $$log_file"; \
+	@for i in $(shell seq 0 $(shell echo $(NUM_BROKERS) - 1 | bc)); do \
+		broker_port=$$(($(BASE_BROKER_PORT) + i)); \
+		admin_port=$$(($(BASE_ADMIN_PORT) + i)); \
+		prom_port=$$(($(BASE_PROM_PORT) + i)); \
+		log_file="broker_$$broker_port.log"; \
+		echo "Starting broker on broker port $$broker_port, admin port $$admin_port, prometheus port $$prom_port, logging to $$log_file"; \
 		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 cargo build --release --package danube-broker --bin danube-broker && \
-		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 ./target/release/danube-broker --broker-addr "0.0.0.0:$$port" --cluster-name "MY_CLUSTER" --meta-store-addr "0.0.0.0:2379" > temp/$$log_file 2>&1 & \
+		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 ./target/release/danube-broker \
+		    --config-file $(CONFIG_FILE) \
+		    --broker-addr "0.0.0.0:$$broker_port" \
+		    --admin-addr "0.0.0.0:$$admin_port" \
+		    --prom-exporter "0.0.0.0:$$prom_port" \
+		    > temp/$$log_file 2>&1 & \
 		sleep 2; \
 	done
-	@echo "Danube brokers started on ports: $(BROKER_PORTS)"
+	@echo "Danube brokers started on ports starting from $(BASE_BROKER_PORT)"
 
 brokers-clean:
 	@echo "Cleaning up Brokers instances..."
-	@pids=$$(ps aux | grep '[d]anube-broker --broker-addr \0.0.0.0:'); \
+	@pids=$$(ps aux | grep '[d]anube-broker --config-file'); \
 	if [ -n "$$pids" ]; then \
 		echo "$$pids" | awk '{print $$2}' | xargs -r kill; \
 		echo "Danube brokers cleaned up."; \

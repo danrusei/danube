@@ -24,6 +24,7 @@ use crate::{
     broker_server,
     broker_service::BrokerService,
     metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
+    policies::Policies,
     resources::{
         Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, DEFAULT_NAMESPACE, SYSTEM_NAMESPACE,
     },
@@ -144,10 +145,20 @@ impl DanubeService {
         .await?;
 
         //create the default Namespace
-        create_namespace_if_absent(&mut self.resources, DEFAULT_NAMESPACE).await?;
+        create_namespace_if_absent(
+            &mut self.resources,
+            DEFAULT_NAMESPACE,
+            &self.service_config.policies,
+        )
+        .await?;
 
         //create system Namespace
-        create_namespace_if_absent(&mut self.resources, SYSTEM_NAMESPACE).await?;
+        create_namespace_if_absent(
+            &mut self.resources,
+            SYSTEM_NAMESPACE,
+            &self.service_config.policies,
+        )
+        .await?;
 
         //create system topic
         if !self.resources.topic.topic_exists(SYSTEM_TOPIC).await? {
@@ -156,7 +167,12 @@ impl DanubeService {
 
         //create bootstrap namespaces
         for namespace in &self.service_config.bootstrap_namespaces {
-            create_namespace_if_absent(&mut self.resources, &namespace).await?;
+            create_namespace_if_absent(
+                &mut self.resources,
+                &namespace,
+                &self.service_config.policies,
+            )
+            .await?;
         }
 
         info!("cluster metadata setup completed");
@@ -166,11 +182,9 @@ impl DanubeService {
 
         // Start the Broker GRPC server
         //==========================================================================
+        let broker_addr: std::net::SocketAddr = self.service_config.broker_addr.parse()?;
 
-        let grpc_server = broker_server::DanubeServerImpl::new(
-            self.broker.clone(),
-            self.service_config.broker_addr,
-        );
+        let grpc_server = broker_server::DanubeServerImpl::new(self.broker.clone(), broker_addr);
 
         // Create a oneshot channel for readiness signaling
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
@@ -246,13 +260,12 @@ impl DanubeService {
         // Start the Danube Admin GRPC server
         //==========================================================================
 
+        let admin_addr: std::net::SocketAddr = self.service_config.admin_addr.parse()?;
+
         let broker_service_cloned = Arc::clone(&self.broker);
 
-        let admin_server = DanubeAdminImpl::new(
-            self.service_config.admin_addr,
-            broker_service_cloned,
-            self.resources.clone(),
-        );
+        let admin_server =
+            DanubeAdminImpl::new(admin_addr, broker_service_cloned, self.resources.clone());
 
         let admin_handle: tokio::task::JoinHandle<()> = admin_server.start().await;
 
@@ -369,11 +382,12 @@ impl DanubeService {
 pub(crate) async fn create_namespace_if_absent(
     resources: &mut Resources,
     namespace_name: &str,
+    policies: &Policies,
 ) -> Result<()> {
     if !resources.namespace.namespace_exist(namespace_name).await? {
         resources
             .namespace
-            .create_namespace(namespace_name, None)
+            .create_namespace(namespace_name, Some(policies))
             .await?;
     } else {
         info!("Namespace {} already exists.", namespace_name);

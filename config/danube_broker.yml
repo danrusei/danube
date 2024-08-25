@@ -1,0 +1,52 @@
+# Danube cluster name
+cluster_name: "MY_CLUSTER"
+
+# Danube Broker data address
+broker_addr: "0.0.0.0:6650"
+
+# Danube Broker admin api address
+admin_addr: "0.0.0.0:50051"
+
+# Metadata Persistent Store address
+meta_store_addr: "127.0.0.1:2379"
+
+# Prometheus metrics exporter
+prom_exporter: "0.0.0.0:9040"
+
+# Namespaces to be created on boot
+bootstrap_namespaces:
+  - "default"
+
+# Broker policies, that can be overwritten by namespace / topic policies
+policies:
+  # Limits the maximum number of producers that can simultaneously publish messages to a specific topic.
+  # Default is 0, unlimited.
+  max_producers_per_topic: 0
+
+  # Limits the maximum number of subscriptions that can be created on the topic.
+  # Default is 0, unlimited.
+  max_subscriptions_per_topic: 0
+
+  # Limits the maximum number of consumers that can simultaneously consume messages from a specific topic.
+  # Default is 0, unlimited.
+  max_consumers_per_topic: 0
+
+  # Limits the maximum number of consumers that can simultaneously use a single subscription on a topic.
+  # Default is 0, unlimited.
+  max_consumers_per_subscription: 0
+
+  # Defines the Max publish rate (number of messages and/or bytes per second) for producers publishing to the topic.
+  # Default is 0, unlimited.
+  max_publish_rate: 0
+
+  # Defines the Max dispatch rate (number of messages and/or bytes per second) for the topic.
+  # Default is 0, unlimited.
+  max_dispatch_rate: 0
+
+  # Defines the dispatch rate for each subscription on the topic.
+  # Default is 0, unlimited.
+  max_subscription_dispatch_rate: 0
+
+  # Limits the maximum size of a single message that can be published to the topic.
+  # Default is 10 MB
+  max_message_size: 10485760 # in bytes which means 10 MB

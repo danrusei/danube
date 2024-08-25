@@ -32,9 +32,12 @@ RUN apt-get update && apt-get install -y protobuf-compiler
 # Copy the compiled binary from the builder stage
 COPY --from=builder /app/target/release/danube-broker /usr/local/bin/danube-broker
 
+# Copy the configuration file into the container (adjust the path if needed)
+COPY config/danube_broker.yml /etc/danube_broker.yml
+
 # Expose the ports your broker listens on
 EXPOSE 6650 6651
 
 # Define entrypoint and default command
 ENTRYPOINT ["/usr/local/bin/danube-broker"]
-CMD ["--broker-addr", "0.0.0.0:6650", "--cluster-name", "MY_CLUSTER", "--meta-store-addr", "0.0.0.0:2379"]
+CMD ["--config-file", "/etc/danube_broker.yml", "--broker-addr", "0.0.0.0:6650"]
