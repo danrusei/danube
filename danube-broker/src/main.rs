@@ -25,11 +25,12 @@ use crate::{
     danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
     metadata_store::{EtcdMetadataStore, MetadataStorage, MetadataStoreConfig},
     resources::{Resources, LEADER_ELECTION_PATH},
-    service_configuration::ServiceConfiguration,
+    service_configuration::{LoadConfiguration, ServiceConfiguration},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
+use std::net::SocketAddr;
 use tokio::sync::Mutex;
 use tracing::info;
 use tracing_subscriber;
@@ -72,42 +73,51 @@ async fn main() -> Result<()> {
 
     // Load the configuration from the specified YAML file
     let config_content = read_to_string(Path::new(&args.config_file))?;
-    let mut service_config: ServiceConfiguration = serde_yaml::from_str(&config_content)?;
+    let load_config: LoadConfiguration = serde_yaml::from_str(&config_content)?;
+
+    // Attempt to transform LoadConfiguration into ServiceConfiguration
+    let mut service_config: ServiceConfiguration = load_config.try_into()?;
 
     // If `broker_addr` is provided via command-line args, override the value from the config file
     if let Some(broker_addr) = args.broker_addr {
-        service_config.broker_addr = broker_addr;
+        let broker_address: SocketAddr = broker_addr.parse().context(format!(
+            "Failed to parse into Socket address: {}",
+            broker_addr
+        ))?;
+        service_config.broker_addr = broker_address;
     }
 
     // If `admin_addr` is provided via command-line args, override the value from the config file
     if let Some(admin_addr) = args.admin_addr {
-        service_config.admin_addr = admin_addr;
+        let admin_address: SocketAddr = admin_addr.parse().context(format!(
+            "Failed to parse into Socket address: {}",
+            admin_addr
+        ))?;
+        service_config.admin_addr = admin_address;
     }
 
     // If `prom_exporter` is provided via command-line args, override the value from the config file
     if let Some(prom_exporter) = args.prom_exporter {
-        service_config.prom_exporter = Some(prom_exporter);
+        let prom_address: SocketAddr = prom_exporter.parse().context(format!(
+            "Failed to parse into Socket address: {}",
+            prom_exporter
+        ))?;
+        service_config.prom_exporter = Some(prom_address);
     }
 
     // Init metrics with or without prometheus exporter
     if let Some(prometheus_exporter) = service_config.prom_exporter.clone() {
-        let prom_addr: std::net::SocketAddr = prometheus_exporter.parse()?;
-        init_metrics(Some(prom_addr));
+        init_metrics(Some(prometheus_exporter));
     } else {
         init_metrics(None)
     }
 
     // initialize the storage layer for Danube Metadata
     let store_config = MetadataStoreConfig::new();
-    let metadata_store: MetadataStorage =
-        if let Some(etcd_addr) = service_config.meta_store_addr.clone() {
-            info!("Use ETCD storage as metadata persistent store");
-            MetadataStorage::EtcdStore(EtcdMetadataStore::new(etcd_addr, store_config).await?)
-        } else {
-            return Err(anyhow!("ETCD meta store address is required"));
-            // MemoryStore is not yet supported
-            // MetadataStorage::MemoryStore(MemoryMetadataStore::new(store_config).await?)
-        };
+    info!("Use ETCD storage as metadata persistent store");
+    let metadata_store: MetadataStorage = MetadataStorage::EtcdStore(
+        EtcdMetadataStore::new(service_config.meta_store_addr.clone(), store_config).await?,
+    );
 
     // caching metadata locally to reduce the number of remote calls to Metadata Store
     let local_cache = LocalCache::new();

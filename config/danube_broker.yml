@@ -1,17 +1,23 @@
 # Danube cluster name
 cluster_name: "MY_CLUSTER"
 
-# Danube Broker data address
-broker_addr: "0.0.0.0:6650"
+# Danube Broker hostname
+# Hostname or IP address shared by Broker, Admin API, and Prometheus exporter
+broker_host: "0.0.0.0"
 
-# Danube Broker admin api address
-admin_addr: "0.0.0.0:50051"
+# Ports for the Danube broker services
+# Port for gRPC communication with the broker
+broker_port: 6650
+# Port for the Admin API
+admin_port: 50051
+# Port for Prometheus exporter
+prom_port: 9040
 
-# Metadata Persistent Store address
-meta_store_addr: "127.0.0.1:2379"
-
-# Prometheus metrics exporter
-prom_exporter: "0.0.0.0:9040"
+# Metadata Persistent Store address (e.g., etcd)
+# Hostname or IP for etcd
+meta_store_host: "127.0.0.1"
+# Port for etcd or metadata store
+meta_store_port: 2379
 
 # Namespaces to be created on boot
 bootstrap_namespaces:
