@@ -40,4 +40,4 @@ EXPOSE 6650 6651
 
 # Define entrypoint and default command
 ENTRYPOINT ["/usr/local/bin/danube-broker"]
-CMD ["--config-file", "/etc/danube_broker.yml", "--broker-addr", "0.0.0.0:6650"]
+CMD ["--config-file", "/etc/danube_broker.yml", "--broker-addr", "0.0.0.0:6650", "--advertised-addr", "0.0.0.0:6650"]

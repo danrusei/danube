@@ -35,6 +35,8 @@ pub(crate) struct ServiceConfiguration {
     pub(crate) cluster_name: String,
     /// Broker Service address for serving gRPC requests.
     pub(crate) broker_addr: std::net::SocketAddr,
+    /// Broker Advertised address, used for kubernetes deployment
+    pub(crate) advertised_addr: Option<String>,
     /// Admin API address
     pub(crate) admin_addr: std::net::SocketAddr,
     /// Prometheus exporter address
@@ -80,6 +82,7 @@ impl TryFrom<LoadConfiguration> for ServiceConfiguration {
         Ok(ServiceConfiguration {
             cluster_name: config.cluster_name,
             broker_addr,
+            advertised_addr: None,
             admin_addr,
             prom_exporter,
             meta_store_addr,

@@ -135,11 +135,17 @@ impl DanubeService {
             .await;
 
         // register the local broker to cluster
+        let advertised_addr = if let Some(advertised_addr) = &self.service_config.advertised_addr {
+            advertised_addr.to_string()
+        } else {
+            self.service_config.broker_addr.clone().to_string()
+        };
+
         let ttl = 32; // Time to live for the lease in seconds
         register_broker(
             self.meta_store.clone(),
             &self.broker_id.to_string(),
-            &self.service_config.broker_addr.to_string(),
+            &advertised_addr,
             ttl,
         )
         .await?;

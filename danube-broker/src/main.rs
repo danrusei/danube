@@ -61,6 +61,10 @@ struct Args {
     /// Prometheus Exporter http address (optional, overrides config file)
     #[arg(short = 'p', long)]
     prom_exporter: Option<String>,
+
+    /// Advertised address - fqdn (optional, required for kubernetes deployment)
+    #[arg(short = 'd', long)]
+    advertised_addr: Option<String>,
 }
 
 #[tokio::main]
@@ -85,6 +89,11 @@ async fn main() -> Result<()> {
             broker_addr
         ))?;
         service_config.broker_addr = broker_address;
+    }
+
+    // If "advertised_addr" is provided via command-line args
+    if let Some(advertised_addr) = args.advertised_addr {
+        service_config.advertised_addr = Some(advertised_addr)
     }
 
     // If `admin_addr` is provided via command-line args, override the value from the config file
