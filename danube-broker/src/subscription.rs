@@ -2,10 +2,10 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::{
-    consumer::Consumer,
+    consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
         dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
@@ -44,6 +44,37 @@ impl Subscription {
             dispatcher: None,
         }
     }
+
+    // Dispatch message to consumers
+    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+        if let Some(dispatcher) = &self.dispatcher {
+            if let Err(err) = dispatcher.send_messages(message).await {
+                info!(
+                    "The subscription {}, has no active consumers, got error: {} ",
+                    self.subscription_name, err
+                );
+                return Err(err);
+            }
+        } else {
+            trace!(
+                "No dispatcher has been found for subscription {}",
+                self.subscription_name
+            );
+        }
+        Ok(())
+    }
+
+    // Acknowledge the messages received from consumer
+    pub(crate) async fn acknowledge_message(&self, sequence_id: u64) -> Result<()> {
+        // Notify the topic that this subscription has acknowledged the message
+        let topic = self.topic.read().await;
+        topic
+            .retention
+            .acknowledge_message(sequence_id, self.subscription_name.clone())
+            .await?;
+        Ok(())
+    }
+
     // Adds a consumer to the subscription
     pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
         // Retrieve the subscription type and consumer ID without holding the lock for too long

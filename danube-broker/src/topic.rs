@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 
 use crate::proto::MessageMetadata;
 use crate::{
@@ -13,6 +13,7 @@ use crate::{
     consumer::{Consumer, MessageToSend},
     policies::Policies,
     producer::Producer,
+    retention_strategy::RetentionStrategy,
     schema::Schema,
     subscription::{Subscription, SubscriptionOptions},
     utils::get_random_id,
@@ -31,7 +32,7 @@ pub(crate) static SYSTEM_TOPIC: &str = "/system/_events_topic";
 // Topics string representation:  /{namespace}/{topic-name}
 //
 #[derive(Debug)]
-pub(crate) struct Topic {
+pub(crate) struct Topic<R: RetentionStrategy> {
     pub(crate) topic_name: String,
     pub(crate) schema: Option<Schema>,
     pub(crate) topic_policies: Option<Policies>,
@@ -39,18 +40,19 @@ pub(crate) struct Topic {
     pub(crate) subscriptions: Mutex<HashMap<String, Subscription>>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
+    // Suppoted retention strategy:  ReliableRetention, NonReliableRetention
+    pub(crate) retention: R,
 }
 
-// TODO! should be moved to support partitioned topics from scratch, in order to support hashing dispatch
-
-impl Topic {
-    pub(crate) fn new(topic_name: &str) -> Self {
+impl<R: RetentionStrategy> Topic<R> {
+    pub(crate) fn new(topic_name: &str, retention: R) -> Self {
         Topic {
             topic_name: topic_name.into(),
             schema: None,
             topic_policies: None,
             subscriptions: Mutex::new(HashMap::new()),
             producers: HashMap::new(),
+            retention,
         }
     }
 
@@ -138,26 +140,18 @@ impl Topic {
             metadata: meta,
         };
 
+        // Store the message according to the retention strategy
+        self.retention.store_message(message_to_send.clone())?;
+
+        // Dispatch the message to all subscriptions
         // Collect subscriptions that need to be unsubscribed, if contain no active consumers
         let subscriptions_to_remove: Vec<String> = {
             let subscriptions = self.subscriptions.lock().await;
             let mut to_remove = Vec::new();
 
-            for (_name, subscription) in subscriptions.iter() {
-                let duplicate_message = message_to_send.clone();
-                if let Some(dispatcher) = subscription.get_dispatcher() {
-                    if let Err(err) = dispatcher.send_messages(duplicate_message).await {
-                        info!(
-                            "The subscription {}, has no active consumers, got error: {} ",
-                            subscription.subscription_name, err
-                        );
-                        to_remove.push(subscription.subscription_name.clone());
-                    }
-                } else {
-                    trace!(
-                        "No dispatcher has been found for subscription {}",
-                        subscription.subscription_name
-                    );
+            for subscription in subscriptions.values() {
+                if let Err(_) = subscription.dispatch_message(message_to_send.clone()).await {
+                    to_remove.push(subscription.subscription_name.clone());
                 }
             }
 
