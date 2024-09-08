@@ -1,84 +1,78 @@
+mod non_reliable_retention;
+mod reliable_retention;
+
+pub(crate) use non_reliable_retention::NonReliableRetention;
+pub(crate) use reliable_retention::ReliableRetention;
+
 use anyhow::Result;
-use dashmap::DashMap;
-use std::collections::HashSet;
+use std::fmt;
+use std::str::FromStr;
 
 use crate::consumer::MessageToSend;
 
-use crate::proto::MessageMetadata;
+// Define the RetentionStrategyType enum
+#[derive(Debug, Clone)]
+pub enum RetentionStrategyType {
+    Reliable(ReliableRetention),
+    NonReliable(NonReliableRetention),
+}
 
+// Implement ToString for RetentionStrategyType to return the names of the strategies
+impl fmt::Display for RetentionStrategyType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RetentionStrategyType::Reliable(_) => write!(f, "ReliableRetention"),
+            RetentionStrategyType::NonReliable(_) => write!(f, "NonReliableRetention"),
+        }
+    }
+}
+
+// Implement FromStr for RetentionStrategyType
+impl FromStr for RetentionStrategyType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ReliableRetention" => Ok(RetentionStrategyType::Reliable(ReliableRetention::new())),
+            "NonReliableRetention" => Ok(RetentionStrategyType::NonReliable(
+                NonReliableRetention::new(),
+            )),
+            _ => Err(format!(
+                "Invalid retention_type, allowed values: ReliableRetention, NonReliableRetention"
+            )),
+        }
+    }
+}
+
+// Trait for retention strategies
 pub trait RetentionStrategy {
     fn store_message(&self, message: MessageToSend) -> Result<()>;
     fn remove_message(&self, sequence_id: u64) -> Result<()>;
     fn is_ready_for_removal(&self, sequence_id: u64) -> bool;
 }
 
-pub struct ReliableRetention {
-    // Stores the message until acknowledged
-    messages: DashMap<u64, MessageToSend>,
-    // Tracks acknowledgments by subscription
-    ack_status: DashMap<u64, HashSet<String>>,
-}
-
-impl ReliableRetention {
-    // Acknowledgment is handled by the subscription,
-    // but the logic for removing messages resides in the topic's retention strategy.
-    pub(crate) async fn acknowledge_message(
-        &self,
-        sequence_id: u64,
-        subscription_name: String,
-    ) -> Result<()> {
-        if let Some(mut ack_set) = self.ack_status.get_mut(&sequence_id) {
-            ack_set.insert(subscription_name);
-        }
-
-        // Check if all subscriptions have acknowledged this message
-        if self.is_ready_for_removal(sequence_id) {
-            self.remove_message(sequence_id)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl RetentionStrategy for ReliableRetention {
+// Implement RetentionStrategy for RetentionStrategyType enum
+impl RetentionStrategy for RetentionStrategyType {
     fn store_message(&self, message: MessageToSend) -> Result<()> {
-        // Store the message in memory
-        self.messages
-            .insert(message.metadata.clone().unwrap().sequence_id, message);
-        Ok(())
+        match self {
+            RetentionStrategyType::Reliable(strategy) => strategy.store_message(message),
+            RetentionStrategyType::NonReliable(strategy) => strategy.store_message(message),
+        }
     }
 
     fn remove_message(&self, sequence_id: u64) -> Result<()> {
-        // Remove message if all subscriptions have acknowledged
-        if self.is_ready_for_removal(sequence_id) {
-            self.messages.remove(&sequence_id);
+        match self {
+            RetentionStrategyType::Reliable(strategy) => strategy.remove_message(sequence_id),
+            RetentionStrategyType::NonReliable(strategy) => strategy.remove_message(sequence_id),
         }
-        Ok(())
     }
 
     fn is_ready_for_removal(&self, sequence_id: u64) -> bool {
-        // Check if all subscriptions have acknowledged the message
-        if let Some(ack_set) = self.ack_status.get(&sequence_id) {
-            return ack_set.len() == self.subscriptions.len();
+        match self {
+            RetentionStrategyType::Reliable(strategy) => strategy.is_ready_for_removal(sequence_id),
+            RetentionStrategyType::NonReliable(strategy) => {
+                strategy.is_ready_for_removal(sequence_id)
+            }
         }
-        false
-    }
-}
-
-pub struct NonReliableRetention;
-
-impl RetentionStrategy for NonReliableRetention {
-    fn store_message(&self, _message: MessageToSend) -> Result<()> {
-        // No need to store the message
-        Ok(())
-    }
-
-    fn remove_message(&self, _sequence_id: u64) -> Result<()> {
-        // Nothing to remove, non-reliable mode discards after dispatch
-        Ok(())
-    }
-
-    fn is_ready_for_removal(&self, _sequence_id: u64) -> bool {
-        true // Always ready for removal
     }
 }

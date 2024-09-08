@@ -5,6 +5,7 @@ use crate::{
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::BASE_TOPICS_PATH,
+    retention_strategy::RetentionStrategyType,
     schema::Schema,
     utils::join_path,
     LocalCache,
@@ -59,6 +60,18 @@ impl TopicResources {
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "schema"]);
         let data = serde_json::to_value(&schema).unwrap();
+        self.create(&path, data).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn add_topic_retention(
+        &mut self,
+        topic_name: &str,
+        retention: RetentionStrategyType,
+    ) -> Result<()> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
+        let data = serde_json::to_value(&retention.to_string()).unwrap();
         self.create(&path, data).await?;
 
         Ok(())
@@ -128,6 +141,16 @@ impl TopicResources {
             return schema;
         }
         None
+    }
+
+    pub(crate) fn get_retention(&self, topic_name: &str) -> Result<String> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
+        let result = self.local_cache.get(&path);
+
+        let retention: Option<String> = serde_json::from_value(result.expect(
+            "should not be allowed to create a topic without specifying the retention type",
+        ))?;
+        return Ok(retention.unwrap_or("NonReliableRetention".to_string()));
     }
 
     pub(crate) fn get_policies(&self, topic_name: &str) -> Option<Policies> {

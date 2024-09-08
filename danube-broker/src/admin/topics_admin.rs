@@ -3,8 +3,10 @@ use crate::admin_proto::{
     topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, SubscriptionListResponse,
     SubscriptionRequest, SubscriptionResponse, TopicListResponse, TopicRequest, TopicResponse,
 };
+use crate::retention_strategy::RetentionStrategyType;
 use crate::schema::{Schema, SchemaType};
 
+use std::str::FromStr;
 use tonic::{Request, Response, Status};
 use tracing::{trace, Level};
 
@@ -37,6 +39,14 @@ impl TopicAdmin for DanubeAdminImpl {
 
         trace!("Admin: creates a non-partitioned topic: {}", req.name);
 
+        let retention_type = match RetentionStrategyType::from_str(&req.retention_type) {
+            Ok(retention_type) => retention_type,
+            Err(err) => {
+                let status = Status::not_found(err);
+                return Err(status);
+            }
+        };
+
         let mut schema_type = match SchemaType::from_str(&req.schema_type) {
             Some(schema_type) => schema_type,
             None => {
@@ -56,7 +66,7 @@ impl TopicAdmin for DanubeAdminImpl {
         let schema = Schema::new(format!("{}_schema", req.name), schema_type);
 
         let success = match service
-            .create_topic_cluster(&req.name, Some(schema.into()))
+            .create_topic_cluster(&req.name, Some(schema.into()), retention_type)
             .await
         {
             Ok(()) => true,

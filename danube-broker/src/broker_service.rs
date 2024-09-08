@@ -8,6 +8,7 @@ use tracing::{info, warn};
 
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
+use crate::retention_strategy::{NonReliableRetention, ReliableRetention, RetentionStrategyType};
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
     consumer::Consumer,
@@ -29,7 +30,7 @@ pub(crate) struct BrokerService {
     // to handle the metadata and configurations
     pub(crate) resources: Resources,
     // maps topic_name to Topic
-    pub(crate) topics: HashMap<String, Topic>,
+    pub(crate) topics: HashMap<String, Topic<RetentionStrategyType>>,
     // maps producer_id to topic_name
     pub(crate) producer_index: HashMap<u64, String>,
     // maps consumer_id to (topic_name, subscription_name)
@@ -112,7 +113,12 @@ impl BrokerService {
             return Err(status);
         };
 
-        match self.create_topic_cluster(topic_name, schema).await {
+        let retention = RetentionStrategyType::NonReliable(NonReliableRetention);
+
+        match self
+            .create_topic_cluster(topic_name, schema, retention)
+            .await
+        {
             Ok(()) => {
                 let error_string =
             "The topic metadata was created, need to redo the lookup to find the correct broker";
@@ -140,6 +146,7 @@ impl BrokerService {
         &mut self,
         topic_name: &str,
         schema: Option<ProtoSchema>,
+        retention: RetentionStrategyType,
     ) -> Result<(), Status> {
         // The topic format is /{namespace_name}/{topic_name}
         if !validate_topic_format(topic_name) {
@@ -176,7 +183,10 @@ impl BrokerService {
             return Err(status);
         }
 
-        match self.post_new_topic(topic_name, schema.unwrap(), None).await {
+        match self
+            .post_new_topic(topic_name, schema.unwrap(), None, retention)
+            .await
+        {
             Ok(()) => return Ok(()),
 
             Err(err) => {
@@ -195,8 +205,9 @@ impl BrokerService {
         topic_name: &str,
         schema: ProtoSchema,
         policies: Option<Policies>,
+        retention: RetentionStrategyType,
     ) -> Result<()> {
-        // store the topic to unassigned queue for the Load Manager to assign to a broker
+        // Store the topic to unassigned queue for the Load Manager to assign to a broker
         // Load Manager will decide which broker is going to serve the new created topic
         // so it will not be added to local list, yet.
         self.resources
@@ -222,6 +233,12 @@ impl BrokerService {
         self.resources
             .topic
             .add_topic_schema(topic_name, schema.into())
+            .await?;
+
+        // store new topic retention strategy: /topics/{namespace}/{topic}/retention
+        self.resources
+            .topic
+            .add_topic_retention(topic_name, retention)
             .await?;
 
         Ok(())
@@ -262,8 +279,19 @@ impl BrokerService {
     // assumes that it was received from legitimate sources, like ETCDWatchEvent
     // so we know that the topic was checked before and assigned to this broker by load manager
     pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
+        // get the type of message retention strategy
+        let retention_name = self.resources.topic.get_retention(topic_name)?;
+
+        let retention = match retention_name.as_str() {
+            "ReliableRetention" => RetentionStrategyType::Reliable(ReliableRetention::new()),
+            "NonReliableRetention" => {
+                RetentionStrategyType::NonReliable(NonReliableRetention::new())
+            }
+            _ => return Err(anyhow!("Unsuported retention strategy: {}", retention_name)),
+        };
+
         // create the topic,
-        let mut new_topic = Topic::new(topic_name);
+        let mut new_topic = Topic::new(topic_name, retention);
 
         // get schema from local_cache
         let schema = self.resources.topic.get_schema(topic_name);
@@ -298,7 +326,10 @@ impl BrokerService {
     }
 
     // deletes the topic
-    pub(crate) async fn delete_topic(&mut self, topic_name: &str) -> Result<Topic> {
+    pub(crate) async fn delete_topic(
+        &mut self,
+        topic_name: &str,
+    ) -> Result<Topic<RetentionStrategyType>> {
         let topic = match self.topics.get_mut(topic_name) {
             Some(topic) => topic,
             None => {
@@ -465,7 +496,10 @@ impl BrokerService {
     }
 
     // finding a Topic by Producer ID
-    pub(crate) fn find_topic_by_producer(&mut self, producer_id: u64) -> Option<&Topic> {
+    pub(crate) fn find_topic_by_producer(
+        &mut self,
+        producer_id: u64,
+    ) -> Option<&Topic<RetentionStrategyType>> {
         if let Some(topic_name) = self.producer_index.get(&producer_id) {
             self.topics.get(topic_name)
         } else {
