@@ -1,10 +1,14 @@
 use dashmap::DashMap;
 
+use crate::consumer::MessageToSend;
+
+// SegmentStore store immutable Segments,
+// basically the segment_id should continue to increase, for the entire lifetime of the topic
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) struct SegmentStore {
     // Map segment ID to segment data
-    segments: DashMap<u64, Vec<u8>>,
+    segments: DashMap<u64, Vec<MessageToSend>>,
     // Map topic names to list of segment_ids
     segments_per_topic: DashMap<String, Vec<u64>>,
     // Map segment ID to segment metadata

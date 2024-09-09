@@ -109,7 +109,9 @@ message StreamMessage {
 }
 
 message AckRequest {
-    uint64 request_id =1; 
+    uint64 request_id = 1; 
+    string topic_name = 2;
+    string subscription = 3;
 }
 
 message AckResponse {

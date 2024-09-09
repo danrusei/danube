@@ -167,6 +167,10 @@ pub struct StreamMessage {
 pub struct AckRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    #[prost(string, tag = "2")]
+    pub topic_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub subscription: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

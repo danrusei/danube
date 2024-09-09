@@ -163,8 +163,19 @@ impl ConsumerService for DanubeServerImpl {
     // Consumer acknowledge the received message
     async fn ack(
         &self,
-        _request: tonic::Request<AckRequest>,
+        request: tonic::Request<AckRequest>,
     ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+
+        trace!(
+            "The Ack for request with name: {} for topic: {} with subscription_type {}",
+            req.request_id,
+            req.topic_name,
+            req.subscription_type
+        );
+
+        // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
+
+        let mut service = self.service.lock().await;
     }
 }
