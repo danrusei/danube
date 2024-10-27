@@ -1,10 +1,11 @@
 use anyhow::Result;
 use metrics::{counter, gauge};
-use tracing::{trace, warn};
+use tokio::sync::mpsc;
+use tracing::{info, trace, warn};
 
 use crate::{
     broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER, TOPIC_CONSUMERS},
-    proto::MessageMetadata,
+    proto::{MessageMetadata, StreamMessage},
 };
 
 /// Represents a consumer connected and associated with a Subscription.
@@ -16,7 +17,6 @@ pub(crate) struct Consumer {
     pub(crate) consumer_name: String,
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32, // should be SubscriptionType,
-    pub(crate) tx: Option<tokio::sync::mpsc::Sender<MessageToSend>>,
     // status = true -> consumer OK, status = false -> Close the consumer
     pub(crate) status: bool,
 }
@@ -41,51 +41,56 @@ impl Consumer {
             consumer_name: consumer_name.into(),
             subscription_name: subscription_name.into(),
             subscription_type,
-            tx: None,
             status: true,
         }
     }
 
-    // Dispatch a list of entries to the consumer.
-    pub(crate) async fn send_messages(
+    // The consumer task runs asynchronously, handling message delivery to the gRPC `ReceiverStream`.
+    pub(crate) async fn run(
         &mut self,
-        messages: MessageToSend,
-        _batch_size: usize,
-    ) -> Result<()> {
-        // let _unacked_messages = messages.len();
-        //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
-
-        // It attempts to send the message through the tx channel.
-        // If sending fails (e.g., if the client disconnects), it breaks the loop.
-        if let Some(tx) = &self.tx {
-            // Since u8 is exactly 1 byte, the size in bytes will be equal to the number of elements in the vector.
-            let payload_size = messages.payload.len();
-            if let Err(err) = tx.send(messages).await {
-                // Log the error and handle the channel closure scenario
-                warn!(
-                    "Failed to send message to consumer with id: {}. Error: {:?}",
-                    self.consumer_id, err
-                );
-
-                self.status = false
-            } else {
-                trace!("Sending the message over channel to {}", self.consumer_id);
-                counter!(CONSUMER_MSG_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(1);
-                counter!(CONSUMER_BYTES_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(payload_size as u64);
-            }
-        } else {
-            warn!(
-                "Unable to send the message to consumer: {} with id: {}, as the tx is not found",
-                self.consumer_name, self.consumer_id
-            );
-        };
-
-        Ok(())
+        rx_broker: mpsc::Receiver<MessageToSend>,
+        tx_cons: mpsc::Sender<MessageToSend>,
+        consumer_id: u64,
+    ) {
+        info!("Consumer task ended for consumer_id: {}", consumer_id);
     }
 
-    pub(crate) fn set_tx(&mut self, tx: tokio::sync::mpsc::Sender<MessageToSend>) -> () {
-        self.tx = Some(tx);
-    }
+    // Dispatch a list of entries to the consumer.
+    // pub(crate) async fn send_messages(
+    //     &mut self,
+    //     messages: MessageToSend,
+    //     _batch_size: usize,
+    // ) -> Result<()> {
+    //     // let _unacked_messages = messages.len();
+    //     //Todo! here implement a logic to permit messages if the pendingAcks is under a threshold
+
+    //     // It attempts to send the message through the tx channel.
+    //     // If sending fails (e.g., if the client disconnects), it breaks the loop.
+    //     if let Some(tx) = &self.tx {
+    //         // Since u8 is exactly 1 byte, the size in bytes will be equal to the number of elements in the vector.
+    //         let payload_size = messages.payload.len();
+    //         if let Err(err) = tx.send(messages).await {
+    //             // Log the error and handle the channel closure scenario
+    //             warn!(
+    //                 "Failed to send message to consumer with id: {}. Error: {:?}",
+    //                 self.consumer_id, err
+    //             );
+
+    //             self.status = false
+    //         } else {
+    //             trace!("Sending the message over channel to {}", self.consumer_id);
+    //             counter!(CONSUMER_MSG_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(1);
+    //             counter!(CONSUMER_BYTES_OUT_COUNTER.name, "topic"=> self.topic_name.clone() , "consumer" => self.consumer_id.to_string()).increment(payload_size as u64);
+    //         }
+    //     } else {
+    //         warn!(
+    //             "Unable to send the message to consumer: {} with id: {}, as the tx is not found",
+    //             self.consumer_name, self.consumer_id
+    //         );
+    //     };
+
+    //     Ok(())
+    // }
 
     pub(crate) fn get_status(&self) -> bool {
         return self.status;

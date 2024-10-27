@@ -1,21 +1,17 @@
 use anyhow::{anyhow, Result};
 use metrics::counter;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
+use std::collections::{hash_map::Entry, HashMap};
 use tokio::sync::Mutex;
 use tracing::{info, trace, warn};
 
 use crate::proto::MessageMetadata;
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
-    consumer::{Consumer, MessageToSend},
+    consumer::MessageToSend,
     policies::Policies,
     producer::Producer,
     schema::Schema,
     subscription::{Subscription, SubscriptionOptions},
-    utils::get_random_id,
 };
 
 pub(crate) static SYSTEM_TOPIC: &str = "/system/_events_topic";
@@ -187,7 +183,7 @@ impl Topic {
         &self,
         topic_name: &str,
         options: SubscriptionOptions,
-    ) -> Result<Arc<Mutex<Consumer>>> {
+    ) -> Result<u64> {
         //Todo! sub_metadata is user-defined information to the subscription,
         //maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
@@ -203,22 +199,11 @@ impl Topic {
             return Err(anyhow!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name));
         }
 
-        let consumer_id = get_random_id();
-
-        let consumer = Arc::new(Mutex::new(Consumer::new(
-            topic_name,
-            consumer_id,
-            options.consumer_name.as_str(),
-            options.subscription_name.clone().as_str(),
-            options.subscription_type,
-        )));
-
         //Todo! Check the topic policies with max_consumers per topic
 
-        // is it ok to clone ? .. or should return just the ID, or ARC
-        subscription.add_consumer(consumer.clone()).await?;
+        let consumer_id = subscription.add_consumer(topic_name, options).await?;
 
-        Ok(consumer)
+        Ok(consumer_id)
     }
 
     // Unsubscribes the specified subscription from the topic
