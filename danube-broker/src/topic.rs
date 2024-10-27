@@ -240,8 +240,7 @@ impl Topic {
         let consumers = disp.get_consumers();
 
         for consumer in consumers {
-            let cons_guard = consumer.lock().await;
-            if cons_guard.status {
+            if *consumer.status.lock().await {
                 return Some(true);
             }
         }

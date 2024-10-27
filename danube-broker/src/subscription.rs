@@ -20,17 +20,17 @@ pub(crate) struct Subscription {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32,
     // Each consumer has a `mpsc::Sender` channel for sending messages
-    pub(crate) consumers: HashMap<
-        u64,
-        (
-            //this is used by broker to send messages
-            mpsc::Sender<MessageToSend>,
-            //this is used on the client side
-            Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
-            tokio::task::JoinHandle<()>,
-        ),
-    >,
+    pub(crate) consumers: HashMap<u64, (ConsumerInfo, tokio::task::JoinHandle<()>)>,
     pub(crate) dispatcher: Option<Dispatcher>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ConsumerInfo {
+    pub(crate) consumer_id: u64,
+    pub(crate) sub_options: SubscriptionOptions,
+    pub(crate) status: Arc<Mutex<bool>>,
+    pub(crate) tx_broker: mpsc::Sender<MessageToSend>,
+    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ impl Subscription {
     // Adds a consumer to the subscription
     pub(crate) async fn add_consumer(
         &mut self,
-        topic_name: &str,
+        _topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<u64> {
         // for communication with broker
@@ -66,17 +66,19 @@ impl Subscription {
         let (tx_cons, rx_cons) = mpsc::channel(4);
 
         let consumer_id = get_random_id();
+        let consumer_status = Arc::new(Mutex::new(true));
         let mut consumer = Consumer::new(
-            topic_name,
             consumer_id,
             &options.consumer_name,
-            &options.subscription_name,
             options.subscription_type,
+            rx_broker,
+            tx_cons,
+            consumer_status.clone(),
         );
 
         // Spawn consumer task
         let handle = tokio::spawn(async move {
-            consumer.run(rx_broker, tx_cons, consumer_id).await;
+            consumer.run().await;
         });
 
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
@@ -105,14 +107,20 @@ impl Subscription {
             self.dispatcher.as_mut().unwrap()
         };
 
-        // Insert the consumer into the subscription's consumer list
-        self.consumers.insert(
+        let consumer_info = ConsumerInfo {
             consumer_id,
-            (tx_broker, Arc::new(Mutex::new(rx_cons)), handle),
-        );
+            sub_options: options,
+            status: consumer_status,
+            tx_broker,
+            rx_cons: Arc::new(Mutex::new(rx_cons)),
+        };
+
+        // Insert the consumer into the subscription's consumer list
+        self.consumers
+            .insert(consumer_id, (consumer_info.clone(), handle));
 
         // Add the consumer to the dispatcher
-        dispatcher.add_consumer(consumer_id, tx_broker).await?;
+        dispatcher.add_consumer(consumer_info).await?;
 
         trace!(
             "A dispatcher {:?} has been added on subscription {}",
@@ -128,7 +136,7 @@ impl Subscription {
         consumer_id: u64,
     ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
         if let Some(consumer) = self.consumers.get(&consumer_id) {
-            return Some(consumer.1.clone());
+            return Some(consumer.0.rx_cons.clone());
         }
         None
     }
@@ -147,9 +155,9 @@ impl Subscription {
     pub(crate) async fn disconnect(&mut self) -> Result<Vec<u64>> {
         let mut consumers_id = Vec::new();
 
-        if let Some(dispatcher) = &self.dispatcher {
-            let mut disconnected_consumers = dispatcher.disconnect_all_consumers().await?;
-            consumers_id.append(&mut disconnected_consumers);
+        for (_, consumer) in &self.consumers {
+            consumer.1.abort();
+            consumers_id.push(consumer.0.consumer_id);
         }
 
         Ok(consumers_id)
@@ -167,16 +175,14 @@ impl Subscription {
     // Validate Consumer - returns consumer ID
     pub(crate) async fn validate_consumer(&self, consumer_name: &str) -> Option<u64> {
         for consumer in self.consumers.values() {
-            let mut consumer_guard = consumer.lock().await;
-
-            if consumer_guard.consumer_name == consumer_name {
+            if consumer.0.sub_options.consumer_name == consumer_name {
                 // if consumer exist and its status is false, then the consumer has disconnected
                 // the consumer client may try to reconnect
                 // then set the status to true and use the consumer
-                if !consumer_guard.status {
-                    consumer_guard.status = true
+                if !*consumer.0.status.lock().await {
+                    *consumer.0.status.lock().await = true
                 }
-                return Some(consumer_guard.consumer_id);
+                return Some(consumer.0.consumer_id);
             }
         }
         None

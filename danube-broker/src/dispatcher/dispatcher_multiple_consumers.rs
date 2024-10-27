@@ -1,14 +1,12 @@
 use anyhow::{anyhow, Result};
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::trace;
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
-    consumers: Vec<Arc<Mutex<Consumer>>>,
+    consumers: Vec<ConsumerInfo>,
     index_consumer: AtomicUsize,
 }
 
@@ -21,7 +19,7 @@ impl DispatcherMultipleConsumers {
     }
 
     // manage the addition of consumers to the dispatcher
-    pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
+    pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
         // checks if adding a new consumer would exceed the maximum allowed consumers for the subscription
         self.consumers.push(consumer);
 
@@ -34,8 +32,7 @@ impl DispatcherMultipleConsumers {
         let pos = {
             let mut pos = None;
             for (index, x) in self.consumers.iter().enumerate() {
-                let consumer = x.lock().await;
-                if consumer.consumer_id == consumer_id {
+                if x.consumer_id == consumer_id {
                     pos = Some(index);
                     break;
                 }
@@ -51,29 +48,22 @@ impl DispatcherMultipleConsumers {
         Ok(())
     }
 
-    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
+    pub(crate) fn get_consumers(&self) -> &Vec<ConsumerInfo> {
         &self.consumers
     }
 
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
-        let mut consumers = Vec::new();
-
-        for consumer in self.consumers.iter() {
-            let consumer_id = consumer.lock().await.disconnect();
-            consumers.push(consumer_id)
-        }
-        Ok(consumers)
+    pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
+        Ok(())
     }
 
     pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         // Attempt to get an active consumer and send messages
         if let Ok(consumer) = self.find_next_active_consumer().await {
-            let mut consumer_guard = consumer.lock().await;
-            let batch_size = 1; // to be calculated
-            consumer_guard.send_messages(messages, batch_size).await?;
+            //let batch_size = 1; // to be calculated
+            consumer.tx_broker.send(messages).await?;
             trace!(
                 "Dispatcher is sending the message to consumer: {}",
-                consumer_guard.consumer_id
+                consumer.consumer_id
             );
             Ok(())
         } else {
@@ -81,18 +71,15 @@ impl DispatcherMultipleConsumers {
         }
     }
 
-    async fn find_next_active_consumer(&self) -> Result<Arc<Mutex<Consumer>>> {
+    async fn find_next_active_consumer(&self) -> Result<ConsumerInfo> {
         let num_consumers = self.consumers.len();
 
         for _ in 0..num_consumers {
             let consumer = self.get_next_consumer()?;
-            let consumer_guard = consumer.lock().await;
 
-            if !consumer_guard.status {
+            if !*consumer.status.lock().await {
                 continue;
             }
-
-            drop(consumer_guard);
 
             return Ok(consumer);
         }
@@ -100,7 +87,7 @@ impl DispatcherMultipleConsumers {
         return Err(anyhow!("unable to find an active consumer"));
     }
 
-    pub(crate) fn get_next_consumer(&self) -> Result<Arc<Mutex<Consumer>>> {
+    pub(crate) fn get_next_consumer(&self) -> Result<ConsumerInfo> {
         let num_consumers = self.consumers.len();
 
         if num_consumers == 0 {

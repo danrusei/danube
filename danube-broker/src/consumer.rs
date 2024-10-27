@@ -1,6 +1,7 @@
 use anyhow::Result;
 use metrics::{counter, gauge};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 use tracing::{info, trace, warn};
 
 use crate::{
@@ -10,15 +11,14 @@ use crate::{
 
 /// Represents a consumer connected and associated with a Subscription.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct Consumer {
-    pub(crate) topic_name: String,
     pub(crate) consumer_id: u64,
     pub(crate) consumer_name: String,
-    pub(crate) subscription_name: String,
-    pub(crate) subscription_type: i32, // should be SubscriptionType,
+    pub(crate) subscription_type: i32,
+    pub(crate) rx_broker: mpsc::Receiver<MessageToSend>,
+    pub(crate) tx_cons: mpsc::Sender<MessageToSend>,
     // status = true -> consumer OK, status = false -> Close the consumer
-    pub(crate) status: bool,
+    pub(crate) status: Arc<Mutex<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,30 +29,26 @@ pub(crate) struct MessageToSend {
 
 impl Consumer {
     pub(crate) fn new(
-        topic_name: &str,
         consumer_id: u64,
         consumer_name: &str,
-        subscription_name: &str,
-        subscription_type: i32, // should be SubscriptionType,
+        subscription_type: i32,
+        rx_broker: mpsc::Receiver<MessageToSend>,
+        tx_cons: mpsc::Sender<MessageToSend>,
+        status: Arc<Mutex<bool>>,
     ) -> Self {
         Consumer {
-            topic_name: topic_name.into(),
             consumer_id: consumer_id.into(),
             consumer_name: consumer_name.into(),
-            subscription_name: subscription_name.into(),
             subscription_type,
-            status: true,
+            rx_broker,
+            tx_cons,
+            status,
         }
     }
 
     // The consumer task runs asynchronously, handling message delivery to the gRPC `ReceiverStream`.
-    pub(crate) async fn run(
-        &mut self,
-        rx_broker: mpsc::Receiver<MessageToSend>,
-        tx_cons: mpsc::Sender<MessageToSend>,
-        consumer_id: u64,
-    ) {
-        info!("Consumer task ended for consumer_id: {}", consumer_id);
+    pub(crate) async fn run(&mut self) {
+        info!("Consumer task ended for consumer_id: {}", self.consumer_id);
     }
 
     // Dispatch a list of entries to the consumer.
@@ -92,8 +88,8 @@ impl Consumer {
     //     Ok(())
     // }
 
-    pub(crate) fn get_status(&self) -> bool {
-        return self.status;
+    pub(crate) async fn get_status(&self) -> bool {
+        *self.status.lock().await
     }
 
     // Close the consumer if: a. the connection is dropped
