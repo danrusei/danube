@@ -8,6 +8,7 @@ use tracing::{info, warn};
 
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
+use crate::subscription::ConsumerInfo;
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
     consumer::MessageToSend,
@@ -489,10 +490,22 @@ impl BrokerService {
         None
     }
 
+    // finding the ConsumerInfo for the provided consumer_id
+    pub(crate) async fn find_consumer_by_id(&mut self, consumer_id: u64) -> Option<ConsumerInfo> {
+        if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
+            if let Some(topic) = self.topics.get(topic_name) {
+                if let Some(subscription) = topic.subscriptions.lock().await.get(subscription_name)
+                {
+                    return subscription.get_consumer_info(consumer_id);
+                }
+            }
+        }
+        None
+    }
+
     pub(crate) async fn health_consumer(&mut self, consumer_id: u64) -> bool {
         if let Some(consumer) = self.find_consumer_by_id(consumer_id).await {
-            let consumer = consumer.lock().await;
-            return consumer.get_status();
+            return consumer.get_status().await;
         }
         false
     }

@@ -33,6 +33,12 @@ pub(crate) struct ConsumerInfo {
     pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
 }
 
+impl ConsumerInfo {
+    pub(crate) async fn get_status(&self) -> bool {
+        *self.status.lock().await
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SubscriptionOptions {
     pub(crate) subscription_name: String,
@@ -57,7 +63,7 @@ impl Subscription {
     // Adds a consumer to the subscription
     pub(crate) async fn add_consumer(
         &mut self,
-        _topic_name: &str,
+        topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<u64> {
         // for communication with broker
@@ -71,6 +77,7 @@ impl Subscription {
             consumer_id,
             &options.consumer_name,
             options.subscription_type,
+            topic_name,
             rx_broker,
             tx_cons,
             consumer_status.clone(),
@@ -135,8 +142,15 @@ impl Subscription {
         &self,
         consumer_id: u64,
     ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
+        if let Some(consumer_info) = self.consumers.get(&consumer_id) {
+            return Some(consumer_info.0.rx_cons.clone());
+        }
+        None
+    }
+
+    pub(crate) fn get_consumer_info(&self, consumer_id: u64) -> Option<ConsumerInfo> {
         if let Some(consumer) = self.consumers.get(&consumer_id) {
-            return Some(consumer.0.rx_cons.clone());
+            return Some(consumer.0.clone());
         }
         None
     }
@@ -174,15 +188,15 @@ impl Subscription {
 
     // Validate Consumer - returns consumer ID
     pub(crate) async fn validate_consumer(&self, consumer_name: &str) -> Option<u64> {
-        for consumer in self.consumers.values() {
-            if consumer.0.sub_options.consumer_name == consumer_name {
+        for consumer_info in self.consumers.values() {
+            if consumer_info.0.sub_options.consumer_name == consumer_name {
                 // if consumer exist and its status is false, then the consumer has disconnected
                 // the consumer client may try to reconnect
                 // then set the status to true and use the consumer
-                if !*consumer.0.status.lock().await {
-                    *consumer.0.status.lock().await = true
+                if !*consumer_info.0.status.lock().await {
+                    *consumer_info.0.status.lock().await = true
                 }
-                return Some(consumer.0.consumer_id);
+                return Some(consumer_info.0.consumer_id);
             }
         }
         None
