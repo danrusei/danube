@@ -52,10 +52,6 @@ impl DispatcherMultipleConsumers {
         &self.consumers
     }
 
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
-        Ok(())
-    }
-
     pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
         // Attempt to get an active consumer and send messages
         if let Ok(consumer) = self.find_next_active_consumer().await {
@@ -77,7 +73,7 @@ impl DispatcherMultipleConsumers {
         for _ in 0..num_consumers {
             let consumer = self.get_next_consumer()?;
 
-            if !*consumer.status.lock().await {
+            if !consumer.get_status().await {
                 continue;
             }
 

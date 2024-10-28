@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
+use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use tracing::trace;
 
 use crate::{
+    broker_metrics::TOPIC_CONSUMERS,
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
@@ -19,6 +21,7 @@ use crate::{
 pub(crate) struct Subscription {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32,
+    pub(crate) topic_name: String,
     // Each consumer has a `mpsc::Sender` channel for sending messages
     pub(crate) consumers: HashMap<u64, (ConsumerInfo, tokio::task::JoinHandle<()>)>,
     pub(crate) dispatcher: Option<Dispatcher>,
@@ -37,6 +40,12 @@ impl ConsumerInfo {
     pub(crate) async fn get_status(&self) -> bool {
         *self.status.lock().await
     }
+    pub(crate) async fn set_status_false(&self) -> () {
+        *self.status.lock().await = false
+    }
+    pub(crate) async fn set_status_true(&self) -> () {
+        *self.status.lock().await = true
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,11 +60,13 @@ impl Subscription {
     // create new subscription
     pub(crate) fn new(
         sub_options: SubscriptionOptions,
+        topic_name: &str,
         _meta_properties: HashMap<String, String>,
     ) -> Self {
         Subscription {
             subscription_name: sub_options.subscription_name,
             subscription_type: sub_options.subscription_type,
+            topic_name: topic_name.into(),
             consumers: HashMap::new(),
             dispatcher: None,
         }
@@ -155,35 +166,31 @@ impl Subscription {
         None
     }
 
-    // remove a consumer from the subscription
-    #[allow(dead_code)]
-    pub(crate) fn remove_consumer(_consumer: Consumer) -> Result<()> {
-        // TODO!
-        // removes consumer from the dispatcher
-        // If there are no consumers left after removing the specified one,
-        // it unsubscribes the subscription from the topic.
-        todo!()
-    }
-
     // handles the disconnection of consumers associated with the subscription.
     pub(crate) async fn disconnect(&mut self) -> Result<Vec<u64>> {
         let mut consumers_id = Vec::new();
 
+        // in order to disconnect the consumers we have to
+        // * abort the the JoinHandle
+        // * set Consumer status to false, to inform the client the server side was removed
+        // * remove Consumer from the subscription
+        // * remove Consumer from the dispatcher
+        // * send back to broker service the list of disconnected consumers
         for (_, consumer) in &self.consumers {
             consumer.1.abort();
             consumers_id.push(consumer.0.consumer_id);
+            gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
+            consumer.0.set_status_false().await;
+        }
+
+        for consumer_id in &consumers_id {
+            self.consumers.remove(&consumer_id);
+            if let Some(dispatcher) = &mut self.dispatcher {
+                dispatcher.remove_consumer(consumer_id.clone()).await?;
+            }
         }
 
         Ok(consumers_id)
-    }
-
-    // Deletes the subscription after it is unsubscribed from the topic and disconnected from consumers.
-    #[allow(dead_code)]
-    pub(crate) fn delete() -> Result<()> {
-        // TODO!
-        //  It checks if there is a dispatcher associated with the subscription.
-        // If there is, it calls the disconnectAllConsumers method of the dispatcher
-        todo!()
     }
 
     // Validate Consumer - returns consumer ID
@@ -193,8 +200,8 @@ impl Subscription {
                 // if consumer exist and its status is false, then the consumer has disconnected
                 // the consumer client may try to reconnect
                 // then set the status to true and use the consumer
-                if !*consumer_info.0.status.lock().await {
-                    *consumer_info.0.status.lock().await = true
+                if !consumer_info.0.get_status().await {
+                    consumer_info.0.set_status_true().await;
                 }
                 return Some(consumer_info.0.consumer_id);
             }

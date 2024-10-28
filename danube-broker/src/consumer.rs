@@ -1,15 +1,16 @@
 use anyhow::Result;
-use metrics::{counter, gauge};
+use metrics::counter;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{info, trace, warn};
 
 use crate::{
-    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER, TOPIC_CONSUMERS},
+    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER},
     proto::MessageMetadata,
 };
 
 /// Represents a consumer connected and associated with a Subscription.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Consumer {
     consumer_id: u64,

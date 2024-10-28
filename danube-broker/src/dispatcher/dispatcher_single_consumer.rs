@@ -24,10 +24,9 @@ impl DispatcherSingleConsumer {
 
         let mut candidate = None;
 
-        for consumer in &self.consumers {
-            let consumer_status = consumer.status.lock().await;
-            if *consumer_status {
-                candidate = Some(consumer.clone());
+        for consumer_info in &self.consumers {
+            if consumer_info.get_status().await {
+                candidate = Some(consumer_info.clone());
                 break;
             }
         }
@@ -58,8 +57,7 @@ impl DispatcherSingleConsumer {
         // 3. other permits like dispatch rate limiter, quota etc
 
         // check if the consumer is active
-        let active_consumer_status = active_consumer.status.lock().await;
-        if !*active_consumer_status {
+        if !active_consumer.get_status().await {
             // Pick a new active consumer
             if !self.pick_active_consumer().await {
                 return Err(anyhow!(
@@ -110,11 +108,20 @@ impl DispatcherSingleConsumer {
         Ok(())
     }
 
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
-        Ok(())
-    }
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+        self.consumers
+            .retain(|consumer| consumer.consumer_id != consumer_id);
 
-    pub(crate) async fn remove_consumer(&self, _consumer: ConsumerInfo) -> Result<()> {
+        // Acquire a write lock on active_consumer to modify it
+        let mut active_consumer = self.active_consumer.write().await;
+
+        // Check if the active_consumer matches the consumer_id and set to None if so
+        if let Some(ref act_consumer) = *active_consumer {
+            if act_consumer.consumer_id == consumer_id {
+                *active_consumer = None;
+            }
+        }
+
         Ok(())
     }
 

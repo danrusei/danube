@@ -192,7 +192,11 @@ impl Topic {
         let mut subscriptions_lock = self.subscriptions.lock().await;
         let subscription = subscriptions_lock
             .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(options.clone(), sub_metadata));
+            .or_insert(Subscription::new(
+                options.clone(),
+                &self.topic_name,
+                sub_metadata,
+            ));
 
         if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
@@ -239,8 +243,8 @@ impl Topic {
         let disp = subs.get_dispatcher()?;
         let consumers = disp.get_consumers();
 
-        for consumer in consumers {
-            if *consumer.status.lock().await {
+        for consumer_info in consumers {
+            if consumer_info.get_status().await {
                 return Some(true);
             }
         }

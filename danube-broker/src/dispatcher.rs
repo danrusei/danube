@@ -23,16 +23,6 @@ impl Dispatcher {
             }
         }
     }
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
-        match self {
-            Dispatcher::OneConsumer(dispatcher) => {
-                Ok(dispatcher.disconnect_all_consumers().await?)
-            }
-            Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.disconnect_all_consumers().await?)
-            }
-        }
-    }
     pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.add_consumer(consumer).await?),
@@ -41,12 +31,13 @@ impl Dispatcher {
             }
         }
     }
-    #[allow(dead_code)]
-    pub(crate) async fn remove_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
         match self {
-            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.remove_consumer(consumer).await?),
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
             Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.remove_consumer(consumer.consumer_id).await?)
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
             }
         }
     }
