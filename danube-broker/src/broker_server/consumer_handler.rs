@@ -4,6 +4,7 @@ use crate::proto::{
 };
 use crate::{proto::consumer_service_server::ConsumerService, subscription::SubscriptionOptions};
 
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -121,21 +122,25 @@ impl ConsumerService for DanubeServerImpl {
             return Err(status);
         };
 
-        let mut rx_guard = rx.lock().await;
+        let rx_cloned = Arc::clone(&rx);
 
-        while let Some(message) = rx_guard.recv().await {
-            let stream_message = StreamMessage {
-                request_id: 1, // Placeholder; ideally, map this to a proper request ID
-                payload: message.payload,
-                metadata: message.metadata,
-            };
+        tokio::spawn(async move {
+            let mut rx_guard = rx_cloned.lock().await;
 
-            if grpc_tx.send(Ok(stream_message)).await.is_err() {
-                // Error handling for when the client disconnects
-                warn!("Client disconnected for consumer_id: {}", consumer_id);
-                break;
+            while let Some(message) = rx_guard.recv().await {
+                let stream_message = StreamMessage {
+                    request_id: 1, // Placeholder; ideally, map this to a proper request ID
+                    payload: message.payload,
+                    metadata: message.metadata,
+                };
+
+                if grpc_tx.send(Ok(stream_message)).await.is_err() {
+                    // Error handling for when the client disconnects
+                    warn!("Client disconnected for consumer_id: {}", consumer_id);
+                    break;
+                }
             }
-        }
+        });
 
         Ok(Response::new(ReceiverStream::new(grpc_rx)))
     }
