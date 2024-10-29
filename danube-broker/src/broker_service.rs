@@ -2,15 +2,16 @@ use anyhow::{anyhow, Result};
 use metrics::gauge;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tonic::{Code, Status};
 use tracing::{info, warn};
 
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
+use crate::subscription::ConsumerInfo;
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
-    consumer::Consumer,
+    consumer::MessageToSend,
     error_message::create_error_status,
     policies::Policies,
     resources::Resources,
@@ -473,16 +474,29 @@ impl BrokerService {
         }
     }
 
-    // finding a Consumer by Consumer ID
-    pub(crate) async fn find_consumer_by_id(
-        &self,
+    // finding the receiver for the provided consumer_id
+    pub(crate) async fn find_consumer_rx(
+        &mut self,
         consumer_id: u64,
-    ) -> Option<Arc<Mutex<Consumer>>> {
+    ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
         if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
             if let Some(topic) = self.topics.get(topic_name) {
                 if let Some(subscription) = topic.subscriptions.lock().await.get(subscription_name)
                 {
-                    return subscription.consumers.get(&consumer_id).cloned();
+                    return subscription.get_consumer_rx(consumer_id);
+                }
+            }
+        }
+        None
+    }
+
+    // finding the ConsumerInfo for the provided consumer_id
+    pub(crate) async fn find_consumer_by_id(&mut self, consumer_id: u64) -> Option<ConsumerInfo> {
+        if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
+            if let Some(topic) = self.topics.get(topic_name) {
+                if let Some(subscription) = topic.subscriptions.lock().await.get(subscription_name)
+                {
+                    return subscription.get_consumer_info(consumer_id);
                 }
             }
         }
@@ -491,8 +505,7 @@ impl BrokerService {
 
     pub(crate) async fn health_consumer(&mut self, consumer_id: u64) -> bool {
         if let Some(consumer) = self.find_consumer_by_id(consumer_id).await {
-            let consumer = consumer.lock().await;
-            return consumer.get_status();
+            return consumer.get_status().await;
         }
         false
     }
@@ -541,10 +554,9 @@ impl BrokerService {
         // the caller of this function should ensure that the topic is served by this broker
 
         if let Some(topic) = self.topics.get_mut(topic_name) {
-            let consumer = topic
+            let consumer_id = topic
                 .subscribe(topic_name, subscription_options.clone())
                 .await?;
-            let consumer_id = consumer.lock().await.consumer_id;
 
             // insert into consumer_index for efficient searches and retrievals
             self.consumer_index.insert(

@@ -1,14 +1,13 @@
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tracing::{trace, warn};
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
-    consumers: Vec<Arc<Mutex<Consumer>>>,
-    active_consumer: RwLock<Option<Arc<Mutex<Consumer>>>>,
+    consumers: Vec<ConsumerInfo>,
+    active_consumer: RwLock<Option<ConsumerInfo>>,
 }
 
 impl DispatcherSingleConsumer {
@@ -25,11 +24,9 @@ impl DispatcherSingleConsumer {
 
         let mut candidate = None;
 
-        for consumer in &self.consumers {
-            let guard = consumer.lock().await;
-            // validates that the consumer has called the receive methods which populates the Consumer tx field
-            if guard.tx.is_some() && guard.status {
-                candidate = Some(consumer.clone());
+        for consumer_info in &self.consumers {
+            if consumer_info.get_status().await {
+                candidate = Some(consumer_info.clone());
                 break;
             }
         }
@@ -59,12 +56,8 @@ impl DispatcherSingleConsumer {
         // 2. filter the messages for consumers
         // 3. other permits like dispatch rate limiter, quota etc
 
-        let mut consumer_guard = active_consumer.lock().await;
-
         // check if the consumer is active
-        if !consumer_guard.status {
-            drop(consumer_guard);
-
+        if !active_consumer.get_status().await {
             // Pick a new active consumer
             if !self.pick_active_consumer().await {
                 return Err(anyhow!(
@@ -72,32 +65,28 @@ impl DispatcherSingleConsumer {
                 ));
             }
         } else {
-            consumer_guard.send_messages(messages, 1).await?;
+            active_consumer.tx_broker.send(messages).await?;
         }
 
         Ok(())
     }
 
     // manage the addition of consumers to the dispatcher
-    pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
+    pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
         // Handle Exclusive Subscription
         // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
-        let consumer_subscription_type;
 
-        {
-            let consumer_guard = consumer.lock().await;
-            consumer_subscription_type = consumer_guard.subscription_type;
+        // if the subscription is Shared should not be routed to this dispatcher
+        if consumer.sub_options.subscription_type == 1 {
+            return Err(anyhow!(
+                "Erroneous routing, Shared subscription should use dispatcher multiple consumer"
+            ));
+        }
 
-            // if the subscription is Shared should not be routed to this dispatcher
-            if consumer_subscription_type == 1 {
-                return Err(anyhow!("Erroneous routing, Shared subscription should use dispatcher multiple consumer"));
-            }
-
-            if consumer_subscription_type == 0 && !self.consumers.is_empty() {
-                // connect to active consumer self.active_consumer
-                warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer_guard.consumer_id);
-                return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
-            }
+        if consumer.sub_options.subscription_type == 0 && !self.consumers.is_empty() {
+            // connect to active consumer self.active_consumer
+            warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer.consumer_id);
+            return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
         }
 
         if self.consumers.is_empty() {
@@ -108,65 +97,35 @@ impl DispatcherSingleConsumer {
             }
         }
 
-        // add Exclusive and Failover consumer to dispatcher
-        self.consumers.push(consumer.clone());
-
-        let consumer_name;
-
-        {
-            let consumer_guard = consumer.lock().await;
-            consumer_name = consumer_guard.consumer_name.clone();
-        }
-
         trace!(
             "The dispatcher DispatcherSingleConsumer has added the consumer {}",
-            consumer_name
+            consumer.sub_options.consumer_name
         );
 
+        // add Exclusive and Failover consumer to dispatcher
+        self.consumers.push(consumer);
+
         Ok(())
     }
 
-    // manage the removal of consumers from the dispatcher
-    #[allow(dead_code)]
-    pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
-        // Find the position asynchronously
-        let pos = {
-            let mut pos = None;
-            for (index, x) in self.consumers.iter().enumerate() {
-                if x.lock().await.consumer_id == consumer.consumer_id {
-                    pos = Some(index);
-                    break;
-                }
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+        self.consumers
+            .retain(|consumer| consumer.consumer_id != consumer_id);
+
+        // Acquire a write lock on active_consumer to modify it
+        let mut active_consumer = self.active_consumer.write().await;
+
+        // Check if the active_consumer matches the consumer_id and set to None if so
+        if let Some(ref act_consumer) = *active_consumer {
+            if act_consumer.consumer_id == consumer_id {
+                *active_consumer = None;
             }
-            pos
-        };
-
-        // If a position was found, remove the consumer at that position
-        if let Some(pos) = pos {
-            self.consumers.remove(pos);
         }
-
-        // Check if the consumers list is empty and update the active consumer
-        if self.consumers.is_empty() {
-            self.active_consumer = None.into();
-        }
-
-        let _ = self.pick_active_consumer();
 
         Ok(())
     }
 
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
-        let mut consumers = Vec::new();
-
-        for consumer in self.consumers.iter() {
-            let consumer_id = consumer.lock().await.disconnect();
-            consumers.push(consumer_id)
-        }
-        Ok(consumers)
-    }
-
-    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
+    pub(crate) fn get_consumers(&self) -> &Vec<ConsumerInfo> {
         &self.consumers
     }
 }

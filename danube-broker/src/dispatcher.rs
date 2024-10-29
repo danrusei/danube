@@ -1,8 +1,6 @@
 use anyhow::Result;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_single_consumer;
@@ -25,17 +23,7 @@ impl Dispatcher {
             }
         }
     }
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
-        match self {
-            Dispatcher::OneConsumer(dispatcher) => {
-                Ok(dispatcher.disconnect_all_consumers().await?)
-            }
-            Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.disconnect_all_consumers().await?)
-            }
-        }
-    }
-    pub(crate) async fn add_consumer(&mut self, consumer: Arc<Mutex<Consumer>>) -> Result<()> {
+    pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.add_consumer(consumer).await?),
             Dispatcher::MultipleConsumers(dispatcher) => {
@@ -43,17 +31,18 @@ impl Dispatcher {
             }
         }
     }
-    #[allow(dead_code)]
-    pub(crate) async fn remove_consumer(&mut self, consumer: Consumer) -> Result<()> {
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
         match self {
-            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.remove_consumer(consumer).await?),
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
             Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.remove_consumer(consumer.consumer_id).await?)
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
             }
         }
     }
 
-    pub(crate) fn get_consumers(&self) -> &Vec<Arc<Mutex<Consumer>>> {
+    pub(crate) fn get_consumers(&self) -> &Vec<ConsumerInfo> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers(),
             Dispatcher::MultipleConsumers(dispatcher) => dispatcher.get_consumers(),

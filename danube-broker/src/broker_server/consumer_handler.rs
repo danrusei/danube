@@ -4,6 +4,7 @@ use crate::proto::{
 };
 use crate::{proto::consumer_service_server::ConsumerService, subscription::SubscriptionOptions};
 
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -102,18 +103,16 @@ impl ConsumerService for DanubeServerImpl {
         &self,
         request: tonic::Request<ReceiveRequest>,
     ) -> std::result::Result<tonic::Response<Self::ReceiveMessagesStream>, tonic::Status> {
-        let (tx, rx) = mpsc::channel(4); // Buffer size of 4, adjust as needed
-        let (tx_consumer, mut rx_consumer) = mpsc::channel(4);
         let consumer_id = request.into_inner().consumer_id;
 
-        info!(
-            "The Consumer with id: {} requested to receive messages",
-            consumer_id
-        );
+        // Create a new mpsc channel to stream messages to the client via gRPC
+        let (grpc_tx, grpc_rx) = mpsc::channel(4); // Buffer size of 4, adjust as needed
 
-        let service = self.service.lock().await;
+        info!("Consumer {} is ready to receive messages", consumer_id);
 
-        let consumer = if let Some(consumer) = service.find_consumer_by_id(consumer_id).await {
+        let mut service = self.service.lock().await;
+
+        let rx = if let Some(consumer) = service.find_consumer_rx(consumer_id).await {
             consumer
         } else {
             let status = Status::not_found(format!(
@@ -123,41 +122,27 @@ impl ConsumerService for DanubeServerImpl {
             return Err(status);
         };
 
-        // sends the channel's tx to consumer
-        consumer.lock().await.set_tx(tx_consumer);
+        let rx_cloned = Arc::clone(&rx);
 
-        //for each consumer spawn a task to send messages
         tokio::spawn(async move {
-            while let Some(messages) = rx_consumer.recv().await {
-                // TODO! should I respond with request id ??
-                let request_id = 1;
+            let mut rx_guard = rx_cloned.lock().await;
 
-                let stream_messages = StreamMessage {
-                    request_id: request_id,
-                    payload: messages.payload,
-                    metadata: messages.metadata,
+            while let Some(message) = rx_guard.recv().await {
+                let stream_message = StreamMessage {
+                    request_id: 1, // Placeholder; ideally, map this to a proper request ID
+                    payload: message.payload,
+                    metadata: message.metadata,
                 };
 
-                if tx.send(Ok(stream_messages)).await.is_err() {
-                    // Consumer is disconnected or error occurred while sending.
+                if grpc_tx.send(Ok(stream_message)).await.is_err() {
+                    // Error handling for when the client disconnects
+                    warn!("Client disconnected for consumer_id: {}", consumer_id);
                     break;
                 }
-
-                trace!(
-                    "The message with request_id: {} was sent to consumer {}",
-                    request_id,
-                    consumer_id
-                );
             }
-
-            // Exit the loop if rx_consumer is closed or if tx fails to send.
-            warn!(
-                "Consumer {} has disconnected or a message send failure occurred.",
-                consumer_id
-            );
         });
 
-        Ok(Response::new(ReceiverStream::new(rx)))
+        Ok(Response::new(ReceiverStream::new(grpc_rx)))
     }
 
     // Consumer acknowledge the received message
