@@ -1,21 +1,62 @@
 use anyhow::{anyhow, Result};
-use tokio::sync::RwLock;
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    RwLock,
+};
 use tracing::{trace, warn};
 
-use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
+use crate::{
+    consumer::{Consumer, MessageToSend},
+    subscription::ConsumerInfo,
+};
+
+use super::DispatcherCommand;
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
-    consumers: Vec<ConsumerInfo>,
-    active_consumer: RwLock<Option<ConsumerInfo>>,
+    consumers: Vec<Consumer>,
+    active_consumer: RwLock<Option<Consumer>>,
+    rx_disp: Receiver<DispatcherCommand>,
+    tx_response: Sender<Result<()>>,
 }
 
 impl DispatcherSingleConsumer {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(
+        rx_disp: Receiver<DispatcherCommand>,
+        tx_response: Sender<Result<()>>,
+    ) -> Self {
         DispatcherSingleConsumer {
             consumers: Vec::new(),
             active_consumer: RwLock::new(None),
+            rx_disp,
+            tx_response,
         }
+    }
+
+    pub(crate) async fn run(&self) -> Result<()> {
+        loop {
+            if let Some(command) = self.rx_disp.recv().await {
+                let result = match command {
+                    DispatcherCommand::AddConsumer(consumer) => {
+                        self.add_consumer(consumer).await;
+                    }
+                    DispatcherCommand::RemoveConsumer(consumer_id) => {
+                        self.remove_consumer(consumer_id).await;
+                    }
+                    DispatcherCommand::Dispatch(message) => {
+                        self.send_messages(message).await;
+                    }
+                    DispatcherCommand::Shutdown => {
+                        break;
+                    }
+                };
+                // Send the result back through the response channel
+                if let Err(e) = self.tx_response.send(result).await {
+                    warn!("Failed to send dispatcher response: {}", e);
+                }
+            }
+        }
+        Ok(())
     }
 
     // Pick an active consumer for a topic for subscription.
@@ -72,25 +113,25 @@ impl DispatcherSingleConsumer {
     }
 
     // manage the addition of consumers to the dispatcher
-    pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
+    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
         // Handle Exclusive Subscription
         // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
 
         // if the subscription is Shared should not be routed to this dispatcher
-        if consumer.sub_options.subscription_type == 1 {
+        if consumer.subscription_type == 1 {
             return Err(anyhow!(
                 "Erroneous routing, Shared subscription should use dispatcher multiple consumer"
             ));
         }
 
-        if consumer.sub_options.subscription_type == 0 && !self.consumers.is_empty() {
+        if consumer.subscription_type == 0 && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer.consumer_id);
             return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
         }
 
         if self.consumers.is_empty() {
-            self.active_consumer = Some(consumer.clone()).into()
+            self.active_consumer = Some(consumer).into()
         } else {
             if !self.pick_active_consumer().await {
                 return Err(anyhow!("Unable to pick an active Consumer"));
@@ -99,7 +140,7 @@ impl DispatcherSingleConsumer {
 
         trace!(
             "The dispatcher DispatcherSingleConsumer has added the consumer {}",
-            consumer.sub_options.consumer_name
+            consumer.consumer_name
         );
 
         // add Exclusive and Failover consumer to dispatcher

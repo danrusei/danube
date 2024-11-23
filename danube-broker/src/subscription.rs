@@ -10,7 +10,8 @@ use crate::{
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
-        dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
+        dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher, DispatcherCommand,
+        DispatcherInfo,
     },
     utils::get_random_id,
 };
@@ -22,9 +23,8 @@ pub(crate) struct Subscription {
     pub(crate) subscription_name: String,
     pub(crate) subscription_type: i32,
     pub(crate) topic_name: String,
-    // Each consumer has a `mpsc::Sender` channel for sending messages
-    pub(crate) consumers: HashMap<u64, (ConsumerInfo, tokio::task::JoinHandle<()>)>,
-    pub(crate) dispatcher: Option<Dispatcher>,
+    pub(crate) dispatcher: Option<DispatcherInfo>,
+    pub(crate) consumers: HashMap<u64, ConsumerInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,6 @@ pub(crate) struct ConsumerInfo {
     pub(crate) consumer_id: u64,
     pub(crate) sub_options: SubscriptionOptions,
     pub(crate) status: Arc<Mutex<bool>>,
-    pub(crate) tx_broker: mpsc::Sender<MessageToSend>,
     pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
 }
 
@@ -77,8 +76,6 @@ impl Subscription {
         topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<u64> {
-        // for communication with broker
-        let (tx_broker, rx_broker) = mpsc::channel(4);
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
 
@@ -89,39 +86,17 @@ impl Subscription {
             &options.consumer_name,
             options.subscription_type,
             topic_name,
-            rx_broker,
             tx_cons,
             consumer_status.clone(),
         );
-
-        // Spawn consumer task
-        let handle = tokio::spawn(async move {
-            consumer.run().await;
-        });
 
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         let dispatcher = if let Some(dispatcher) = self.dispatcher.as_mut() {
             dispatcher
         } else {
-            let new_dispatcher = match options.subscription_type {
-                // Exclusive
-                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
-
-                // Shared
-                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
-
-                // Failover
-                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
-
-                _ => {
-                    return Err(anyhow!("Should not get here"));
-                }
-            };
-
-            // Set the dispatcher for the subscription
-            self.dispatcher = Some(new_dispatcher);
-
+            let dispatcher_info = self.create_new_dispatcher(options.clone())?;
+            self.dispatcher = Some(dispatcher_info);
             self.dispatcher.as_mut().unwrap()
         };
 
@@ -129,7 +104,6 @@ impl Subscription {
             consumer_id,
             sub_options: options,
             status: consumer_status,
-            tx_broker,
             rx_cons: Arc::new(Mutex::new(rx_cons)),
         };
 
@@ -138,7 +112,10 @@ impl Subscription {
             .insert(consumer_id, (consumer_info.clone(), handle));
 
         // Add the consumer to the dispatcher
-        dispatcher.add_consumer(consumer_info).await?;
+        dispatcher
+            .dispatcher_tx
+            .send(DispatcherCommand::AddConsumer(consumer))
+            .await?;
 
         trace!(
             "A dispatcher {:?} has been added on subscription {}",
@@ -147,6 +124,40 @@ impl Subscription {
         );
 
         Ok(consumer_id)
+    }
+
+    pub(crate) fn create_new_dispatcher(
+        &self,
+        options: SubscriptionOptions,
+    ) -> Result<DispatcherInfo> {
+        //for communication with the dispatcher
+        let (tx_disp, rx_disp) = mpsc::channel(4);
+        let (tx_response, rx_response) = mpsc::channel(4);
+
+        let new_dispatcher = match options.subscription_type {
+            // Exclusive
+            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(rx_disp, tx_response)),
+
+            // Shared
+            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(rx_disp)),
+
+            // Failover
+            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(rx_disp, tx_response)),
+
+            _ => {
+                return Err(anyhow!("Should not get here"));
+            }
+        };
+
+        let dispatcher_handle = tokio::spawn(async move {
+            new_dispatcher.run().await;
+        });
+
+        // Set the dispatcher for the subscription
+        Ok(DispatcherInfo {
+            dispatcher_handle,
+            dispatcher_tx: tx_disp,
+        })
     }
 
     pub(crate) fn get_consumer_rx(

@@ -1,20 +1,22 @@
 use anyhow::{anyhow, Result};
-use std::sync::atomic::AtomicUsize;
+use std::sync::{atomic::AtomicUsize, mpsc::Receiver};
 use tracing::trace;
 
-use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
+use crate::{consumer::MessageToSend, dispatcher::DispatcherCommand, subscription::ConsumerInfo};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
-    consumers: Vec<ConsumerInfo>,
+    consumers: Vec<Consumer>,
     index_consumer: AtomicUsize,
+    rx_disp: Receiver<DispatcherCommand>,
 }
 
 impl DispatcherMultipleConsumers {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(rx_disp: Receiver<DispatcherCommand>) -> Self {
         DispatcherMultipleConsumers {
             consumers: Vec::new(),
             index_consumer: AtomicUsize::new(0),
+            rx_disp,
         }
     }
 
