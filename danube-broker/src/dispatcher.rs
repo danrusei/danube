@@ -1,5 +1,4 @@
 use anyhow::Result;
-use tokio::sync::mpsc;
 
 use crate::consumer::{Consumer, MessageToSend};
 
@@ -7,20 +6,6 @@ pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_single_consumer;
 pub(crate) use dispatcher_multiple_consumers::DispatcherMultipleConsumers;
 pub(crate) use dispatcher_single_consumer::DispatcherSingleConsumer;
-
-#[derive(Debug)]
-pub(crate) struct DispatcherInfo {
-    pub(crate) dispatcher_handle: tokio::task::JoinHandle<()>,
-    pub(crate) dispatcher_tx: mpsc::Sender<DispatcherCommand>,
-}
-
-#[derive(Debug)]
-pub(crate) enum DispatcherCommand {
-    AddConsumer(Consumer),
-    RemoveConsumer(u64),
-    Dispatch(MessageToSend),
-    Shutdown,
-}
 
 // The dispatchers ensure that messages are routed to consumers according to the semantics of the subscription type
 #[derive(Debug)]
@@ -34,6 +19,42 @@ impl Dispatcher {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.run().await?),
             Dispatcher::MultipleConsumers(dispatcher) => Ok(dispatcher.run().await?),
+        }
+    }
+    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.add_consumer(consumer).await?),
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.add_consumer(consumer).await?)
+            }
+        }
+    }
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
+        }
+    }
+
+    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.disconnect_all_consumers().await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.disconnect_all_consumers().await?)
+            }
+        }
+    }
+
+    pub(crate) fn get_consumers(&self) -> &Vec<Consumer> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers(),
+            Dispatcher::MultipleConsumers(dispatcher) => dispatcher.get_consumers(),
         }
     }
 }

@@ -11,7 +11,7 @@ use crate::{
 
 /// Represents a consumer connected and associated with a Subscription.
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Consumer {
     pub(crate) consumer_id: u64,
     pub(crate) consumer_name: String,

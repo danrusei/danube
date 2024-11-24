@@ -1,61 +1,69 @@
 use anyhow::{anyhow, Result};
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    RwLock,
-};
+use std::sync::Arc;
+use tokio::sync::{mpsc::Receiver, Mutex, RwLock};
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::{Consumer, MessageToSend},
-    subscription::ConsumerInfo,
-};
-
-use super::DispatcherCommand;
+use crate::consumer::{Consumer, MessageToSend};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
     consumers: Vec<Consumer>,
     active_consumer: RwLock<Option<Consumer>>,
-    rx_disp: Receiver<DispatcherCommand>,
-    tx_response: Sender<Result<()>>,
+    rx_disp: Arc<Mutex<Receiver<MessageToSend>>>,
 }
 
 impl DispatcherSingleConsumer {
-    pub(crate) fn new(
-        rx_disp: Receiver<DispatcherCommand>,
-        tx_response: Sender<Result<()>>,
-    ) -> Self {
+    pub(crate) fn new(rx_disp: Arc<Mutex<Receiver<MessageToSend>>>) -> Self {
         DispatcherSingleConsumer {
             consumers: Vec::new(),
             active_consumer: RwLock::new(None),
             rx_disp,
-            tx_response,
         }
     }
 
-    pub(crate) async fn run(&self) -> Result<()> {
+    pub(crate) async fn run(&mut self) -> Result<()> {
         loop {
-            if let Some(command) = self.rx_disp.recv().await {
-                let result = match command {
-                    DispatcherCommand::AddConsumer(consumer) => {
-                        self.add_consumer(consumer).await;
-                    }
-                    DispatcherCommand::RemoveConsumer(consumer_id) => {
-                        self.remove_consumer(consumer_id).await;
-                    }
-                    DispatcherCommand::Dispatch(message) => {
-                        self.send_messages(message).await;
-                    }
-                    DispatcherCommand::Shutdown => {
-                        break;
-                    }
-                };
-                // Send the result back through the response channel
-                if let Err(e) = self.tx_response.send(result).await {
-                    warn!("Failed to send dispatcher response: {}", e);
-                }
+            let mut rx = self.rx_disp.lock().await;
+            if let Some(_message) = rx.recv().await {
+                todo!();
+            };
+        }
+        Ok(())
+    }
+    // manage the addition of consumers to the dispatcher
+    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
+        // Handle Exclusive Subscription
+        // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
+
+        // if the subscription is Shared should not be routed to this dispatcher
+        if consumer.subscription_type == 1 {
+            return Err(anyhow!(
+                "Erroneous routing, Shared subscription should use dispatcher multiple consumer"
+            ));
+        }
+
+        if consumer.subscription_type == 0 && !self.consumers.is_empty() {
+            // connect to active consumer self.active_consumer
+            warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer.consumer_id);
+            return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
+        }
+
+        if self.consumers.is_empty() {
+            self.active_consumer = Some(consumer.clone()).into()
+        } else {
+            if !self.pick_active_consumer().await {
+                return Err(anyhow!("Unable to pick an active Consumer"));
             }
         }
+
+        trace!(
+            "The dispatcher DispatcherSingleConsumer has added the consumer {}",
+            consumer.consumer_name
+        );
+
+        // add Exclusive and Failover consumer to dispatcher
+        self.consumers.push(consumer);
+
         Ok(())
     }
 
@@ -81,72 +89,18 @@ impl DispatcherSingleConsumer {
         }
     }
 
-    // sending messages to an active consumer
-    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-        // Try to acquire the read lock on the active consumer
-        let active_consumer = {
-            let guard = self.active_consumer.read().await;
-            match &*guard {
-                Some(consumer) => consumer.clone(),
-                None => return Err(anyhow::anyhow!("There is no active Consumer")),
-            }
-        };
+    pub(crate) async fn disconnect_all_consumers(&mut self) -> Result<Vec<u64>> {
+        let mut consumers = Vec::new();
 
-        //Todo!
-        // 1. check first if the Consumer allow to send the messages
-        // 2. filter the messages for consumers
-        // 3. other permits like dispatch rate limiter, quota etc
-
-        // check if the consumer is active
-        if !active_consumer.get_status().await {
-            // Pick a new active consumer
-            if !self.pick_active_consumer().await {
-                return Err(anyhow!(
-                    "There is no active consumer to dispatch the message"
-                ));
-            }
-        } else {
-            active_consumer.tx_broker.send(messages).await?;
+        for consumer in self.consumers.iter() {
+            consumers.push(consumer.consumer_id)
         }
 
-        Ok(())
-    }
-
-    // manage the addition of consumers to the dispatcher
-    pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
-        // Handle Exclusive Subscription
-        // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
-
-        // if the subscription is Shared should not be routed to this dispatcher
-        if consumer.subscription_type == 1 {
-            return Err(anyhow!(
-                "Erroneous routing, Shared subscription should use dispatcher multiple consumer"
-            ));
+        for consumer_id in consumers.iter() {
+            self.remove_consumer(consumer_id.clone()).await?;
         }
 
-        if consumer.subscription_type == 0 && !self.consumers.is_empty() {
-            // connect to active consumer self.active_consumer
-            warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer.consumer_id);
-            return Err(anyhow!("Not allowed to add the Consumer, the Exclusive subscription can't be shared with other consumers"));
-        }
-
-        if self.consumers.is_empty() {
-            self.active_consumer = Some(consumer).into()
-        } else {
-            if !self.pick_active_consumer().await {
-                return Err(anyhow!("Unable to pick an active Consumer"));
-            }
-        }
-
-        trace!(
-            "The dispatcher DispatcherSingleConsumer has added the consumer {}",
-            consumer.consumer_name
-        );
-
-        // add Exclusive and Failover consumer to dispatcher
-        self.consumers.push(consumer);
-
-        Ok(())
+        Ok(consumers)
     }
 
     pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
@@ -166,7 +120,7 @@ impl DispatcherSingleConsumer {
         Ok(())
     }
 
-    pub(crate) fn get_consumers(&self) -> &Vec<ConsumerInfo> {
+    pub(crate) fn get_consumers(&self) -> &Vec<Consumer> {
         &self.consumers
     }
 }
