@@ -103,7 +103,11 @@ impl Subscription {
             let shared_rx = Arc::new(Mutex::new(rx_disp));
             let rx_clone = Arc::clone(&shared_rx);
 
-            let dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
+            let mut dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
+
+            // Start the dispatcher here
+            dispatcher.run().await;
+
             self.dispatcher = Some(dispatcher);
             self.tx_disp = Some(tx_disp);
             self.dispatcher.as_mut().unwrap()
@@ -150,10 +154,6 @@ impl Subscription {
                 return Err(anyhow!("Should not get here"));
             }
         };
-
-        let _dispatcher_handle = tokio::spawn(async move {
-            new_dispatcher.run().await;
-        });
 
         Ok(new_dispatcher)
     }

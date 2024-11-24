@@ -5,10 +5,10 @@ use tracing::{trace, warn};
 
 use crate::consumer::{Consumer, MessageToSend};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct DispatcherSingleConsumer {
     consumers: Vec<Consumer>,
-    active_consumer: RwLock<Option<Consumer>>,
+    active_consumer: Arc<RwLock<Option<Consumer>>>,
     rx_disp: Arc<Mutex<Receiver<MessageToSend>>>,
 }
 
@@ -16,20 +16,59 @@ impl DispatcherSingleConsumer {
     pub(crate) fn new(rx_disp: Arc<Mutex<Receiver<MessageToSend>>>) -> Self {
         DispatcherSingleConsumer {
             consumers: Vec::new(),
-            active_consumer: RwLock::new(None),
+            active_consumer: Arc::new(RwLock::new(None)),
             rx_disp,
         }
     }
 
     pub(crate) async fn run(&mut self) -> Result<()> {
-        loop {
-            let mut rx = self.rx_disp.lock().await;
-            if let Some(_message) = rx.recv().await {
-                todo!();
-            };
-        }
+        let rx_disp_cloned = self.rx_disp.clone();
+        let dispatcher = Arc::new(self.clone());
+        tokio::spawn(async move {
+            loop {
+                let mut rx = rx_disp_cloned.lock().await;
+                if let Some(message) = rx.recv().await {
+                    dispatcher.send_messages(message).await;
+                };
+            }
+        });
         Ok(())
     }
+
+    // sending messages to an active consumer
+    pub(crate) async fn send_messages(&self, message: MessageToSend) -> Result<()> {
+        // Try to acquire the read lock on the active consumer
+        let mut active_consumer = {
+            let guard = self.active_consumer.read().await;
+            match &*guard {
+                Some(consumer) => consumer.clone(),
+                None => return Err(anyhow::anyhow!("There is no active Consumer")),
+            }
+        };
+
+        //Todo!
+        // 1. check first if the Consumer allow to send the messages
+        // 2. filter the messages for consumers
+        // 3. other permits like dispatch rate limiter, quota etc
+
+        let consumer_status = active_consumer.status.lock().await;
+
+        // check if the consumer is active
+        if !consumer_status.to_owned() {
+            // Pick a new active consumer
+            if !self.pick_active_consumer().await {
+                return Err(anyhow!(
+                    "There is no active consumer to dispatch the message"
+                ));
+            }
+        } else {
+            drop(consumer_status);
+            active_consumer.send_message(message).await?;
+        }
+
+        Ok(())
+    }
+
     // manage the addition of consumers to the dispatcher
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
         // Handle Exclusive Subscription
@@ -49,7 +88,7 @@ impl DispatcherSingleConsumer {
         }
 
         if self.consumers.is_empty() {
-            self.active_consumer = Some(consumer.clone()).into()
+            self.active_consumer = Arc::new(Some(consumer.clone()).into())
         } else {
             if !self.pick_active_consumer().await {
                 return Err(anyhow!("Unable to pick an active Consumer"));

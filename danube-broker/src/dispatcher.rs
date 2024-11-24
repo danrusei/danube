@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::consumer::Consumer;
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_single_consumer;
@@ -15,7 +15,7 @@ pub(crate) enum Dispatcher {
 }
 
 impl Dispatcher {
-    pub(crate) async fn run(&self) -> Result<()> {
+    pub(crate) async fn run(&mut self) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.run().await?),
             Dispatcher::MultipleConsumers(dispatcher) => Ok(dispatcher.run().await?),
@@ -40,7 +40,7 @@ impl Dispatcher {
         }
     }
 
-    pub(crate) async fn disconnect_all_consumers(&self) -> Result<Vec<u64>> {
+    pub(crate) async fn disconnect_all_consumers(&mut self) -> Result<Vec<u64>> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => {
                 Ok(dispatcher.disconnect_all_consumers().await?)
