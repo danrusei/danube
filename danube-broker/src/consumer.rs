@@ -1,11 +1,11 @@
 use anyhow::Result;
-use metrics::counter;
+use metrics::{counter, gauge};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{trace, warn};
 
 use crate::{
-    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER},
+    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER, TOPIC_CONSUMERS},
     proto::MessageMetadata,
 };
 
@@ -97,9 +97,9 @@ impl Consumer {
 
     // closes the consumer from server-side and inform the client through health_check mechanism
     // to disconnect consumer
-    // pub(crate) async fn disconnect(&mut self) -> u64 {
-    //     gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
-    //     *self.status.lock().await = false;
-    //     self.consumer_id
-    // }
+    pub(crate) async fn disconnect(&mut self) -> u64 {
+        gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
+        *self.status.lock().await = false;
+        self.consumer_id
+    }
 }

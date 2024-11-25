@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
 use std::sync::{atomic::AtomicUsize, Arc};
 use tokio::sync::{mpsc::Receiver, Mutex};
-use tracing::trace;
+use tracing::{trace, warn};
 
 use crate::consumer::{Consumer, MessageToSend};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct DispatcherMultipleConsumers {
     consumers: Vec<Consumer>,
-    index_consumer: AtomicUsize,
+    index_consumer: Arc<AtomicUsize>,
     rx_disp: Arc<Mutex<Receiver<MessageToSend>>>,
 }
 
@@ -16,19 +16,22 @@ impl DispatcherMultipleConsumers {
     pub(crate) fn new(rx_disp: Arc<Mutex<Receiver<MessageToSend>>>) -> Self {
         DispatcherMultipleConsumers {
             consumers: Vec::new(),
-            index_consumer: AtomicUsize::new(0),
+            index_consumer: Arc::new(AtomicUsize::new(0)),
             rx_disp,
         }
     }
 
     pub(crate) async fn run(&mut self) -> Result<()> {
         let rx_disp_cloned = self.rx_disp.clone();
+        let dispatcher = Arc::new(self.clone());
         tokio::spawn(async move {
             loop {
                 let mut rx = rx_disp_cloned.lock().await;
-                if let Some(_message) = rx.recv().await {
-                    todo!();
-                };
+                if let Some(message) = rx.recv().await {
+                    if let Err(error) = dispatcher.send_messages(message).await {
+                        warn!("Error sending messages: {}", error);
+                    };
+                }
             }
         });
         Ok(())
@@ -46,20 +49,19 @@ impl DispatcherMultipleConsumers {
         &self.consumers
     }
 
-    // pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-    //     // Attempt to get an active consumer and send messages
-    //     if let Ok(consumer) = self.find_next_active_consumer().await {
-    //         //let batch_size = 1; // to be calculated
-    //         consumer.tx_broker.send(messages).await?;
-    //         trace!(
-    //             "Dispatcher is sending the message to consumer: {}",
-    //             consumer.consumer_id
-    //         );
-    //         Ok(())
-    //     } else {
-    //         Err(anyhow!("There are no active consumers on this dispatcher"))
-    //     }
-    // }
+    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
+        // Attempt to get an active consumer and send messages
+        if let Ok(mut consumer) = self.find_next_active_consumer().await {
+            consumer.send_message(messages).await?;
+            trace!(
+                "Dispatcher is sending the message to consumer: {}",
+                consumer.consumer_id
+            );
+            Ok(())
+        } else {
+            Err(anyhow!("There are no active consumers on this dispatcher"))
+        }
+    }
 
     async fn find_next_active_consumer(&self) -> Result<Consumer> {
         let num_consumers = self.consumers.len();

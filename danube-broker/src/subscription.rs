@@ -1,12 +1,10 @@
 use anyhow::{anyhow, Ok, Result};
-use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use tracing::trace;
 
 use crate::{
-    broker_metrics::TOPIC_CONSUMERS,
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
@@ -40,9 +38,9 @@ impl ConsumerInfo {
     pub(crate) async fn get_status(&self) -> bool {
         *self.status.lock().await
     }
-    pub(crate) async fn set_status_false(&self) -> () {
-        *self.status.lock().await = false
-    }
+    // pub(crate) async fn set_status_false(&self) -> () {
+    //     *self.status.lock().await = false
+    // }
     pub(crate) async fn set_status_true(&self) -> () {
         *self.status.lock().await = true
     }
@@ -106,7 +104,9 @@ impl Subscription {
             let mut dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
 
             // Start the dispatcher here
-            dispatcher.run().await;
+            if let Err(error) = dispatcher.run().await {
+                return Err(anyhow!("Failed to start dispatcher: {}", error));
+            };
 
             self.dispatcher = Some(dispatcher);
             self.tx_disp = Some(tx_disp);
@@ -199,7 +199,7 @@ impl Subscription {
     pub(crate) async fn disconnect(&mut self) -> Result<Vec<u64>> {
         let mut consumers_id = Vec::new();
 
-        if let Some(dispatcher) = &self.dispatcher {
+        if let Some(dispatcher) = self.dispatcher.as_mut() {
             let mut disconnected_consumers = dispatcher.disconnect_all_consumers().await?;
             consumers_id.append(&mut disconnected_consumers);
         }

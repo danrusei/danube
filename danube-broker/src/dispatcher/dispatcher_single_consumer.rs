@@ -28,7 +28,9 @@ impl DispatcherSingleConsumer {
             loop {
                 let mut rx = rx_disp_cloned.lock().await;
                 if let Some(message) = rx.recv().await {
-                    dispatcher.send_messages(message).await;
+                    if let Err(error) = dispatcher.send_messages(message).await {
+                        warn!("Error sending messages: {}", error);
+                    }
                 };
             }
         });
@@ -143,6 +145,15 @@ impl DispatcherSingleConsumer {
     }
 
     pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+        // Find and disconnect the consumer before removing it
+        if let Some(consumer) = self
+            .consumers
+            .iter_mut()
+            .find(|c| c.consumer_id == consumer_id)
+        {
+            consumer.disconnect().await;
+        }
+
         self.consumers
             .retain(|consumer| consumer.consumer_id != consumer_id);
 

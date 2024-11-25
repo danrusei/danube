@@ -29,16 +29,16 @@ impl Dispatcher {
             }
         }
     }
-    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
-        match self {
-            Dispatcher::OneConsumer(dispatcher) => {
-                Ok(dispatcher.remove_consumer(consumer_id).await?)
-            }
-            Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.remove_consumer(consumer_id).await?)
-            }
-        }
-    }
+    // pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+    //     match self {
+    //         Dispatcher::OneConsumer(dispatcher) => {
+    //             Ok(dispatcher.remove_consumer(consumer_id).await?)
+    //         }
+    //         Dispatcher::MultipleConsumers(dispatcher) => {
+    //             Ok(dispatcher.remove_consumer(consumer_id).await?)
+    //         }
+    //     }
+    // }
 
     pub(crate) async fn disconnect_all_consumers(&mut self) -> Result<Vec<u64>> {
         match self {
