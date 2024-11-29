@@ -68,7 +68,6 @@ impl DispatcherMultipleConsumers {
 
         for _ in 0..num_consumers {
             let consumer = self.get_next_consumer()?;
-
             if !consumer.get_status().await {
                 continue;
             }

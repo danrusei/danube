@@ -93,25 +93,26 @@ impl Subscription {
 
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
-        let dispatcher = if let Some(dispatcher) = self.dispatcher.as_mut() {
-            dispatcher
-        } else {
+        if self.dispatcher.is_none() {
             //for communication with the dispatcher
             let (tx_disp, rx_disp) = mpsc::channel(4);
             let shared_rx = Arc::new(Mutex::new(rx_disp));
             let rx_clone = Arc::clone(&shared_rx);
 
-            let mut dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
+            let mut new_dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
 
             // Start the dispatcher here
-            if let Err(error) = dispatcher.run().await {
+            if let Err(error) = new_dispatcher.run().await {
                 return Err(anyhow!("Failed to start dispatcher: {}", error));
             };
 
-            self.dispatcher = Some(dispatcher);
             self.tx_disp = Some(tx_disp);
-            self.dispatcher.as_mut().unwrap()
+            self.dispatcher = Some(new_dispatcher);
         };
+
+        let dispatcher = self.dispatcher.as_mut().unwrap();
+        // Add the consumer to the dispatcher
+        dispatcher.add_consumer(consumer).await?;
 
         let consumer_info = ConsumerInfo {
             consumer_id,
@@ -123,12 +124,9 @@ impl Subscription {
         // Insert the consumer into the subscription's consumer list
         self.consumers.insert(consumer_id, consumer_info.clone());
 
-        // Add the consumer to the dispatcher
-        dispatcher.add_consumer(consumer).await?;
-
         trace!(
             "A dispatcher {:?} has been added on subscription {}",
-            dispatcher,
+            &dispatcher,
             self.subscription_name
         );
 

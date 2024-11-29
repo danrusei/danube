@@ -54,7 +54,6 @@ impl DispatcherSingleConsumer {
         // 3. other permits like dispatch rate limiter, quota etc
 
         let consumer_status = active_consumer.status.lock().await;
-
         // check if the consumer is active
         if !consumer_status.to_owned() {
             // Pick a new active consumer
@@ -73,9 +72,6 @@ impl DispatcherSingleConsumer {
 
     // manage the addition of consumers to the dispatcher
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
-        // Handle Exclusive Subscription
-        // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
-
         // if the subscription is Shared should not be routed to this dispatcher
         if consumer.subscription_type == 1 {
             return Err(anyhow!(
@@ -83,6 +79,8 @@ impl DispatcherSingleConsumer {
             ));
         }
 
+        // Handle Exclusive Subscription
+        // The consumer addition is not allowed if there are consumers in the list and Subscription is Exclusive
         if consumer.subscription_type == 0 && !self.consumers.is_empty() {
             // connect to active consumer self.active_consumer
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", consumer.consumer_id);
