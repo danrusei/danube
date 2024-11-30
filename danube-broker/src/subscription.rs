@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Ok, Result};
+use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use tracing::trace;
 
 use crate::{
+    broker_metrics::TOPIC_CONSUMERS,
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
@@ -21,8 +23,6 @@ pub(crate) struct Subscription {
     pub(crate) subscription_type: i32,
     pub(crate) topic_name: String,
     pub(crate) dispatcher: Option<Dispatcher>,
-    pub(crate) tx_disp: Option<mpsc::Sender<MessageToSend>>,
-    pub(crate) rx_disp: Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>>,
     pub(crate) consumers: HashMap<u64, ConsumerInfo>,
 }
 
@@ -38,9 +38,9 @@ impl ConsumerInfo {
     pub(crate) async fn get_status(&self) -> bool {
         *self.status.lock().await
     }
-    // pub(crate) async fn set_status_false(&self) -> () {
-    //     *self.status.lock().await = false
-    // }
+    pub(crate) async fn set_status_false(&self) -> () {
+        *self.status.lock().await = false
+    }
     pub(crate) async fn set_status_true(&self) -> () {
         *self.status.lock().await = true
     }
@@ -66,8 +66,6 @@ impl Subscription {
             subscription_type: sub_options.subscription_type,
             topic_name: topic_name.into(),
             dispatcher: None,
-            tx_disp: None,
-            rx_disp: None,
             consumers: HashMap::new(),
         }
     }
@@ -94,19 +92,8 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
-            //for communication with the dispatcher
-            let (tx_disp, rx_disp) = mpsc::channel(4);
-            let shared_rx = Arc::new(Mutex::new(rx_disp));
-            let rx_clone = Arc::clone(&shared_rx);
+            let new_dispatcher = self.create_new_dispatcher(options.clone())?;
 
-            let mut new_dispatcher = self.create_new_dispatcher(options.clone(), rx_clone)?;
-
-            // Start the dispatcher here
-            if let Err(error) = new_dispatcher.run().await {
-                return Err(anyhow!("Failed to start dispatcher: {}", error));
-            };
-
-            self.tx_disp = Some(tx_disp);
             self.dispatcher = Some(new_dispatcher);
         };
 
@@ -133,20 +120,16 @@ impl Subscription {
         Ok(consumer_id)
     }
 
-    pub(crate) fn create_new_dispatcher(
-        &self,
-        options: SubscriptionOptions,
-        rx_disp: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
-    ) -> Result<Dispatcher> {
+    pub(crate) fn create_new_dispatcher(&self, options: SubscriptionOptions) -> Result<Dispatcher> {
         let new_dispatcher = match options.subscription_type {
             // Exclusive
-            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(rx_disp)),
+            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
             // Shared
-            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new(rx_disp)),
+            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
 
             // Failover
-            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new(rx_disp)),
+            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
             _ => {
                 return Err(anyhow!("Should not get here"));
@@ -158,18 +141,8 @@ impl Subscription {
 
     pub(crate) async fn send_message_to_dispatcher(&self, message: MessageToSend) -> Result<()> {
         // Try to send the message
-        if let Some(tx_disp) = &self.tx_disp {
-            if tx_disp.try_send(message.clone()).is_err() {
-                // Buffer is full; drop the oldest message
-                let mut rx = self.rx_disp.as_ref().unwrap().lock().await;
-                let _ = rx.try_recv();
-
-                //try again
-                if tx_disp.try_send(message).is_err() {
-                    //this is something wrong with the dispatcher
-                    return Err(anyhow!("Failed to send message to dispatcher"));
-                }
-            }
+        if let Some(dispatcher) = self.dispatcher.as_ref() {
+            dispatcher.dispatch_message(message).await?;
         } else {
             return Err(anyhow!("Dispatcher not initialized"));
         }
@@ -193,13 +166,28 @@ impl Subscription {
         None
     }
 
+    // Get Consumers
+    pub(crate) fn get_consumers_info(&self) -> Vec<ConsumerInfo> {
+        let consumers = self.consumers.values().cloned().collect::<Vec<_>>();
+        consumers
+    }
+
     // handles the disconnection of consumers associated with the subscription.
     pub(crate) async fn disconnect(&mut self) -> Result<Vec<u64>> {
         let mut consumers_id = Vec::new();
 
+        for (consumer_id, consumer_info) in self.consumers.iter_mut() {
+            if consumer_info.get_status().await {
+                // if consumer exist and its status is true, then set the status to false
+                consumer_info.set_status_false().await;
+                consumers_id.push(*consumer_id);
+            }
+            gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
+        }
+
+        // Disconnect all consumers
         if let Some(dispatcher) = self.dispatcher.as_mut() {
-            let mut disconnected_consumers = dispatcher.disconnect_all_consumers().await?;
-            consumers_id.append(&mut disconnected_consumers);
+            dispatcher.disconnect_all_consumers().await?;
         }
 
         Ok(consumers_id)
@@ -221,24 +209,10 @@ impl Subscription {
         None
     }
 
-    // Get Consumers
-    pub(crate) fn get_consumers(&self) -> Vec<u64> {
-        self.consumers.keys().cloned().collect()
-    }
-
     pub(crate) fn is_exclusive(&self) -> bool {
         if self.subscription_type == 0 {
             return true;
         }
         return false;
-    }
-
-    // Get Dispatcher
-    pub(crate) fn get_dispatcher(&self) -> Option<&Dispatcher> {
-        // maybe create  a trait that the both dispatachers will implement
-        if let Some(dispatcher) = &self.dispatcher {
-            return Some(dispatcher);
-        }
-        None
     }
 }

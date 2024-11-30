@@ -194,7 +194,7 @@ impl Topic {
                 sub_metadata,
             ));
 
-        if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
+        if subscription.is_exclusive() && !subscription.get_consumers_info().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
             return Err(anyhow!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name));
         }
@@ -236,8 +236,7 @@ impl Topic {
         let sub_guard = self.subscriptions.lock().await;
         let subs = sub_guard.get(subscription)?;
 
-        let disp = subs.get_dispatcher()?;
-        let consumers = disp.get_consumers();
+        let consumers = subs.get_consumers_info();
 
         for consumer_info in consumers {
             if consumer_info.get_status().await {

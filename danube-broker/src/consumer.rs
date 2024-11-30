@@ -1,11 +1,11 @@
 use anyhow::Result;
-use metrics::{counter, gauge};
+use metrics::counter;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{trace, warn};
 
 use crate::{
-    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER, TOPIC_CONSUMERS},
+    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER},
     proto::MessageMetadata,
 };
 
@@ -72,34 +72,5 @@ impl Consumer {
 
     pub(crate) async fn get_status(&self) -> bool {
         *self.status.lock().await
-    }
-
-    // Close the consumer if: a. the connection is dropped
-    // b. all messages were delivered and there are no pending message acks, graceful close connection
-    #[allow(dead_code)]
-    pub(crate) fn close(&self) -> Result<()> {
-        // subscription.remove_consumer(self)
-        todo!()
-    }
-
-    // Unsubscribe consumer from the Subscription
-    #[allow(dead_code)]
-    pub(crate) fn unsubscribe(&self) -> Result<()> {
-        // subscription.unsubscribe(self)
-        todo!()
-    }
-
-    // acked message from client
-    #[allow(dead_code)]
-    pub(crate) fn message_acked(&self) -> Result<()> {
-        todo!()
-    }
-
-    // closes the consumer from server-side and inform the client through health_check mechanism
-    // to disconnect consumer
-    pub(crate) async fn disconnect(&mut self) -> u64 {
-        gauge!(TOPIC_CONSUMERS.name, "topic" => self.topic_name.to_string()).decrement(1);
-        *self.status.lock().await = false;
-        self.consumer_id
     }
 }

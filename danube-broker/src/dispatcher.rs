@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::consumer::Consumer;
+use crate::consumer::{Consumer, MessageToSend};
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_single_consumer;
@@ -14,11 +14,21 @@ pub(crate) enum Dispatcher {
     MultipleConsumers(DispatcherMultipleConsumers),
 }
 
+// Control messages for the dispatcher
+enum DispatcherCommand {
+    AddConsumer(Consumer),
+    RemoveConsumer(u64),
+    DisconnectAllConsumers,
+    DispatchMessage(MessageToSend),
+}
+
 impl Dispatcher {
-    pub(crate) async fn run(&mut self) -> Result<()> {
+    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
         match self {
-            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.run().await?),
-            Dispatcher::MultipleConsumers(dispatcher) => Ok(dispatcher.run().await?),
+            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.dispatch_message(message).await?),
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.dispatch_message(message).await?)
+            }
         }
     }
     pub(crate) async fn add_consumer(&mut self, consumer: Consumer) -> Result<()> {
@@ -29,18 +39,19 @@ impl Dispatcher {
             }
         }
     }
-    // pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
-    //     match self {
-    //         Dispatcher::OneConsumer(dispatcher) => {
-    //             Ok(dispatcher.remove_consumer(consumer_id).await?)
-    //         }
-    //         Dispatcher::MultipleConsumers(dispatcher) => {
-    //             Ok(dispatcher.remove_consumer(consumer_id).await?)
-    //         }
-    //     }
-    // }
+    #[allow(dead_code)]
+    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.remove_consumer(consumer_id).await?)
+            }
+        }
+    }
 
-    pub(crate) async fn disconnect_all_consumers(&mut self) -> Result<Vec<u64>> {
+    pub(crate) async fn disconnect_all_consumers(&mut self) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => {
                 Ok(dispatcher.disconnect_all_consumers().await?)
@@ -48,13 +59,6 @@ impl Dispatcher {
             Dispatcher::MultipleConsumers(dispatcher) => {
                 Ok(dispatcher.disconnect_all_consumers().await?)
             }
-        }
-    }
-
-    pub(crate) fn get_consumers(&self) -> &Vec<Consumer> {
-        match self {
-            Dispatcher::OneConsumer(dispatcher) => dispatcher.get_consumers(),
-            Dispatcher::MultipleConsumers(dispatcher) => dispatcher.get_consumers(),
         }
     }
 }
