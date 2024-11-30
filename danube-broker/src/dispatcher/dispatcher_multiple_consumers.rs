@@ -1,105 +1,121 @@
 use anyhow::{anyhow, Result};
-use std::sync::atomic::AtomicUsize;
-use tracing::trace;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::mpsc;
+use tracing::{trace, warn};
 
-use crate::{consumer::MessageToSend, subscription::ConsumerInfo};
+use crate::{
+    consumer::{Consumer, MessageToSend},
+    dispatcher::DispatcherCommand,
+};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
-    consumers: Vec<ConsumerInfo>,
-    index_consumer: AtomicUsize,
+    control_tx: mpsc::Sender<DispatcherCommand>,
 }
 
 impl DispatcherMultipleConsumers {
     pub(crate) fn new() -> Self {
-        DispatcherMultipleConsumers {
-            consumers: Vec::new(),
-            index_consumer: AtomicUsize::new(0),
-        }
-    }
+        let (control_tx, mut control_rx) = mpsc::channel(16);
 
-    // manage the addition of consumers to the dispatcher
-    pub(crate) async fn add_consumer(&mut self, consumer: ConsumerInfo) -> Result<()> {
-        // checks if adding a new consumer would exceed the maximum allowed consumers for the subscription
-        self.consumers.push(consumer);
+        // Spawn the dispatcher task
+        tokio::spawn(async move {
+            let mut consumers: Vec<Consumer> = Vec::new();
+            let mut index_consumer = AtomicUsize::new(0);
 
-        Ok(())
-    }
-
-    // manage the removal of consumers from the dispatcher
-    pub(crate) async fn remove_consumer(&mut self, consumer_id: u64) -> Result<()> {
-        // Find the position asynchronously
-        let pos = {
-            let mut pos = None;
-            for (index, x) in self.consumers.iter().enumerate() {
-                if x.consumer_id == consumer_id {
-                    pos = Some(index);
-                    break;
+            loop {
+                if let Some(command) = control_rx.recv().await {
+                    match command {
+                        DispatcherCommand::AddConsumer(consumer) => {
+                            consumers.push(consumer);
+                            trace!("Consumer added. Total consumers: {}", consumers.len());
+                        }
+                        DispatcherCommand::RemoveConsumer(consumer_id) => {
+                            consumers.retain(|c| c.consumer_id != consumer_id);
+                            trace!("Consumer removed. Total consumers: {}", consumers.len());
+                        }
+                        DispatcherCommand::DisconnectAllConsumers => {
+                            consumers.clear();
+                            trace!("All consumers disconnected.");
+                        }
+                        DispatcherCommand::DispatchMessage(message) => {
+                            if let Err(error) = Self::handle_dispatch_message(
+                                &mut consumers,
+                                &mut index_consumer,
+                                message,
+                            )
+                            .await
+                            {
+                                warn!("Failed to dispatch message: {}", error);
+                            }
+                        }
+                    }
                 }
             }
-            pos
-        };
+        });
 
-        // If a position was found, remove the consumer at that position
-        if let Some(pos) = pos {
-            self.consumers.remove(pos);
+        DispatcherMultipleConsumers { control_tx }
+    }
+
+    /// Dispatch a message to the active consumer
+    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::DispatchMessage(message))
+            .await
+            .map_err(|err| anyhow!("Failed to dispatch the message {}", err))
+    }
+
+    /// Add a new consumer to the dispatcher
+    pub(crate) async fn add_consumer(&self, consumer: Consumer) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::AddConsumer(consumer))
+            .await
+            .map_err(|_| anyhow!("Failed to send add consumer command"))
+    }
+
+    /// Remove a consumer by its ID
+    #[allow(dead_code)]
+    pub(crate) async fn remove_consumer(&self, consumer_id: u64) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::RemoveConsumer(consumer_id))
+            .await
+            .map_err(|_| anyhow!("Failed to send remove consumer command"))
+    }
+
+    /// Disconnect all consumers
+    pub(crate) async fn disconnect_all_consumers(&self) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::DisconnectAllConsumers)
+            .await
+            .map_err(|_| anyhow!("Failed to send disconnect all consumers command"))
+    }
+
+    /// Dispatch message helper method
+    async fn handle_dispatch_message(
+        consumers: &mut [Consumer],
+        index_consumer: &mut AtomicUsize,
+        message: MessageToSend,
+    ) -> Result<()> {
+        let num_consumers = consumers.len();
+        if num_consumers == 0 {
+            return Err(anyhow!("No consumers available to dispatch the message"));
         }
-
-        Ok(())
-    }
-
-    pub(crate) fn get_consumers(&self) -> &Vec<ConsumerInfo> {
-        &self.consumers
-    }
-
-    pub(crate) async fn send_messages(&self, messages: MessageToSend) -> Result<()> {
-        // Attempt to get an active consumer and send messages
-        if let Ok(consumer) = self.find_next_active_consumer().await {
-            //let batch_size = 1; // to be calculated
-            consumer.tx_broker.send(messages).await?;
-            trace!(
-                "Dispatcher is sending the message to consumer: {}",
-                consumer.consumer_id
-            );
-            Ok(())
-        } else {
-            Err(anyhow!("There are no active consumers on this dispatcher"))
-        }
-    }
-
-    async fn find_next_active_consumer(&self) -> Result<ConsumerInfo> {
-        let num_consumers = self.consumers.len();
 
         for _ in 0..num_consumers {
-            let consumer = self.get_next_consumer()?;
+            let index = index_consumer.fetch_add(1, Ordering::SeqCst) % num_consumers;
+            let consumer = &mut consumers[index];
 
-            if !consumer.get_status().await {
-                continue;
+            if consumer.get_status().await {
+                consumer.send_message(message).await?;
+                trace!(
+                    "Dispatcher sent the message to consumer: {}",
+                    consumer.consumer_id
+                );
+                return Ok(());
             }
-
-            return Ok(consumer);
         }
 
-        return Err(anyhow!("unable to find an active consumer"));
-    }
-
-    pub(crate) fn get_next_consumer(&self) -> Result<ConsumerInfo> {
-        let num_consumers = self.consumers.len();
-
-        if num_consumers == 0 {
-            return Err(anyhow!("There are no consumers left"));
-        }
-
-        // Use modulo to ensure index wraps around
-        let index = self
-            .index_consumer
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-            % num_consumers;
-
-        // Get the consumer at the computed index
-        self.consumers
-            .get(index)
-            .cloned() // Clone the Arc<Mutex<Consumer>> to return
-            .ok_or_else(|| anyhow!("Unable to find the next consumer"))
+        Err(anyhow!(
+            "No active consumers available to handle the message"
+        ))
     }
 }

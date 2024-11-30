@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use metrics::counter;
 use std::collections::{hash_map::Entry, HashMap};
 use tokio::sync::Mutex;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 
 use crate::proto::MessageMetadata;
 use crate::{
@@ -141,19 +141,15 @@ impl Topic {
 
             for (_name, subscription) in subscriptions.iter() {
                 let duplicate_message = message_to_send.clone();
-                if let Some(dispatcher) = subscription.get_dispatcher() {
-                    if let Err(err) = dispatcher.send_messages(duplicate_message).await {
-                        info!(
-                            "The subscription {}, has no active consumers, got error: {} ",
-                            subscription.subscription_name, err
-                        );
-                        to_remove.push(subscription.subscription_name.clone());
-                    }
-                } else {
-                    trace!(
-                        "No dispatcher has been found for subscription {}",
-                        subscription.subscription_name
+                if let Err(err) = subscription
+                    .send_message_to_dispatcher(duplicate_message)
+                    .await
+                {
+                    info!(
+                        "The subscription {}, has no active consumers, got error: {} ",
+                        subscription.subscription_name, err
                     );
+                    to_remove.push(subscription.subscription_name.clone());
                 }
             }
 
@@ -198,7 +194,7 @@ impl Topic {
                 sub_metadata,
             ));
 
-        if subscription.is_exclusive() && !subscription.get_consumers().is_empty() {
+        if subscription.is_exclusive() && !subscription.get_consumers_info().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
             return Err(anyhow!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name));
         }
@@ -240,8 +236,7 @@ impl Topic {
         let sub_guard = self.subscriptions.lock().await;
         let subs = sub_guard.get(subscription)?;
 
-        let disp = subs.get_dispatcher()?;
-        let consumers = disp.get_consumers();
+        let consumers = subs.get_consumers_info();
 
         for consumer_info in consumers {
             if consumer_info.get_status().await {

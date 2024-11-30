@@ -239,14 +239,13 @@ impl ProducerBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
     /// let producer = ProducerBuilder::new()
     ///     .with_topic("my-topic")
     ///     .with_name("my-producer")
     ///     .with_partitions(3)
     ///     .with_schema("my-schema".to_string(), SchemaType::Json("schema-definition".to_string()))
     ///     .build()?;
-    /// ```
+    ///
     pub fn build(self) -> Producer {
         let topic_name = self
             .topic
