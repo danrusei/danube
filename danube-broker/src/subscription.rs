@@ -10,8 +10,11 @@ use crate::{
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
+        dispatcher_reliable_multiple_consumers::DispatcherReliableMultipleConsumers,
+        dispatcher_reliable_single_consumer::DispatcherReliableSingleConsumer,
         dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
     },
+    retention_strategy::RetentionStrategy,
     utils::get_random_id,
 };
 
@@ -74,6 +77,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
+        retention_strategy: &RetentionStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -92,7 +96,7 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
-            let new_dispatcher = self.create_new_dispatcher(options.clone())?;
+            let new_dispatcher = self.create_new_dispatcher(options.clone(), retention_strategy)?;
 
             self.dispatcher = Some(new_dispatcher);
         };
@@ -120,20 +124,42 @@ impl Subscription {
         Ok(consumer_id)
     }
 
-    pub(crate) fn create_new_dispatcher(&self, options: SubscriptionOptions) -> Result<Dispatcher> {
-        let new_dispatcher = match options.subscription_type {
-            // Exclusive
-            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
+    pub(crate) fn create_new_dispatcher(
+        &self,
+        options: SubscriptionOptions,
+        retention_strategy: &RetentionStrategy,
+    ) -> Result<Dispatcher> {
+        let new_dispatcher = match retention_strategy {
+            RetentionStrategy::NonReliable => match options.subscription_type {
+                // Exclusive
+                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
-            // Shared
-            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
+                // Shared
+                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
 
-            // Failover
-            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
+                // Failover
+                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
-            _ => {
-                return Err(anyhow!("Should not get here"));
-            }
+                _ => {
+                    return Err(anyhow!("Should not get here"));
+                }
+            },
+            RetentionStrategy::Reliable(_) => match options.subscription_type {
+                // Exclusive
+                0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new()),
+
+                // Shared
+                1 => {
+                    Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new())
+                }
+
+                // Failover
+                2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new()),
+
+                _ => {
+                    return Err(anyhow!("Should not get here"));
+                }
+            },
         };
 
         Ok(new_dispatcher)

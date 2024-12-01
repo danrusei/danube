@@ -10,6 +10,7 @@ mod metadata_store;
 mod policies;
 mod producer;
 mod resources;
+mod retention_strategy;
 mod schema;
 mod service_configuration;
 mod subscription;
