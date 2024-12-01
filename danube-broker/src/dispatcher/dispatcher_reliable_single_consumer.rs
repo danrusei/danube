@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Result};
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    time::{self, Duration},
+};
 use tracing::{trace, warn};
 
 use crate::{
@@ -7,6 +10,7 @@ use crate::{
     dispatcher::DispatcherCommand,
 };
 
+/// Reliable dispatcher for single consumer, it sends ordered messages to a single consumer
 #[derive(Debug)]
 pub(crate) struct DispatcherReliableSingleConsumer {
     control_tx: mpsc::Sender<DispatcherCommand>,
@@ -27,43 +31,56 @@ impl DispatcherReliableSingleConsumer {
             //
             // the subscription should keep track of acknowledgements from consumers and share with dispatcher?
             // or these should be sent to dispatcher as well ? so the dispatcher to decide
+            // Polling interval for reliable queue
             //
-            // can a dispatcher read from multiple segments ?
-            // or it is not the case as once it completes one segmnet move to the other ?
+            // The dispatcher should mark the segment as acknowledged on the TopicStore
+            // the Subscription should send the next segment to the dispatcher if the dispatcher have no segment to read from
+            // basically when a new message comes, the subscriptions checks also the status of the dispatcher !!!!!!
+            let mut interval = time::interval(Duration::from_millis(100));
 
             loop {
-                if let Some(command) = control_rx.recv().await {
-                    match command {
-                        DispatcherCommand::AddConsumer(consumer) => {
-                            if let Err(e) = Self::handle_add_consumer(
-                                &mut consumers,
-                                &mut active_consumer,
-                                consumer,
-                            )
-                            .await
-                            {
-                                warn!("Failed to add consumer: {}", e);
+                tokio::select! {
+                    Some(command) = control_rx.recv() => {
+                        match command {
+                            DispatcherCommand::AddConsumer(consumer) => {
+                                if let Err(e) = Self::handle_add_consumer(
+                                    &mut consumers,
+                                    &mut active_consumer,
+                                    consumer,
+                                )
+                                .await
+                                {
+                                    warn!("Failed to add consumer: {}", e);
+                                }
                             }
-                        }
-                        DispatcherCommand::RemoveConsumer(consumer_id) => {
-                            Self::handle_remove_consumer(
-                                &mut consumers,
-                                &mut active_consumer,
-                                consumer_id,
-                            )
-                            .await;
-                        }
-                        DispatcherCommand::DisconnectAllConsumers => {
-                            Self::handle_disconnect_all(&mut consumers, &mut active_consumer).await;
-                        }
-                        DispatcherCommand::DispatchMessage(message) => {
-                            if let Err(e) =
-                                Self::handle_dispatch_message(&mut active_consumer, message).await
-                            {
-                                warn!("Failed to dispatch message: {}", e);
+                            DispatcherCommand::RemoveConsumer(consumer_id) => {
+                                Self::handle_remove_consumer(
+                                    &mut consumers,
+                                    &mut active_consumer,
+                                    consumer_id,
+                                )
+                                .await;
+                            }
+                            DispatcherCommand::DisconnectAllConsumers => {
+                                Self::handle_disconnect_all(&mut consumers, &mut active_consumer).await;
+                            }
+                            DispatcherCommand::DispatchMessage(message) => {
+                                unreachable!("Reliable Dispatcher should not receive messages, just segments");
+                            }
+                            DispatcherCommand::DispatchSegment(segment) => {
+                                todo!("Dispatch segment");
                             }
                         }
                     }
+                    // Poll message queue for reliable delivery
+                        _ = interval.tick() => {
+                            // TODO! - don't use the segment if it passed the TTL since closed, go to next segment
+                            // TODO! - send ordered messages from the segment to the consumer
+                            // TODO! - go to next segment if all messages are acknowledged by consumer
+                            if let Err(e) = Self::dispatch_reliable_message(&mut active_consumer, &message_queue).await {
+                                warn!("Failed to dispatch reliable message: {}", e);
+                            }
+                        }
                 }
             }
         });

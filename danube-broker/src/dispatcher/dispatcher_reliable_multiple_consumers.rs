@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    time::{self, Duration},
+};
 use tracing::{trace, warn};
 
 use crate::{
@@ -8,6 +11,7 @@ use crate::{
     dispatcher::DispatcherCommand,
 };
 
+/// Reliable dispatcher for multiple consumers, it sends ordered messages to multiple consumers
 #[derive(Debug)]
 pub(crate) struct DispatcherReliableMultipleConsumers {
     control_tx: mpsc::Sender<DispatcherCommand>,
@@ -22,33 +26,43 @@ impl DispatcherReliableMultipleConsumers {
             let mut consumers: Vec<Consumer> = Vec::new();
             let mut index_consumer = AtomicUsize::new(0);
 
+            // Polling interval for reliable queue
+            let mut interval = time::interval(Duration::from_millis(100));
+
             loop {
-                if let Some(command) = control_rx.recv().await {
-                    match command {
-                        DispatcherCommand::AddConsumer(consumer) => {
-                            consumers.push(consumer);
-                            trace!("Consumer added. Total consumers: {}", consumers.len());
-                        }
-                        DispatcherCommand::RemoveConsumer(consumer_id) => {
-                            consumers.retain(|c| c.consumer_id != consumer_id);
-                            trace!("Consumer removed. Total consumers: {}", consumers.len());
-                        }
-                        DispatcherCommand::DisconnectAllConsumers => {
-                            consumers.clear();
-                            trace!("All consumers disconnected.");
-                        }
-                        DispatcherCommand::DispatchMessage(message) => {
-                            if let Err(error) = Self::handle_dispatch_message(
-                                &mut consumers,
-                                &mut index_consumer,
-                                message,
-                            )
-                            .await
-                            {
-                                warn!("Failed to dispatch message: {}", error);
+                tokio::select! {
+                    Some(command) = control_rx.recv() => {
+                        match command {
+                            DispatcherCommand::AddConsumer(consumer) => {
+                                consumers.push(consumer);
+                                trace!("Consumer added. Total consumers: {}", consumers.len());
+                            }
+                            DispatcherCommand::RemoveConsumer(consumer_id) => {
+                                consumers.retain(|c| c.consumer_id != consumer_id);
+                                trace!("Consumer removed. Total consumers: {}", consumers.len());
+                            }
+                            DispatcherCommand::DisconnectAllConsumers => {
+                                consumers.clear();
+                                trace!("All consumers disconnected.");
+                            }
+                            DispatcherCommand::DispatchMessage(_) => {
+                                unreachable!(
+                                    "Reliable Dispatcher should not receive messages, just segments"
+                                )
+                            }
+                            DispatcherCommand::DispatchSegment(segment) => {
+                                todo!("Dispatching segment: {:?}", &segment);
                             }
                         }
                     }
+                     _ = interval.tick() => {
+                            // TODO! - don't use the segment if it passed the TTL since closed, go to next segment
+                            // TODO! - send ordered messages from the segment to the consumers
+                            // TODO! - go to next segment if all messages are acknowledged by consumers
+                                if let Err(e) = Self::dispatch_reliable_message(&mut active_consumer, &message_queue).await {
+                                    warn!("Failed to dispatch reliable message: {}", e);
+                                }
+                            }
                 }
             }
         });

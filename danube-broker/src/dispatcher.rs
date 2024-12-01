@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::{
+    consumer::{Consumer, MessageToSend},
+    topic_storage::Segment,
+};
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_reliable_multiple_consumers;
@@ -26,6 +29,7 @@ enum DispatcherCommand {
     RemoveConsumer(u64),
     DisconnectAllConsumers,
     DispatchMessage(MessageToSend),
+    DispatchSegment(Segment),
 }
 
 impl Dispatcher {

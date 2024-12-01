@@ -42,6 +42,13 @@ pub(crate) struct Topic {
 
 impl Topic {
     pub(crate) fn new(topic_name: &str, retention_strategy: RetentionStrategy) -> Self {
+        match retention_strategy {
+            RetentionStrategy::Reliable(mut topic_store) => {
+                topic_store.start_lifecycle_management();
+            }
+            _ => {}
+        };
+
         Topic {
             topic_name: topic_name.into(),
             schema: None,
