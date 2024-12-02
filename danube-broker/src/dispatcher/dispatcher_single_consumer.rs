@@ -58,6 +58,11 @@ impl DispatcherSingleConsumer {
                                 "Single consumer dispatcher does not support dispatching segments"
                             );
                         }
+                        DispatcherCommand::MessageAcked(_) => {
+                            unreachable!(
+                                "Non-reliable dispatcher does not care about acked messages"
+                            );
+                        }
                     }
                 }
             }

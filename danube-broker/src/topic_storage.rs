@@ -6,6 +6,7 @@ use crate::consumer::MessageToSend;
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
 /// The segment is immutable after it's closed for writing
+/// The messages in the segment are in the order of arrival
 #[derive(Debug, Clone)]
 pub(crate) struct Segment {
     // Unique segment ID

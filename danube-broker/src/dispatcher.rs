@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::sync::{Arc, RwLock};
 
 use crate::{
     consumer::{Consumer, MessageToSend},
@@ -29,7 +30,8 @@ enum DispatcherCommand {
     RemoveConsumer(u64),
     DisconnectAllConsumers,
     DispatchMessage(MessageToSend),
-    DispatchSegment(Segment),
+    DispatchSegment(Arc<RwLock<Segment>>),
+    MessageAcked(u64),
 }
 
 impl Dispatcher {
@@ -39,11 +41,31 @@ impl Dispatcher {
             Dispatcher::MultipleConsumers(dispatcher) => {
                 Ok(dispatcher.dispatch_message(message).await?)
             }
+            Dispatcher::ReliableOneConsumer(_) => {
+                unreachable!(
+                    "Reliable dispatchers do not receive single messsages, rather segments"
+                )
+            }
+            Dispatcher::ReliableMultipleConsumers(_) => {
+                unreachable!(
+                    "Reliable dispatchers do not receive single messsages, rather segments"
+                )
+            }
+        }
+    }
+    pub(crate) async fn dispatch_segment(&self, segment: Arc<RwLock<Segment>>) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(_) => {
+                unreachable!("Non reliable dispatchers do not receive segments, rather messages")
+            }
+            Dispatcher::MultipleConsumers(_) => {
+                unreachable!("Non reliable dispatchers do not receive segments, rather messages")
+            }
             Dispatcher::ReliableOneConsumer(dispatcher) => {
-                Ok(dispatcher.dispatch_message(message).await?)
+                Ok(dispatcher.dispatch_segment(segment).await?)
             }
             Dispatcher::ReliableMultipleConsumers(dispatcher) => {
-                Ok(dispatcher.dispatch_message(message).await?)
+                Ok(dispatcher.dispatch_segment(segment).await?)
             }
         }
     }
