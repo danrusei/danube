@@ -101,6 +101,9 @@ impl DispatcherReliableSingleConsumer {
                         }
                     }
                     _ = interval.tick() => {
+                        // TODO! - don't use the segment if it passed the TTL since closed, go to next segment
+                            // TODO! - send ordered messages from the segment to the consumers
+                            // TODO! - go to next segment if all messages are acknowledged by consumers
                         if let Some(segment) = &consumer_dispatch.segment {
                             let message = {
                                 let segment_lock = segment.read().unwrap();
