@@ -96,7 +96,9 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
-            let new_dispatcher = self.create_new_dispatcher(options.clone(), retention_strategy)?;
+            let new_dispatcher = self
+                .create_new_dispatcher(options.clone(), retention_strategy)
+                .await?;
 
             self.dispatcher = Some(new_dispatcher);
         };
@@ -124,11 +126,20 @@ impl Subscription {
         Ok(consumer_id)
     }
 
-    pub(crate) fn create_new_dispatcher(
+    pub(crate) async fn create_new_dispatcher(
         &self,
         options: SubscriptionOptions,
         retention_strategy: &RetentionStrategy,
     ) -> Result<Dispatcher> {
+        let last_acknowledged_segment =
+            if let RetentionStrategy::Reliable(reliable_storage) = retention_strategy {
+                reliable_storage
+                    .get_last_acknowledged_segment(&options.subscription_name)
+                    .await?
+            } else {
+                return Err(anyhow!("Should not get here"));
+            };
+
         let new_dispatcher = match retention_strategy {
             RetentionStrategy::NonReliable => match options.subscription_type {
                 // Exclusive
@@ -144,9 +155,12 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            RetentionStrategy::Reliable(_) => match options.subscription_type {
+            RetentionStrategy::Reliable(reliable_storage) => match options.subscription_type {
                 // Exclusive
-                0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new()),
+                0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
+                    reliable_storage.topic_store.clone(),
+                    last_acknowledged_segment,
+                )),
 
                 // Shared
                 1 => {
@@ -154,7 +168,10 @@ impl Subscription {
                 }
 
                 // Failover
-                2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new()),
+                2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
+                    reliable_storage.topic_store.clone(),
+                    last_acknowledged_segment,
+                )),
 
                 _ => {
                     return Err(anyhow!("Should not get here"));

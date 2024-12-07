@@ -10,48 +10,8 @@ use tracing::{trace, warn};
 use crate::{
     consumer::{Consumer, MessageToSend},
     dispatcher::DispatcherCommand,
-    topic_storage::Segment,
+    topic_storage::{Segment, TopicStore},
 };
-
-/// ConsumerDispatch is holding information about consumers and the messages within a segment
-/// It is used to dispatch messages to consumers and to track the progress of the consumer
-#[derive(Debug)]
-pub(crate) struct ConsumerDispatch {
-    // list of consumsers
-    pub(crate) consumers: Vec<Consumer>,
-    // active consumer is the consumer that is currently receiving messages
-    pub(crate) active_consumer: Option<Consumer>,
-    // segment holds the messages to be sent to the consumer
-    // segment is replaced when the consumer is done with the segment and if there is another available segment
-    pub(crate) segment: Option<Arc<RwLock<Segment>>>,
-    // acked messages are the messages from the segment that have been acknowledged by the consumer
-    pub(crate) acked_messages: Vec<bool>,
-    // last acked message index is the index of the last message from the segment that has been acknowledged by the consumer
-    pub(crate) last_acked_message_index: u64,
-}
-
-impl ConsumerDispatch {
-    pub(crate) fn new() -> Self {
-        Self {
-            consumers: Vec::new(),
-            active_consumer: None,
-            segment: None,
-            acked_messages: Vec::new(),
-            last_acked_message_index: 0,
-        }
-    }
-    pub(crate) fn add_consumer(&mut self, consumer: Consumer) {
-        self.consumers.push(consumer.clone());
-        if self.active_consumer.is_none() {
-            self.active_consumer = Some(consumer.clone());
-        }
-
-        trace!(
-            "Consumer {} added to single-consumer dispatcher",
-            consumer.consumer_name
-        );
-    }
-}
 
 /// Reliable dispatcher for single consumer, it sends ordered messages to a single consumer
 #[derive(Debug)]
@@ -60,16 +20,16 @@ pub(crate) struct DispatcherReliableSingleConsumer {
 }
 
 impl DispatcherReliableSingleConsumer {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
         let (control_tx, mut control_rx) = mpsc::channel(16);
 
         // Spawn dispatcher task
         tokio::spawn(async move {
-            let mut consumer_dispatch = ConsumerDispatch::new();
+            let mut consumer_dispatch = ConsumerDispatch::new(topic_store, last_acked_segment);
 
             // TODO! The dispatcher should mark the segment as acknowledged on the TopicStore
             // The Subscription should send the next segment to the dispatcher if the dispatcher has no segment to read from
-            // Basically, when a new message comes, the subscriptions check also the status of the dispatcher !!!!!!
+            // Basically, when a new message comes, the subscriptions check also the status of the dispatcher !!!!!
             let mut interval = time::interval(Duration::from_millis(100));
 
             loop {
@@ -87,9 +47,6 @@ impl DispatcherReliableSingleConsumer {
                             DispatcherCommand::DisconnectAllConsumers => {
                                 handle_disconnect_all(&mut consumer_dispatch).await;
                             }
-                            DispatcherCommand::DispatchSegment(segment) => {
-                                handle_dispatch_segment(&mut consumer_dispatch, segment).await;
-                            }
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
@@ -102,35 +59,10 @@ impl DispatcherReliableSingleConsumer {
                     }
                     _ = interval.tick() => {
                         // TODO! - don't use the segment if it passed the TTL since closed, go to next segment
-                            // TODO! - send ordered messages from the segment to the consumers
-                            // TODO! - go to next segment if all messages are acknowledged by consumers
-                        if let Some(segment) = &consumer_dispatch.segment {
-                            let message = {
-                                let segment_lock = segment.read().unwrap();
-
-                                // Find the next unacknowledged message index
-                                let next_message_index = if consumer_dispatch.acked_messages.is_empty() {
-                                    consumer_dispatch.acked_messages = vec![false; segment_lock.messages.len()];
-                                    0
-                                } else {
-                                    consumer_dispatch.last_acked_message_index + 1
-                                };
-
-                                // Check if there are more messages to send and get the message if available
-                                if next_message_index < segment_lock.messages.len() as u64
-                                    && !consumer_dispatch.acked_messages[next_message_index as usize] {
-                                    Some(segment_lock.messages[next_message_index as usize].clone())
-                                } else {
-                                    None
-                                }
-                            }; // RwLockReadGuard is dropped here
-
-                            // Dispatch message outside the scope of the lock if we got one
-                            if let Some(msg) = message {
-                                if let Err(e) = dispatch_reliable_message(&mut consumer_dispatch.active_consumer, msg).await {
-                                    warn!("Failed to dispatch reliable message: {}", e);
-                                }
-                            }
+                        // TODO! - send ordered messages from the segment to the consumers
+                        // TODO! - go to next segment if all messages are acknowledged by consumers
+                        if let Err(e) = consumer_dispatch.process_current_segment().await {
+                            warn!("Failed to process current segment: {}", e);
                         }
                     }
                 }
@@ -138,14 +70,6 @@ impl DispatcherReliableSingleConsumer {
         });
 
         DispatcherReliableSingleConsumer { control_tx }
-    }
-
-    /// Dispatch a message to the active consumer
-    pub(crate) async fn dispatch_segment(&self, segment: Arc<RwLock<Segment>>) -> Result<()> {
-        self.control_tx
-            .send(DispatcherCommand::DispatchSegment(segment))
-            .await
-            .map_err(|err| anyhow!("Failed to dispatch the segment {}", err))
     }
 
     /// Add a consumer
@@ -232,16 +156,6 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
     trace!("All consumers disconnected from dispatcher");
 }
 
-/// Handle dispatching a segment
-async fn handle_dispatch_segment(
-    consumer_dispatch: &mut ConsumerDispatch,
-    segment: Arc<RwLock<Segment>>,
-) {
-    consumer_dispatch.segment = Some(segment);
-    consumer_dispatch.acked_messages.clear();
-    consumer_dispatch.last_acked_message_index = 0;
-}
-
 /// Handle the consumer message acknowledgement
 async fn handle_message_acked(
     consumer_dispatch: &mut ConsumerDispatch,
@@ -276,4 +190,137 @@ async fn dispatch_reliable_message(
     }
 
     Err(anyhow!("No active consumer available to dispatch message"))
+}
+
+/// ConsumerDispatch is holding information about consumers and the messages within a segment
+/// It is used to dispatch messages to consumers and to track the progress of the consumer
+#[derive(Debug)]
+pub(crate) struct ConsumerDispatch {
+    // list of consumsers
+    pub(crate) consumers: Vec<Consumer>,
+    // active consumer is the consumer that is currently receiving messages
+    pub(crate) active_consumer: Option<Consumer>,
+    // topic store is the store of segments
+    // topic store is used to get the next segment to be sent to the consumer
+    pub(crate) topic_store: TopicStore,
+    // last acked segment is the last segment that has all messages acknowledged by the consumer
+    // it is used to track the progress of the subscription
+    pub(crate) last_acked_segment: Arc<RwLock<usize>>,
+    // segment holds the messages to be sent to the consumer
+    // segment is replaced when the consumer is done with the segment and if there is another available segment
+    pub(crate) segment: Option<Arc<RwLock<Segment>>>,
+    // acked messages are the messages from the segment that have been acknowledged by the consumer
+    pub(crate) acked_messages: Vec<bool>,
+    // last acked message index is the index of the last message from the segment that has been acknowledged by the consumer
+    pub(crate) last_acked_message_index: u64,
+}
+
+impl ConsumerDispatch {
+    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
+        Self {
+            consumers: Vec::new(),
+            active_consumer: None,
+            topic_store,
+            last_acked_segment,
+            segment: None,
+            acked_messages: Vec::new(),
+            last_acked_message_index: 0,
+        }
+    }
+    pub(crate) fn add_consumer(&mut self, consumer: Consumer) {
+        self.consumers.push(consumer.clone());
+        if self.active_consumer.is_none() {
+            self.active_consumer = Some(consumer.clone());
+        }
+
+        trace!(
+            "Consumer {} added to single-consumer dispatcher",
+            consumer.consumer_name
+        );
+    }
+    pub(crate) async fn process_current_segment(&mut self) -> Result<(), String> {
+        if let Some(segment) = &self.segment {
+            let mut move_to_next_segment = false;
+
+            let message = {
+                let segment_lock = segment
+                    .read()
+                    .map_err(|_| "Failed to acquire read lock on segment")?;
+
+                // Check if the current segment is closed and fully acknowledged
+                if segment_lock.close_time > 0 && self.acked_messages.iter().all(|&acked| acked) {
+                    move_to_next_segment = true;
+                    None
+                } else {
+                    // Find the next unacknowledged message index
+                    let next_message_index = if self.acked_messages.is_empty() {
+                        self.acked_messages = vec![false; segment_lock.messages.len()];
+                        0
+                    } else {
+                        self.last_acked_message_index + 1
+                    };
+
+                    // Check if there are more messages to send and get the message if available
+                    if next_message_index < segment_lock.messages.len() as u64
+                        && !self.acked_messages[next_message_index as usize]
+                    {
+                        Some(segment_lock.messages[next_message_index as usize].clone())
+                    } else {
+                        None
+                    }
+                }
+            }; // RwLockReadGuard is dropped here
+
+            // If the current segment is closed and fully acknowledged, or there are no more messages, move to the next segment
+            if move_to_next_segment || message.is_none() {
+                let next_segment = self
+                    .topic_store
+                    .get_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
+
+                if let Some(next_segment) = next_segment {
+                    // Update the last acknowledged segment
+                    {
+                        let mut last_acked = self
+                            .last_acked_segment
+                            .write()
+                            .map_err(|_| "Failed to acquire write lock on last_acked_segment")?;
+                        *last_acked = segment
+                            .read()
+                            .map_err(|_| "Failed to acquire read lock on segment")?
+                            .id;
+                    }
+
+                    // Assign the next segment
+                    self.segment = Some(next_segment);
+                    self.acked_messages.clear();
+                    self.last_acked_message_index = 0;
+                } else if move_to_next_segment {
+                    // No next segment available; clear the current segment
+                    self.segment = None;
+                }
+
+                return Ok(());
+            }
+
+            // Dispatch message outside the scope of the lock if we got one
+            if let Some(msg) = message {
+                dispatch_reliable_message(&mut self.active_consumer, msg)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        } else {
+            // If there is no current segment, attempt to fetch the next one
+            let next_segment = self
+                .topic_store
+                .get_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
+
+            if let Some(next_segment) = next_segment {
+                self.segment = Some(next_segment);
+                self.acked_messages.clear();
+                self.last_acked_message_index = 0;
+            }
+        }
+
+        Ok(())
+    }
 }

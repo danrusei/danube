@@ -8,6 +8,7 @@ use tracing::{info, warn};
 
 use crate::proto::{ErrorType, Schema as ProtoSchema};
 
+use crate::retention_strategy;
 use crate::subscription::ConsumerInfo;
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
@@ -264,7 +265,9 @@ impl BrokerService {
     // so we know that the topic was checked before and assigned to this broker by load manager
     pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
         // create the topic,
-        let mut new_topic = Topic::new(topic_name);
+        // TODO!: add from config !!
+        let retention_strategy = retention_strategy::RetentionStrategy::NonReliable;
+        let mut new_topic = Topic::new(topic_name, retention_strategy);
 
         // get schema from local_cache
         let schema = self.resources.topic.get_schema(topic_name);

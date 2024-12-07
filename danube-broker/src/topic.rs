@@ -42,13 +42,6 @@ pub(crate) struct Topic {
 
 impl Topic {
     pub(crate) fn new(topic_name: &str, retention_strategy: RetentionStrategy) -> Self {
-        match retention_strategy {
-            RetentionStrategy::Reliable(mut topic_store) => {
-                topic_store.start_lifecycle_management();
-            }
-            _ => {}
-        };
-
         Topic {
             topic_name: topic_name.into(),
             schema: None,
@@ -173,8 +166,8 @@ impl Topic {
                     //TODO! delete the subscription from the metadata store
                 }
             }
-            RetentionStrategy::Reliable(_) => {
-                self.retention_strategy.store_message(message_to_send);
+            RetentionStrategy::Reliable(reliable_storage) => {
+                reliable_storage.store_message(message_to_send).await?;
             }
         };
 
@@ -204,11 +197,18 @@ impl Topic {
         let mut subscriptions_lock = self.subscriptions.lock().await;
         let subscription = subscriptions_lock
             .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(
-                options.clone(),
-                &self.topic_name,
-                sub_metadata,
-            ));
+            .or_insert_with(|| {
+                let new_subscription =
+                    Subscription::new(options.clone(), &self.topic_name, sub_metadata);
+
+                // Additional logic for reliable storage
+                // TODO!: rezolve this future issue !!
+                if let RetentionStrategy::Reliable(reliable_storage) = &self.retention_strategy {
+                    reliable_storage.add_subscription(&new_subscription.subscription_name);
+                };
+
+                new_subscription
+            });
 
         if subscription.is_exclusive() && !subscription.get_consumers_info().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);

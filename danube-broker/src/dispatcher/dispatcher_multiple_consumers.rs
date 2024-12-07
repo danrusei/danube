@@ -48,11 +48,6 @@ impl DispatcherMultipleConsumers {
                                 warn!("Failed to dispatch message: {}", error);
                             }
                         }
-                        DispatcherCommand::DispatchSegment(_) => {
-                            unreachable!(
-                                "DispatchSegment is not implemented for multiple consumers"
-                            );
-                        }
                         DispatcherCommand::MessageAcked(_) => {
                             unreachable!(
                                 "Non-reliable dispatcher does not care about acked messages"
