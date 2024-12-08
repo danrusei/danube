@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
+use crate::proto::TopicRetentionStrategy;
 use crate::{consumer::MessageToSend, topic_storage::TopicStore};
 
 #[derive(Debug)]
@@ -64,7 +66,35 @@ impl PersistentStorage {
 
 impl Drop for PersistentStorage {
     fn drop(&mut self) {
-        self.shutdown_tx.try_send(());
+        let _ = self.shutdown_tx.try_send(());
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ConfigRetentionStrategy {
+    pub(crate) strategy: String,
+    pub(crate) retention_period: u64,
+    pub(crate) segment_size: usize,
+}
+
+impl Default for ConfigRetentionStrategy {
+    fn default() -> Self {
+        ConfigRetentionStrategy {
+            strategy: "non_persistent".to_string(),
+            retention_period: 3600,
+            segment_size: 50,
+        }
+    }
+}
+
+// Implement conversions from ProtoTypeSchema to SchemaType
+impl From<TopicRetentionStrategy> for ConfigRetentionStrategy {
+    fn from(strategy: TopicRetentionStrategy) -> Self {
+        ConfigRetentionStrategy {
+            strategy: strategy.strategy,
+            retention_period: strategy.retention_period,
+            segment_size: strategy.segment_size as usize,
+        }
     }
 }
 

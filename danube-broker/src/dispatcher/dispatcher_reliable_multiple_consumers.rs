@@ -120,25 +120,6 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
     trace!("All consumers disconnected from dispatcher");
 }
 
-/// Dispatch a message to the active consumer
-pub(crate) async fn dispatch_reliable_message_single_consumer(
-    active_consumer: &mut Option<Consumer>,
-    message: MessageToSend,
-) -> Result<()> {
-    if let Some(consumer) = active_consumer {
-        if consumer.get_status().await {
-            consumer.send_message(message).await?;
-            trace!(
-                "Message dispatched to active consumer {}",
-                consumer.consumer_id
-            );
-            return Ok(());
-        }
-    }
-
-    Err(anyhow!("No active consumer available to dispatch message"))
-}
-
 pub(crate) async fn dispatch_reliable_message_multiple_consumers(
     consumers: &mut [Consumer],
     index_consumer: Arc<AtomicUsize>,

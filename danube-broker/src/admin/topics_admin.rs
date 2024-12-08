@@ -3,6 +3,7 @@ use crate::admin_proto::{
     topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, SubscriptionListResponse,
     SubscriptionRequest, SubscriptionResponse, TopicListResponse, TopicRequest, TopicResponse,
 };
+use crate::proto::TopicRetentionStrategy;
 use crate::schema::{Schema, SchemaType};
 
 use tonic::{Request, Response, Status};
@@ -51,12 +52,18 @@ impl TopicAdmin for DanubeAdminImpl {
             schema_type = SchemaType::Json(req.schema_data);
         }
 
+        let ret_strategy = TopicRetentionStrategy {
+            strategy: req.retention_strategy,
+            retention_period: 3600,
+            segment_size: 50,
+        };
+
         let mut service = self.broker_service.lock().await;
 
         let schema = Schema::new(format!("{}_schema", req.name), schema_type);
 
         let success = match service
-            .create_topic_cluster(&req.name, Some(schema.into()))
+            .create_topic_cluster(&req.name, Some(ret_strategy), Some(schema.into()))
             .await
         {
             Ok(()) => true,
