@@ -275,7 +275,7 @@ impl ConsumerDispatch {
             if move_to_next_segment || message.is_none() {
                 let next_segment = self
                     .topic_store
-                    .get_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
+                    .get_next_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
 
                 if let Some(next_segment) = next_segment {
                     // Update the last acknowledged segment
@@ -312,7 +312,7 @@ impl ConsumerDispatch {
             // If there is no current segment, attempt to fetch the next one
             let next_segment = self
                 .topic_store
-                .get_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
+                .get_next_segment(self.segment.as_ref().unwrap().read().unwrap().id.clone());
 
             if let Some(next_segment) = next_segment {
                 self.segment = Some(next_segment);
