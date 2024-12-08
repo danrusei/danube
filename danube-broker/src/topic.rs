@@ -43,7 +43,7 @@ pub(crate) struct Topic {
 impl Topic {
     pub(crate) fn new(topic_name: &str, ret_strategy: ConfigRetentionStrategy) -> Self {
         let retention_strategy = match ret_strategy.strategy.as_str() {
-            "non-persistent" => RetentionStrategy::NonPersistent,
+            "non_persistent" => RetentionStrategy::NonPersistent,
             "persistent" => RetentionStrategy::Persistent(PersistentStorage::new(
                 ret_strategy.segment_size,
                 ret_strategy.retention_period,
