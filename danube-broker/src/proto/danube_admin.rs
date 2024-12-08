@@ -24,6 +24,8 @@ pub struct NewTopicRequest {
     pub schema_type: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub schema_data: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub retention_strategy: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

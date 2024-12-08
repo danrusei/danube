@@ -10,6 +10,7 @@ use crate::{
     consumer::MessageToSend,
     policies::Policies,
     producer::Producer,
+    retention_strategy::{ConfigRetentionStrategy, PersistentStorage, RetentionStrategy},
     schema::Schema,
     subscription::{Subscription, SubscriptionOptions},
 };
@@ -35,18 +36,28 @@ pub(crate) struct Topic {
     pub(crate) subscriptions: Mutex<HashMap<String, Subscription>>,
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
+    // the retention strategy for the topic, Reliable vs NonReliable
+    pub(crate) retention_strategy: RetentionStrategy,
 }
 
-// TODO! should be moved to support partitioned topics from scratch, in order to support hashing dispatch
-
 impl Topic {
-    pub(crate) fn new(topic_name: &str) -> Self {
+    pub(crate) fn new(topic_name: &str, ret_strategy: ConfigRetentionStrategy) -> Self {
+        let retention_strategy = match ret_strategy.strategy.as_str() {
+            "non_persistent" => RetentionStrategy::NonPersistent,
+            "persistent" => RetentionStrategy::Persistent(PersistentStorage::new(
+                ret_strategy.segment_size,
+                ret_strategy.retention_period,
+            )),
+            _ => panic!("Invalid retention strategy"),
+        };
+
         Topic {
             topic_name: topic_name.into(),
             schema: None,
             topic_policies: None,
             subscriptions: Mutex::new(HashMap::new()),
             producers: HashMap::new(),
+            retention_strategy,
         }
     }
 
@@ -134,33 +145,40 @@ impl Topic {
             metadata: meta,
         };
 
-        // Collect subscriptions that need to be unsubscribed, if contain no active consumers
-        let subscriptions_to_remove: Vec<String> = {
-            let subscriptions = self.subscriptions.lock().await;
-            let mut to_remove = Vec::new();
+        match &self.retention_strategy {
+            RetentionStrategy::NonPersistent => {
+                // Collect subscriptions that need to be unsubscribed, if contain no active consumers
+                let subscriptions_to_remove: Vec<String> = {
+                    let subscriptions = self.subscriptions.lock().await;
+                    let mut to_remove = Vec::new();
 
-            for (_name, subscription) in subscriptions.iter() {
-                let duplicate_message = message_to_send.clone();
-                if let Err(err) = subscription
-                    .send_message_to_dispatcher(duplicate_message)
-                    .await
-                {
-                    info!(
-                        "The subscription {}, has no active consumers, got error: {} ",
-                        subscription.subscription_name, err
-                    );
-                    to_remove.push(subscription.subscription_name.clone());
+                    for (_name, subscription) in subscriptions.iter() {
+                        let duplicate_message = message_to_send.clone();
+                        if let Err(err) = subscription
+                            .send_message_to_dispatcher(duplicate_message)
+                            .await
+                        {
+                            info!(
+                                "The subscription {}, has no active consumers, got error: {} ",
+                                subscription.subscription_name, err
+                            );
+                            to_remove.push(subscription.subscription_name.clone());
+                        }
+                    }
+
+                    to_remove
+                };
+
+                for subscription_name in subscriptions_to_remove {
+                    self.unsubscribe(&subscription_name).await;
+
+                    //TODO! delete the subscription from the metadata store
                 }
             }
-
-            to_remove
+            RetentionStrategy::Persistent(persistent_storage) => {
+                persistent_storage.store_message(message_to_send).await?;
+            }
         };
-
-        for subscription_name in subscriptions_to_remove {
-            self.unsubscribe(&subscription_name).await;
-
-            //TODO! delete the subscription from the metadata store
-        }
 
         Ok(())
     }
@@ -184,15 +202,27 @@ impl Topic {
         //maybe for user internal business, management and montoring
         let sub_metadata = HashMap::new();
 
-        // Lock the subscriptions and get the entry
         let mut subscriptions_lock = self.subscriptions.lock().await;
-        let subscription = subscriptions_lock
-            .entry(options.subscription_name.clone())
-            .or_insert(Subscription::new(
-                options.clone(),
-                &self.topic_name,
-                sub_metadata,
-            ));
+
+        let subscription = if let std::collections::hash_map::Entry::Vacant(entry) =
+            subscriptions_lock.entry(options.subscription_name.clone())
+        {
+            let new_subscription =
+                Subscription::new(options.clone(), &self.topic_name, sub_metadata);
+
+            // Handle additional logic for reliable storage
+            if let RetentionStrategy::Persistent(persistent_storage) = &self.retention_strategy {
+                persistent_storage
+                    .add_subscription(&new_subscription.subscription_name)
+                    .await?;
+            }
+
+            entry.insert(new_subscription)
+        } else {
+            subscriptions_lock
+                .get_mut(&options.subscription_name)
+                .unwrap()
+        };
 
         if subscription.is_exclusive() && !subscription.get_consumers_info().is_empty() {
             warn!("Not allowed to add the Consumer: {}, the Exclusive subscription can't be shared with other consumers", options.consumer_name);
@@ -201,7 +231,9 @@ impl Topic {
 
         //Todo! Check the topic policies with max_consumers per topic
 
-        let consumer_id = subscription.add_consumer(topic_name, options).await?;
+        let consumer_id = subscription
+            .add_consumer(topic_name, options, &self.retention_strategy)
+            .await?;
 
         Ok(consumer_id)
     }

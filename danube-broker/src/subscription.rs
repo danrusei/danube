@@ -10,8 +10,11 @@ use crate::{
     consumer::{Consumer, MessageToSend},
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
+        dispatcher_reliable_multiple_consumers::DispatcherReliableMultipleConsumers,
+        dispatcher_reliable_single_consumer::DispatcherReliableSingleConsumer,
         dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
     },
+    retention_strategy::RetentionStrategy,
     utils::get_random_id,
 };
 
@@ -74,6 +77,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
+        retention_strategy: &RetentionStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -92,7 +96,9 @@ impl Subscription {
         // checks if there'a a dispatcher (responsible for distributing messages to consumers)
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
-            let new_dispatcher = self.create_new_dispatcher(options.clone())?;
+            let new_dispatcher = self
+                .create_new_dispatcher(options.clone(), retention_strategy)
+                .await?;
 
             self.dispatcher = Some(new_dispatcher);
         };
@@ -120,20 +126,60 @@ impl Subscription {
         Ok(consumer_id)
     }
 
-    pub(crate) fn create_new_dispatcher(&self, options: SubscriptionOptions) -> Result<Dispatcher> {
-        let new_dispatcher = match options.subscription_type {
-            // Exclusive
-            0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
-
-            // Shared
-            1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
-
-            // Failover
-            2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
-
-            _ => {
+    pub(crate) async fn create_new_dispatcher(
+        &self,
+        options: SubscriptionOptions,
+        retention_strategy: &RetentionStrategy,
+    ) -> Result<Dispatcher> {
+        let last_acknowledged_segment =
+            if let RetentionStrategy::Persistent(persistent_storage) = retention_strategy {
+                persistent_storage
+                    .get_last_acknowledged_segment(&options.subscription_name)
+                    .await?
+            } else {
                 return Err(anyhow!("Should not get here"));
-            }
+            };
+
+        let new_dispatcher = match retention_strategy {
+            RetentionStrategy::NonPersistent => match options.subscription_type {
+                // Exclusive
+                0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
+
+                // Shared
+                1 => Dispatcher::MultipleConsumers(DispatcherMultipleConsumers::new()),
+
+                // Failover
+                2 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
+
+                _ => {
+                    return Err(anyhow!("Should not get here"));
+                }
+            },
+            RetentionStrategy::Persistent(persistent_storage) => match options.subscription_type {
+                // Exclusive
+                0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
+                    persistent_storage.topic_store.clone(),
+                    last_acknowledged_segment,
+                )),
+
+                // Shared
+                1 => {
+                    Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new(
+                        persistent_storage.topic_store.clone(),
+                        last_acknowledged_segment,
+                    ))
+                }
+
+                // Failover
+                2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
+                    persistent_storage.topic_store.clone(),
+                    last_acknowledged_segment,
+                )),
+
+                _ => {
+                    return Err(anyhow!("Should not get here"));
+                }
+            },
         };
 
         Ok(new_dispatcher)

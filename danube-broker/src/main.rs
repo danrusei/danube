@@ -10,11 +10,12 @@ mod metadata_store;
 mod policies;
 mod producer;
 mod resources;
+mod retention_strategy;
 mod schema;
 mod service_configuration;
-mod storage;
 mod subscription;
 mod topic;
+mod topic_storage;
 mod utils;
 
 use std::{fs::read_to_string, path::Path, sync::Arc};

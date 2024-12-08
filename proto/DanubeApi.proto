@@ -15,13 +15,21 @@ enum ProducerAccessMode {
     Exclusive = 1; // exclusive access for producer
 }
 
+// Message representing topic retention strategy
+message TopicRetentionStrategy {
+    string strategy = 1; // "persistent" or "non_persistent"
+    uint64 retention_period = 2; // in seconds, applicable for "persistent"
+    uint64 segment_size = 3; // in number of messages, applicable for "persistent"
+}
+
 // Create Producer request
 message ProducerRequest { 
     uint64 request_id = 1;
-    string producer_name = 3;
-    string topic_name = 4;
-    Schema schema = 5;
-    ProducerAccessMode producer_access_mode = 6;
+    string producer_name = 2;
+    string topic_name = 3;
+    Schema schema = 4;
+    ProducerAccessMode producer_access_mode = 5;
+    TopicRetentionStrategy retention_strategy = 6;
 }
 
 // Create Producer response
