@@ -266,8 +266,7 @@ impl BrokerService {
     pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
         // create the topic,
         // TODO!: add from config !!
-        let retention_strategy = retention_strategy::RetentionStrategy::NonReliable;
-        let mut new_topic = Topic::new(topic_name, retention_strategy);
+        let mut new_topic = Topic::new(topic_name, retent_strategy);
 
         // get schema from local_cache
         let schema = self.resources.topic.get_schema(topic_name);

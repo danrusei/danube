@@ -164,7 +164,10 @@ impl Subscription {
 
                 // Shared
                 1 => {
-                    Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new())
+                    Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new(
+                        reliable_storage.topic_store.clone(),
+                        last_acknowledged_segment,
+                    ))
                 }
 
                 // Failover
