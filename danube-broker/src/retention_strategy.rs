@@ -7,15 +7,15 @@ use crate::{consumer::MessageToSend, topic_storage::TopicStore};
 #[derive(Debug)]
 pub(crate) enum RetentionStrategy {
     // Does not store messages, sends them directly to the dispatcher
-    NonReliable,
+    NonPersistent,
     // Stores messages in a queue for reliable delivery
     // TODO! - ensure that the messages are delivered in order and are acknowledged before removal from the queue
     // TODO! - TTL - implement a retention policy to remove messages from the queue after a certain period of time (e.g. 1 hour)
-    Reliable(ReliableStorage),
+    Persistent(PersistentStorage),
 }
 
 #[derive(Debug)]
-pub(crate) struct ReliableStorage {
+pub(crate) struct PersistentStorage {
     // Topic store is used to store messages in a queue for reliable delivery
     pub(crate) topic_store: TopicStore,
     // Map of subscription name to last acknowledged segment id
@@ -24,7 +24,7 @@ pub(crate) struct ReliableStorage {
     shutdown_tx: tokio::sync::mpsc::Sender<()>,
 }
 
-impl ReliableStorage {
+impl PersistentStorage {
     pub(crate) fn new(segment_capacity: usize, segment_ttl: u64) -> Self {
         let topic_store = TopicStore::new(segment_capacity, segment_ttl);
         let subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>> = Arc::new(DashMap::new());
@@ -62,7 +62,7 @@ impl ReliableStorage {
     }
 }
 
-impl Drop for ReliableStorage {
+impl Drop for PersistentStorage {
     fn drop(&mut self) {
         self.shutdown_tx.try_send(());
     }

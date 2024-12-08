@@ -137,7 +137,7 @@ impl Topic {
         };
 
         match &self.retention_strategy {
-            RetentionStrategy::NonReliable => {
+            RetentionStrategy::NonPersistent => {
                 // Collect subscriptions that need to be unsubscribed, if contain no active consumers
                 let subscriptions_to_remove: Vec<String> = {
                     let subscriptions = self.subscriptions.lock().await;
@@ -166,8 +166,8 @@ impl Topic {
                     //TODO! delete the subscription from the metadata store
                 }
             }
-            RetentionStrategy::Reliable(reliable_storage) => {
-                reliable_storage.store_message(message_to_send).await?;
+            RetentionStrategy::Persistent(persistent_storage) => {
+                persistent_storage.store_message(message_to_send).await?;
             }
         };
 
@@ -203,8 +203,9 @@ impl Topic {
 
                 // Additional logic for reliable storage
                 // TODO!: rezolve this future issue !!
-                if let RetentionStrategy::Reliable(reliable_storage) = &self.retention_strategy {
-                    reliable_storage.add_subscription(&new_subscription.subscription_name);
+                if let RetentionStrategy::Persistent(persistent_storage) = &self.retention_strategy
+                {
+                    persistent_storage.add_subscription(&new_subscription.subscription_name);
                 };
 
                 new_subscription

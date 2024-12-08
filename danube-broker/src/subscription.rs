@@ -132,8 +132,8 @@ impl Subscription {
         retention_strategy: &RetentionStrategy,
     ) -> Result<Dispatcher> {
         let last_acknowledged_segment =
-            if let RetentionStrategy::Reliable(reliable_storage) = retention_strategy {
-                reliable_storage
+            if let RetentionStrategy::Persistent(persistent_storage) = retention_strategy {
+                persistent_storage
                     .get_last_acknowledged_segment(&options.subscription_name)
                     .await?
             } else {
@@ -141,7 +141,7 @@ impl Subscription {
             };
 
         let new_dispatcher = match retention_strategy {
-            RetentionStrategy::NonReliable => match options.subscription_type {
+            RetentionStrategy::NonPersistent => match options.subscription_type {
                 // Exclusive
                 0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
@@ -155,24 +155,24 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            RetentionStrategy::Reliable(reliable_storage) => match options.subscription_type {
+            RetentionStrategy::Persistent(persistent_storage) => match options.subscription_type {
                 // Exclusive
                 0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                    reliable_storage.topic_store.clone(),
+                    persistent_storage.topic_store.clone(),
                     last_acknowledged_segment,
                 )),
 
                 // Shared
                 1 => {
                     Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new(
-                        reliable_storage.topic_store.clone(),
+                        persistent_storage.topic_store.clone(),
                         last_acknowledged_segment,
                     ))
                 }
 
                 // Failover
                 2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                    reliable_storage.topic_store.clone(),
+                    persistent_storage.topic_store.clone(),
                     last_acknowledged_segment,
                 )),
 
