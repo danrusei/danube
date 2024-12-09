@@ -29,7 +29,7 @@ message ProducerRequest {
     string topic_name = 3;
     Schema schema = 4;
     ProducerAccessMode producer_access_mode = 5;
-    TopicDeliveryStrategy retention_strategy = 6;
+    TopicDeliveryStrategy delivery_strategy = 6;
 }
 
 // Create Producer response

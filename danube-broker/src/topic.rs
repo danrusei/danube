@@ -37,16 +37,16 @@ pub(crate) struct Topic {
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
     // the retention strategy for the topic, Reliable vs NonReliable
-    pub(crate) retention_strategy: DeliveryStrategy,
+    pub(crate) delivery_strategy: DeliveryStrategy,
 }
 
 impl Topic {
-    pub(crate) fn new(topic_name: &str, ret_strategy: ConfigDeliveryStrategy) -> Self {
-        let retention_strategy = match ret_strategy.strategy.as_str() {
+    pub(crate) fn new(topic_name: &str, delivery_strategy: ConfigDeliveryStrategy) -> Self {
+        let delivery_strategy = match delivery_strategy.strategy.as_str() {
             "non_reliable" => DeliveryStrategy::NonReliable,
             "reliable" => DeliveryStrategy::Reliable(PersistentStorage::new(
-                ret_strategy.segment_size,
-                ret_strategy.retention_period,
+                delivery_strategy.segment_size,
+                delivery_strategy.retention_period,
             )),
             _ => panic!("Invalid retention strategy"),
         };
@@ -57,7 +57,7 @@ impl Topic {
             topic_policies: None,
             subscriptions: Mutex::new(HashMap::new()),
             producers: HashMap::new(),
-            retention_strategy,
+            delivery_strategy,
         }
     }
 
@@ -145,7 +145,7 @@ impl Topic {
             metadata: meta,
         };
 
-        match &self.retention_strategy {
+        match &self.delivery_strategy {
             DeliveryStrategy::NonReliable => {
                 // Collect subscriptions that need to be unsubscribed, if contain no active consumers
                 let subscriptions_to_remove: Vec<String> = {
@@ -211,7 +211,7 @@ impl Topic {
                 Subscription::new(options.clone(), &self.topic_name, sub_metadata);
 
             // Handle additional logic for reliable storage
-            if let DeliveryStrategy::Reliable(persistent_storage) = &self.retention_strategy {
+            if let DeliveryStrategy::Reliable(persistent_storage) = &self.delivery_strategy {
                 persistent_storage
                     .add_subscription(&new_subscription.subscription_name)
                     .await?;
@@ -232,7 +232,7 @@ impl Topic {
         //Todo! Check the topic policies with max_consumers per topic
 
         let consumer_id = subscription
-            .add_consumer(topic_name, options, &self.retention_strategy)
+            .add_consumer(topic_name, options, &self.delivery_strategy)
             .await?;
 
         Ok(consumer_id)

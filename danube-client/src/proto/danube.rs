@@ -28,7 +28,7 @@ pub struct ProducerRequest {
     #[prost(enumeration = "ProducerAccessMode", tag = "5")]
     pub producer_access_mode: i32,
     #[prost(message, optional, tag = "6")]
-    pub retention_strategy: ::core::option::Option<TopicDeliveryStrategy>,
+    pub delivery_strategy: ::core::option::Option<TopicDeliveryStrategy>,
 }
 /// Create Producer response
 #[allow(clippy::derive_partial_eq_without_eq)]

@@ -28,7 +28,7 @@ impl ProducerService for DanubeServerImpl {
         let mut service = self.service.lock().await;
 
         match service
-            .get_topic(&req.topic_name, req.retention_strategy, req.schema, true)
+            .get_topic(&req.topic_name, req.delivery_strategy, req.schema, true)
             .await
         {
             Ok(_) => trace!("topic_name: {} was found", &req.topic_name),

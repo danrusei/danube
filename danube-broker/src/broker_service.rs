@@ -60,7 +60,7 @@ impl BrokerService {
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
-        ret_strategy: Option<TopicDeliveryStrategy>,
+        delivery_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
         create_if_missing: bool,
     ) -> Result<bool, Status> {
@@ -115,7 +115,7 @@ impl BrokerService {
         };
 
         match self
-            .create_topic_cluster(topic_name, ret_strategy, schema)
+            .create_topic_cluster(topic_name, delivery_strategy, schema)
             .await
         {
             Ok(()) => {
@@ -144,7 +144,7 @@ impl BrokerService {
     pub(crate) async fn create_topic_cluster(
         &mut self,
         topic_name: &str,
-        ret_strategy: Option<TopicDeliveryStrategy>,
+        delivery_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
     ) -> Result<(), Status> {
         // The topic format is /{namespace_name}/{topic_name}
@@ -173,8 +173,8 @@ impl BrokerService {
             return Err(status);
         }
 
-        if let Some(ret_strategy) = &ret_strategy {
-            match ret_strategy.strategy.as_str() {
+        if let Some(delivery_strategy) = &delivery_strategy {
+            match delivery_strategy.strategy.as_str() {
                 "reliable" => {}
                 "non_reliable" => {}
                 _ => {
@@ -210,7 +210,12 @@ impl BrokerService {
         }
 
         match self
-            .post_new_topic(topic_name, ret_strategy.unwrap(), schema.unwrap(), None)
+            .post_new_topic(
+                topic_name,
+                delivery_strategy.unwrap(),
+                schema.unwrap(),
+                None,
+            )
             .await
         {
             Ok(()) => return Ok(()),
@@ -229,7 +234,7 @@ impl BrokerService {
     pub(crate) async fn post_new_topic(
         &mut self,
         topic_name: &str,
-        ret_strategy: TopicDeliveryStrategy,
+        delivery_strategy: TopicDeliveryStrategy,
         schema: ProtoSchema,
         policies: Option<Policies>,
     ) -> Result<()> {
@@ -250,7 +255,7 @@ impl BrokerService {
         // store new topic retention strategy: /topics/{namespace}/{topic}/retention
         self.resources
             .topic
-            .add_topic_retention(topic_name, ret_strategy.into())
+            .add_topic_delivery(topic_name, delivery_strategy.into())
             .await?;
 
         // store new topic policy: /topics/{namespace}/{topic}/policy
@@ -306,8 +311,8 @@ impl BrokerService {
     // so we know that the topic was checked before and assigned to this broker by load manager
     pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
         //get retention strategy from local_cache
-        let ret_strategy = self.resources.topic.get_retention_strategy(topic_name);
-        if ret_strategy.is_none() {
+        let delivery_strategy = self.resources.topic.get_delivery_strategy(topic_name);
+        if delivery_strategy.is_none() {
             warn!("Unable to create topic without a valid retention strategy");
             return Err(anyhow!(
                 "Unable to create topic without a valid retention strategy"
@@ -315,7 +320,7 @@ impl BrokerService {
         }
 
         // create the topic,
-        let mut new_topic = Topic::new(topic_name, ret_strategy.unwrap());
+        let mut new_topic = Topic::new(topic_name, delivery_strategy.unwrap());
 
         // get schema from local_cache
         let schema = self.resources.topic.get_schema(topic_name);
