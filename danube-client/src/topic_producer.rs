@@ -5,6 +5,7 @@ use crate::proto::{
 use crate::{
     errors::{decode_error_details, DanubeError, Result},
     message::{MessageMetadata, SendMessage},
+    retention_strategy::ConfigRetentionStrategy,
     schema::Schema,
     DanubeClient, ProducerOptions,
 };
@@ -37,6 +38,8 @@ pub(crate) struct TopicProducer {
     message_sequence_id: AtomicU64,
     // the schema represent the message payload schema
     schema: Schema,
+    // the retention strategy for the topic
+    retention_strategy: ConfigRetentionStrategy,
     // other configurable options for the producer
     producer_options: ProducerOptions,
     // the grpc client cnx
@@ -51,6 +54,7 @@ impl TopicProducer {
         topic: String,
         producer_name: String,
         schema: Schema,
+        retention_strategy: ConfigRetentionStrategy,
         producer_options: ProducerOptions,
     ) -> Self {
         TopicProducer {
@@ -61,6 +65,7 @@ impl TopicProducer {
             request_id: AtomicU64::new(0),
             message_sequence_id: AtomicU64::new(0),
             schema,
+            retention_strategy,
             producer_options,
             stream_client: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
@@ -76,6 +81,7 @@ impl TopicProducer {
             topic_name: self.topic.clone(),
             schema: Some(self.schema.clone().into()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
+            retention_strategy: Some(self.retention_strategy.clone().into()),
         };
 
         let max_retries = 4;

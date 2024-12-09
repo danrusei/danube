@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, Mutex};
 use tonic::{Code, Status};
 use tracing::{info, warn};
 
-use crate::proto::{ErrorType, Schema as ProtoSchema};
+use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDeliveryStrategy};
 
 use crate::subscription::ConsumerInfo;
 use crate::{
@@ -60,6 +60,7 @@ impl BrokerService {
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
+        ret_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
         create_if_missing: bool,
     ) -> Result<bool, Status> {
@@ -113,7 +114,10 @@ impl BrokerService {
             return Err(status);
         };
 
-        match self.create_topic_cluster(topic_name, schema).await {
+        match self
+            .create_topic_cluster(topic_name, ret_strategy, schema)
+            .await
+        {
             Ok(()) => {
                 let error_string =
             "The topic metadata was created, need to redo the lookup to find the correct broker";
@@ -140,6 +144,7 @@ impl BrokerService {
     pub(crate) async fn create_topic_cluster(
         &mut self,
         topic_name: &str,
+        ret_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
     ) -> Result<(), Status> {
         // The topic format is /{namespace_name}/{topic_name}
@@ -168,6 +173,33 @@ impl BrokerService {
             return Err(status);
         }
 
+        if let Some(ret_strategy) = &ret_strategy {
+            match ret_strategy.strategy.as_str() {
+                "reliable" => {}
+                "non_reliable" => {}
+                _ => {
+                    let error_string =
+                        "Unable to create a topic with the specified retention strategy";
+                    let status = create_error_status(
+                        Code::InvalidArgument,
+                        ErrorType::UnknownError,
+                        error_string,
+                        None,
+                    );
+                    return Err(status);
+                }
+            }
+        } else {
+            let error_string = "Retention strategy is missing";
+            let status = create_error_status(
+                Code::InvalidArgument,
+                ErrorType::UnknownError,
+                error_string,
+                None,
+            );
+            return Err(status);
+        }
+
         let ns_name = get_nsname_from_topic(topic_name);
 
         if let Ok(false) = self.resources.namespace.namespace_exist(ns_name).await {
@@ -177,7 +209,10 @@ impl BrokerService {
             return Err(status);
         }
 
-        match self.post_new_topic(topic_name, schema.unwrap(), None).await {
+        match self
+            .post_new_topic(topic_name, ret_strategy.unwrap(), schema.unwrap(), None)
+            .await
+        {
             Ok(()) => return Ok(()),
 
             Err(err) => {
@@ -194,6 +229,7 @@ impl BrokerService {
     pub(crate) async fn post_new_topic(
         &mut self,
         topic_name: &str,
+        ret_strategy: TopicDeliveryStrategy,
         schema: ProtoSchema,
         policies: Option<Policies>,
     ) -> Result<()> {
@@ -209,6 +245,12 @@ impl BrokerService {
         self.resources
             .namespace
             .create_new_topic(topic_name)
+            .await?;
+
+        // store new topic retention strategy: /topics/{namespace}/{topic}/retention
+        self.resources
+            .topic
+            .add_topic_retention(topic_name, ret_strategy.into())
             .await?;
 
         // store new topic policy: /topics/{namespace}/{topic}/policy
@@ -263,8 +305,17 @@ impl BrokerService {
     // assumes that it was received from legitimate sources, like ETCDWatchEvent
     // so we know that the topic was checked before and assigned to this broker by load manager
     pub(crate) async fn create_topic_locally(&mut self, topic_name: &str) -> Result<()> {
+        //get retention strategy from local_cache
+        let ret_strategy = self.resources.topic.get_retention_strategy(topic_name);
+        if ret_strategy.is_none() {
+            warn!("Unable to create topic without a valid retention strategy");
+            return Err(anyhow!(
+                "Unable to create topic without a valid retention strategy"
+            ));
+        }
+
         // create the topic,
-        let mut new_topic = Topic::new(topic_name);
+        let mut new_topic = Topic::new(topic_name, ret_strategy.unwrap());
 
         // get schema from local_cache
         let schema = self.resources.topic.get_schema(topic_name);

@@ -48,6 +48,11 @@ impl DispatcherMultipleConsumers {
                                 warn!("Failed to dispatch message: {}", error);
                             }
                         }
+                        DispatcherCommand::MessageAcked(_) => {
+                            unreachable!(
+                                "Non-reliable dispatcher does not care about acked messages"
+                            );
+                        }
                     }
                 }
             }

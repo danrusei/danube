@@ -183,9 +183,6 @@ impl DanubeService {
 
         info!("cluster metadata setup completed");
 
-        // Not used yet, will be used for persistent topic storage, which is not yet implemented
-        // let _storage = storage::memory_segment_storage::SegmentStore::new();
-
         // Start the Broker GRPC server
         //==========================================================================
 

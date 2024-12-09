@@ -4,6 +4,7 @@ mod broker_server;
 mod broker_service;
 mod consumer;
 mod danube_service;
+mod delivery_strategy;
 mod dispatcher;
 mod error_message;
 mod metadata_store;
@@ -12,9 +13,9 @@ mod producer;
 mod resources;
 mod schema;
 mod service_configuration;
-mod storage;
 mod subscription;
 mod topic;
+mod topic_storage;
 mod utils;
 
 use std::{fs::read_to_string, path::Path, sync::Arc};

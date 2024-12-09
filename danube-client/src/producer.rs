@@ -1,6 +1,6 @@
 use crate::{
-    errors::Result, message_router::MessageRouter, topic_producer::TopicProducer, DanubeClient,
-    Schema, SchemaType,
+    errors::Result, message_router::MessageRouter, retention_strategy::ConfigRetentionStrategy,
+    topic_producer::TopicProducer, DanubeClient, Schema, SchemaType,
 };
 
 use std::collections::HashMap;
@@ -16,6 +16,7 @@ pub struct Producer {
     client: DanubeClient,
     topic_name: String,
     schema: Schema,
+    retention_strategy: ConfigRetentionStrategy,
     producer_name: String,
     partitions: Option<usize>,
     message_router: Option<MessageRouter>,
@@ -28,6 +29,7 @@ impl Producer {
         client: DanubeClient,
         topic_name: String,
         schema: Option<Schema>,
+        retention_strategy: Option<ConfigRetentionStrategy>,
         producer_name: String,
         partitions: Option<usize>,
         message_router: Option<MessageRouter>,
@@ -40,10 +42,17 @@ impl Producer {
             Schema::new("string_schema".into(), SchemaType::String)
         };
 
+        let retention_strategy = if let Some(retention) = retention_strategy {
+            retention
+        } else {
+            ConfigRetentionStrategy::default()
+        };
+
         Producer {
             client,
             topic_name,
             schema,
+            retention_strategy,
             producer_name,
             partitions,
             message_router,
@@ -65,6 +74,7 @@ impl Producer {
                     self.topic_name.clone(),
                     self.producer_name.clone(),
                     self.schema.clone(),
+                    self.retention_strategy.clone(),
                     self.producer_options.clone(),
                 )]
             }
@@ -81,6 +91,7 @@ impl Producer {
                             topic,
                             format!("{}-{}", self.producer_name, partition_id),
                             self.schema.clone(),
+                            self.retention_strategy.clone(),
                             self.producer_options.clone(),
                         )
                     })
@@ -146,6 +157,7 @@ pub struct ProducerBuilder {
     num_partitions: Option<usize>,
     producer_name: Option<String>,
     schema: Option<Schema>,
+    retention_strategy: Option<ConfigRetentionStrategy>,
     producer_options: ProducerOptions,
 }
 
@@ -157,6 +169,7 @@ impl ProducerBuilder {
             num_partitions: None,
             producer_name: None,
             schema: None,
+            retention_strategy: None,
             producer_options: ProducerOptions::default(),
         }
     }
@@ -201,6 +214,18 @@ impl ProducerBuilder {
     ///   - `SchemaType::Json(String)`: Indicates that the schema uses JSON data. The `String` contains the JSON schema definition.
     pub fn with_schema(mut self, schema_name: String, schema_type: SchemaType) -> Self {
         self.schema = Some(Schema::new(schema_name, schema_type));
+        self
+    }
+
+    /// Sets the retention strategy for the producer.
+    /// This method configures the retention strategy for the producer, which determines how messages are stored and managed.
+    /// The retention strategy defines how long messages are retained and how they are managed in the message broker.
+    ///
+    /// # Parameters
+    ///
+    /// - `retention_strategy`: The retention strategy to be used by the producer. This should be an instance of a `ConfigRetentionStrategy` implementation.
+    pub fn with_retention_strategy(mut self, retention_strategy: ConfigRetentionStrategy) -> Self {
+        self.retention_strategy = Some(retention_strategy);
         self
     }
 
@@ -258,6 +283,7 @@ impl ProducerBuilder {
             self.client,
             topic_name,
             self.schema,
+            self.retention_strategy,
             producer_name,
             self.num_partitions,
             None,

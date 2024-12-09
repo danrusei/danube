@@ -53,6 +53,11 @@ impl DispatcherSingleConsumer {
                                 warn!("Failed to dispatch message: {}", e);
                             }
                         }
+                        DispatcherCommand::MessageAcked(_) => {
+                            unreachable!(
+                                "Non-reliable dispatcher does not care about acked messages"
+                            );
+                        }
                     }
                 }
             }
