@@ -16,10 +16,10 @@ enum ProducerAccessMode {
 }
 
 // Message representing topic retention strategy
-message TopicRetentionStrategy {
-    string strategy = 1; // "persistent" or "non_persistent"
-    uint64 retention_period = 2; // in seconds, applicable for "persistent"
-    uint64 segment_size = 3; // in number of messages, applicable for "persistent"
+message TopicDeliveryStrategy {
+    string strategy = 1; // "reliable" or "non_reliable"
+    uint64 retention_period = 2; // in seconds, applicable for "reliable"
+    uint64 segment_size = 3; // in number of messages, applicable for "reliable"
 }
 
 // Create Producer request
@@ -29,7 +29,7 @@ message ProducerRequest {
     string topic_name = 3;
     Schema schema = 4;
     ProducerAccessMode producer_access_mode = 5;
-    TopicRetentionStrategy retention_strategy = 6;
+    TopicDeliveryStrategy retention_strategy = 6;
 }
 
 // Create Producer response

@@ -2,14 +2,14 @@
 /// Message representing topic retention strategy
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TopicRetentionStrategy {
-    /// "persistent" or "non_persistent"
+pub struct TopicDeliveryStrategy {
+    /// "reliable" or "non_reliable"
     #[prost(string, tag = "1")]
     pub strategy: ::prost::alloc::string::String,
-    /// in seconds, applicable for "persistent"
+    /// in seconds, applicable for "reliable"
     #[prost(uint64, tag = "2")]
     pub retention_period: u64,
-    /// in number of messages, applicable for "persistent"
+    /// in number of messages, applicable for "reliable"
     #[prost(uint64, tag = "3")]
     pub segment_size: u64,
 }
@@ -28,7 +28,7 @@ pub struct ProducerRequest {
     #[prost(enumeration = "ProducerAccessMode", tag = "5")]
     pub producer_access_mode: i32,
     #[prost(message, optional, tag = "6")]
-    pub retention_strategy: ::core::option::Option<TopicRetentionStrategy>,
+    pub retention_strategy: ::core::option::Option<TopicDeliveryStrategy>,
 }
 /// Create Producer response
 #[allow(clippy::derive_partial_eq_without_eq)]

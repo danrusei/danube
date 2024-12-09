@@ -2,10 +2,10 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
+    delivery_strategy::ConfigDeliveryStrategy,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::BASE_TOPICS_PATH,
-    retention_strategy::ConfigRetentionStrategy,
     schema::Schema,
     utils::join_path,
     LocalCache,
@@ -68,7 +68,7 @@ impl TopicResources {
     pub(crate) async fn add_topic_retention(
         &mut self,
         topic_name: &str,
-        ret_strategy: ConfigRetentionStrategy,
+        ret_strategy: ConfigDeliveryStrategy,
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
         let data = serde_json::to_value(ret_strategy).unwrap();
@@ -146,11 +146,11 @@ impl TopicResources {
     pub(crate) fn get_retention_strategy(
         &self,
         topic_name: &str,
-    ) -> Option<ConfigRetentionStrategy> {
+    ) -> Option<ConfigDeliveryStrategy> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
         let result = self.local_cache.get(&path);
         if let Some(value) = result {
-            let ret_strategy: Option<ConfigRetentionStrategy> = serde_json::from_value(value).ok();
+            let ret_strategy: Option<ConfigDeliveryStrategy> = serde_json::from_value(value).ok();
             return ret_strategy;
         }
         None

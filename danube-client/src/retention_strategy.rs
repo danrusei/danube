@@ -1,4 +1,4 @@
-use crate::proto::TopicRetentionStrategy;
+use crate::proto::TopicDeliveryStrategy;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,7 +11,7 @@ pub struct ConfigRetentionStrategy {
 impl Default for ConfigRetentionStrategy {
     fn default() -> Self {
         ConfigRetentionStrategy {
-            strategy: "non_persistent".to_string(),
+            strategy: "non_reliable".to_string(),
             retention_period: 3600,
             segment_size: 50,
         }
@@ -19,8 +19,8 @@ impl Default for ConfigRetentionStrategy {
 }
 
 // Implement conversions from ProtoTypeSchema to SchemaType
-impl From<TopicRetentionStrategy> for ConfigRetentionStrategy {
-    fn from(strategy: TopicRetentionStrategy) -> Self {
+impl From<TopicDeliveryStrategy> for ConfigRetentionStrategy {
+    fn from(strategy: TopicDeliveryStrategy) -> Self {
         ConfigRetentionStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
@@ -29,9 +29,9 @@ impl From<TopicRetentionStrategy> for ConfigRetentionStrategy {
     }
 }
 // Implement conversions from ConfigRetentionStrategy to ProtoTypeSchema
-impl From<ConfigRetentionStrategy> for TopicRetentionStrategy {
+impl From<ConfigRetentionStrategy> for TopicDeliveryStrategy {
     fn from(strategy: ConfigRetentionStrategy) -> Self {
-        TopicRetentionStrategy {
+        TopicDeliveryStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
             segment_size: strategy.segment_size as u64,

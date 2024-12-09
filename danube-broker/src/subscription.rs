@@ -8,13 +8,13 @@ use tracing::trace;
 use crate::{
     broker_metrics::TOPIC_CONSUMERS,
     consumer::{Consumer, MessageToSend},
+    delivery_strategy::DeliveryStrategy,
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
         dispatcher_reliable_multiple_consumers::DispatcherReliableMultipleConsumers,
         dispatcher_reliable_single_consumer::DispatcherReliableSingleConsumer,
         dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
     },
-    retention_strategy::RetentionStrategy,
     utils::get_random_id,
 };
 
@@ -77,7 +77,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
-        retention_strategy: &RetentionStrategy,
+        retention_strategy: &DeliveryStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -129,19 +129,19 @@ impl Subscription {
     pub(crate) async fn create_new_dispatcher(
         &self,
         options: SubscriptionOptions,
-        retention_strategy: &RetentionStrategy,
+        retention_strategy: &DeliveryStrategy,
     ) -> Result<Dispatcher> {
-        let last_acknowledged_segment =
-            if let RetentionStrategy::Persistent(persistent_storage) = retention_strategy {
+        let last_acknowledged_segment = match retention_strategy {
+            DeliveryStrategy::Reliable(persistent_storage) => Some(
                 persistent_storage
                     .get_last_acknowledged_segment(&options.subscription_name)
-                    .await?
-            } else {
-                return Err(anyhow!("Should not get here"));
-            };
+                    .await?,
+            ),
+            DeliveryStrategy::NonReliable => None,
+        };
 
         let new_dispatcher = match retention_strategy {
-            RetentionStrategy::NonPersistent => match options.subscription_type {
+            DeliveryStrategy::NonReliable => match options.subscription_type {
                 // Exclusive
                 0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
@@ -155,31 +155,37 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            RetentionStrategy::Persistent(persistent_storage) => match options.subscription_type {
-                // Exclusive
-                0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                    persistent_storage.topic_store.clone(),
-                    last_acknowledged_segment,
-                )),
+            DeliveryStrategy::Reliable(persistent_storage) => {
+                let last_acked_segment = last_acknowledged_segment.ok_or_else(|| {
+                    anyhow!("Expected last_acknowledged_segment for Reliable strategy")
+                })?;
 
-                // Shared
-                1 => {
-                    Dispatcher::ReliableMultipleConsumers(DispatcherReliableMultipleConsumers::new(
+                match options.subscription_type {
+                    // Exclusive
+                    0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
                         persistent_storage.topic_store.clone(),
-                        last_acknowledged_segment,
-                    ))
-                }
+                        last_acked_segment,
+                    )),
 
-                // Failover
-                2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                    persistent_storage.topic_store.clone(),
-                    last_acknowledged_segment,
-                )),
+                    // Shared
+                    1 => Dispatcher::ReliableMultipleConsumers(
+                        DispatcherReliableMultipleConsumers::new(
+                            persistent_storage.topic_store.clone(),
+                            last_acked_segment,
+                        ),
+                    ),
 
-                _ => {
-                    return Err(anyhow!("Should not get here"));
+                    // Failover
+                    2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
+                        persistent_storage.topic_store.clone(),
+                        last_acked_segment,
+                    )),
+
+                    _ => {
+                        return Err(anyhow!("Should not get here"));
+                    }
                 }
-            },
+            }
         };
 
         Ok(new_dispatcher)

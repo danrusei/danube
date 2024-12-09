@@ -21,7 +21,7 @@ pub(crate) enum TopicsCommands {
         schema_type: String,
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
-        #[arg(short, long, default_value = "non_persistent")]
+        #[arg(short, long, default_value = "non_reliable")]
         ret_strategy: String,
     },
     #[command(about = "Create a partitioned topic")]
@@ -32,7 +32,7 @@ pub(crate) enum TopicsCommands {
         schema_type: String,
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
-        #[arg(short, long, default_value = "non_persistent")]
+        #[arg(short, long, default_value = "non_reliable")]
         ret_strategy: String,
     },
     #[command(about = "Delete an existing topic")]

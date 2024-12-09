@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, Mutex};
 use tonic::{Code, Status};
 use tracing::{info, warn};
 
-use crate::proto::{ErrorType, Schema as ProtoSchema, TopicRetentionStrategy};
+use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDeliveryStrategy};
 
 use crate::subscription::ConsumerInfo;
 use crate::{
@@ -60,7 +60,7 @@ impl BrokerService {
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
-        ret_strategy: Option<TopicRetentionStrategy>,
+        ret_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
         create_if_missing: bool,
     ) -> Result<bool, Status> {
@@ -144,7 +144,7 @@ impl BrokerService {
     pub(crate) async fn create_topic_cluster(
         &mut self,
         topic_name: &str,
-        ret_strategy: Option<TopicRetentionStrategy>,
+        ret_strategy: Option<TopicDeliveryStrategy>,
         schema: Option<ProtoSchema>,
     ) -> Result<(), Status> {
         // The topic format is /{namespace_name}/{topic_name}
@@ -175,8 +175,8 @@ impl BrokerService {
 
         if let Some(ret_strategy) = &ret_strategy {
             match ret_strategy.strategy.as_str() {
-                "persistent" => {}
-                "non_persistent" => {}
+                "reliable" => {}
+                "non_reliable" => {}
                 _ => {
                     let error_string =
                         "Unable to create a topic with the specified retention strategy";
@@ -229,7 +229,7 @@ impl BrokerService {
     pub(crate) async fn post_new_topic(
         &mut self,
         topic_name: &str,
-        ret_strategy: TopicRetentionStrategy,
+        ret_strategy: TopicDeliveryStrategy,
         schema: ProtoSchema,
         policies: Option<Policies>,
     ) -> Result<()> {

@@ -8,9 +8,9 @@ use crate::proto::MessageMetadata;
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
     consumer::MessageToSend,
+    delivery_strategy::{ConfigDeliveryStrategy, DeliveryStrategy, PersistentStorage},
     policies::Policies,
     producer::Producer,
-    retention_strategy::{ConfigRetentionStrategy, PersistentStorage, RetentionStrategy},
     schema::Schema,
     subscription::{Subscription, SubscriptionOptions},
 };
@@ -37,14 +37,14 @@ pub(crate) struct Topic {
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
     // the retention strategy for the topic, Reliable vs NonReliable
-    pub(crate) retention_strategy: RetentionStrategy,
+    pub(crate) retention_strategy: DeliveryStrategy,
 }
 
 impl Topic {
-    pub(crate) fn new(topic_name: &str, ret_strategy: ConfigRetentionStrategy) -> Self {
+    pub(crate) fn new(topic_name: &str, ret_strategy: ConfigDeliveryStrategy) -> Self {
         let retention_strategy = match ret_strategy.strategy.as_str() {
-            "non_persistent" => RetentionStrategy::NonPersistent,
-            "persistent" => RetentionStrategy::Persistent(PersistentStorage::new(
+            "non_reliable" => DeliveryStrategy::NonReliable,
+            "reliable" => DeliveryStrategy::Reliable(PersistentStorage::new(
                 ret_strategy.segment_size,
                 ret_strategy.retention_period,
             )),
@@ -146,7 +146,7 @@ impl Topic {
         };
 
         match &self.retention_strategy {
-            RetentionStrategy::NonPersistent => {
+            DeliveryStrategy::NonReliable => {
                 // Collect subscriptions that need to be unsubscribed, if contain no active consumers
                 let subscriptions_to_remove: Vec<String> = {
                     let subscriptions = self.subscriptions.lock().await;
@@ -175,7 +175,7 @@ impl Topic {
                     //TODO! delete the subscription from the metadata store
                 }
             }
-            RetentionStrategy::Persistent(persistent_storage) => {
+            DeliveryStrategy::Reliable(persistent_storage) => {
                 persistent_storage.store_message(message_to_send).await?;
             }
         };
@@ -211,7 +211,7 @@ impl Topic {
                 Subscription::new(options.clone(), &self.topic_name, sub_metadata);
 
             // Handle additional logic for reliable storage
-            if let RetentionStrategy::Persistent(persistent_storage) = &self.retention_strategy {
+            if let DeliveryStrategy::Reliable(persistent_storage) = &self.retention_strategy {
                 persistent_storage
                     .add_subscription(&new_subscription.subscription_name)
                     .await?;
