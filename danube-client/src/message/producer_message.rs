@@ -15,14 +15,14 @@ pub struct MessageMetadata {
 }
 
 #[derive(Clone, PartialEq)]
-pub struct SendMessage {
+pub struct ProducerMessage {
     pub request_id: u64,
     pub producer_id: u64,
     pub metadata: Option<MessageMetadata>,
     pub message: Vec<u8>,
 }
 
-impl SendMessage {
+impl ProducerMessage {
     // Helper function to convert local structs to generated structs
     pub fn to_proto(&self) -> MessageRequest {
         let metadata = match &self.metadata {

@@ -28,7 +28,7 @@ pub use schema::{Schema, SchemaType};
 
 mod schema_service;
 
-mod producer_message;
+mod message;
 
 mod lookup_service;
 

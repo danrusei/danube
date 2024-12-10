@@ -5,7 +5,7 @@ use crate::proto::{
 use crate::{
     delivery_strategy::ConfigDeliveryStrategy,
     errors::{decode_error_details, DanubeError, Result},
-    producer_message::{MessageMetadata, SendMessage},
+    message::producer_message::{MessageMetadata, ProducerMessage},
     schema::Schema,
     DanubeClient, ProducerOptions,
 };
@@ -200,7 +200,7 @@ impl TopicProducer {
             attributes: attr,
         };
 
-        let send_message = SendMessage {
+        let send_message = ProducerMessage {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
             producer_id: self
                 .producer_id

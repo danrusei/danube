@@ -44,7 +44,11 @@ async fn main() -> Result<()> {
         let result = String::from_utf8(payload);
 
         match result {
-            Ok(message) => println!("Received message: {:?}", message),
+            Ok(message_str) => {
+                println!("Received message: {:?}", message_str);
+
+                consumer.ack(&message).await?;
+            }
             Err(e) => println!("Failed to convert Payload to String: {}", e),
         }
     }

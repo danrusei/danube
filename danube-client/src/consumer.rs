@@ -176,6 +176,10 @@ impl Consumer {
 
         Ok(rx)
     }
+
+    pub async fn ack(&mut self, message: &StreamMessage) -> Result<()> {
+        todo!()
+    }
 }
 
 /// ConsumerBuilder is a builder for creating a new Consumer instance.
