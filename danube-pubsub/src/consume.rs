@@ -77,11 +77,8 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
 
     while let Some(stream_message) = message_stream.recv().await {
         let payload = stream_message.payload;
-        let (seq_id, attr) = if let Some(meta) = stream_message.metadata {
-            (meta.sequence_id, meta.attributes)
-        } else {
-            (0, HashMap::new())
-        };
+        let seq_id = stream_message.msg_id.sequence_id;
+        let attr = stream_message.attributes;
 
         // Process message based on the schema type
         process_message(

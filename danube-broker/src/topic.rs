@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use metrics::counter;
 use std::collections::{hash_map::Entry, HashMap};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
-use crate::proto::MessageMetadata;
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
-    consumer::MessageToSend,
     delivery_strategy::{ConfigDeliveryStrategy, DeliveryStrategy, PersistentStorage},
     policies::Policies,
     producer::Producer,
@@ -113,37 +112,30 @@ impl Topic {
     }
 
     // Publishes the message to the topic, and send to active consumers
-    pub(crate) async fn publish_message(
-        &self,
-        producer_id: u64,
-        payload: Vec<u8>,
-        meta: Option<MessageMetadata>,
-    ) -> Result<()> {
-        let producer = if let Some(top) = self.producers.get(&producer_id) {
+    pub(crate) async fn publish_message(&self, stream_message: StreamMessage) -> Result<()> {
+        let producer = if let Some(top) = self.producers.get(&stream_message.producer_id) {
             top
         } else {
             return Err(anyhow!(
                 "the producer with id {} is not attached to topic name: {}",
-                producer_id,
+                &stream_message.producer_id,
                 self.topic_name
             ));
         };
 
         //TODO! this is doing nothing for now, and may not need to be async
-        match producer.publish_message(producer_id, &payload).await {
+        match producer
+            .publish_message(stream_message.producer_id, &stream_message.payload)
+            .await
+        {
             Ok(_) => {
-                counter!(TOPIC_MSG_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => producer_id.to_string()).increment(1);
-                counter!(TOPIC_BYTES_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => producer_id.to_string()).increment(payload.len() as u64);
+                counter!(TOPIC_MSG_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => stream_message.producer_id.to_string()).increment(1);
+                counter!(TOPIC_BYTES_IN_COUNTER.name, "topic"=> self.topic_name.clone() , "producer" => stream_message.producer_id.to_string()).increment(stream_message.payload.len() as u64);
             }
             Err(err) => {
                 return Err(anyhow!("the Producer checks have failed: {}", err));
             }
         }
-
-        let message_to_send = MessageToSend {
-            payload,
-            metadata: meta,
-        };
 
         match &self.delivery_strategy {
             DeliveryStrategy::NonReliable => {
@@ -153,7 +145,7 @@ impl Topic {
                     let mut to_remove = Vec::new();
 
                     for (_name, subscription) in subscriptions.iter() {
-                        let duplicate_message = message_to_send.clone();
+                        let duplicate_message = stream_message.clone();
                         if let Err(err) = subscription
                             .send_message_to_dispatcher(duplicate_message)
                             .await
@@ -176,7 +168,7 @@ impl Topic {
                 }
             }
             DeliveryStrategy::Reliable(persistent_storage) => {
-                persistent_storage.store_message(message_to_send).await?;
+                persistent_storage.store_message(stream_message).await?;
             }
         };
 

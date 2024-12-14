@@ -1,13 +1,11 @@
 use anyhow::Result;
+use danube_client::StreamMessage;
 use metrics::counter;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{trace, warn};
 
-use crate::{
-    broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER},
-    proto::MessageMetadata,
-};
+use crate::broker_metrics::{CONSUMER_BYTES_OUT_COUNTER, CONSUMER_MSG_OUT_COUNTER};
 
 /// Represents a consumer connected and associated with a Subscription.
 #[allow(dead_code)]
@@ -17,15 +15,9 @@ pub(crate) struct Consumer {
     pub(crate) consumer_name: String,
     pub(crate) subscription_type: i32,
     pub(crate) topic_name: String,
-    pub(crate) tx_cons: mpsc::Sender<MessageToSend>,
+    pub(crate) tx_cons: mpsc::Sender<StreamMessage>,
     // status = true -> consumer OK, status = false -> Close the consumer
     pub(crate) status: Arc<Mutex<bool>>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct MessageToSend {
-    pub(crate) payload: Vec<u8>,
-    pub(crate) metadata: Option<MessageMetadata>,
 }
 
 impl Consumer {
@@ -34,7 +26,7 @@ impl Consumer {
         consumer_name: &str,
         subscription_type: i32,
         topic_name: &str,
-        tx_cons: mpsc::Sender<MessageToSend>,
+        tx_cons: mpsc::Sender<StreamMessage>,
         status: Arc<Mutex<bool>>,
     ) -> Self {
         Consumer {
@@ -48,7 +40,7 @@ impl Consumer {
     }
 
     // The consumer task runs asynchronously, handling message delivery to the gRPC `ReceiverStream`.
-    pub(crate) async fn send_message(&mut self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn send_message(&mut self, message: StreamMessage) -> Result<()> {
         // Since u8 is exactly 1 byte, the size in bytes will be equal to the number of elements in the vector.
         let payload_size = message.payload.len();
         // Send the message to the other channel

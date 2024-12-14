@@ -1,44 +1,5 @@
-use std::collections::HashMap;
-
 use crate::proto::{MsgId, StreamMessage as ProtoStreamMessage};
-
-// TODO! messageID is very important as it will be used to identify the message
-// it should be constructed by producer, amended maybe by the broker and sent back to the consumer
-// the consumer will used the messageID in the ack mechanism so the Broker will easily identify the acked message
-// the below struct will be used by both client SDK and broker to identify the message.
-
-#[derive(Debug, Clone)]
-pub struct MessageID {
-    // the messsage sequence id, this is the sequence id of the message within the topic
-    pub sequence_id: u64,
-    // broker_addr is the address of the broker that sent the message to the consumer
-    // this is required by the consumer to send the ack to the correct broker
-    pub broker_addr: String,
-    // topic_name is the name of the topic the message belongs to
-    // this is required by the broker to send the ack to the correct topic
-    pub topic_name: String,
-    // subscription_name is the name of the subscription the consumer is subscribed to
-    // this is required by the broker to send the ack to the correct subscription
-    pub subscription_name: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct StreamMessage {
-    // Unique ID for tracking the message request
-    pub request_id: u64,
-    // Identifies the message, associated with a unique topic, subscription and the broker
-    pub msg_id: MessageID,
-    // The actual payload of the message
-    pub payload: Vec<u8>,
-    // Timestamp for when the message was published
-    pub publish_time: u64,
-    // Identifies the producer’s name
-    pub producer_name: String,
-    // Identifies the producer, associated with a unique topic
-    pub producer_id: u64,
-    // User-defined properties/attributes
-    pub attributes: HashMap<String, String>,
-}
+use danube_client::{MessageID, StreamMessage};
 
 impl From<MsgId> for MessageID {
     fn from(proto_msg_id: MsgId) -> Self {

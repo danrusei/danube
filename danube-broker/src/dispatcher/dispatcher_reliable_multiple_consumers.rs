@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::{
@@ -8,9 +9,7 @@ use tokio::{
 use tracing::{trace, warn};
 
 use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::ConsumerDispatch,
-    dispatcher::DispatcherCommand,
+    consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
     topic_storage::TopicStore,
 };
 
@@ -123,7 +122,7 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
 pub(crate) async fn dispatch_reliable_message_multiple_consumers(
     consumers: &mut [Consumer],
     index_consumer: Arc<AtomicUsize>,
-    message: MessageToSend,
+    message: StreamMessage,
 ) -> Result<()> {
     let num_consumers = consumers.len();
     if num_consumers == 0 {

@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
 use crate::proto::TopicDeliveryStrategy;
-use crate::{consumer::MessageToSend, topic_storage::TopicStore};
+use crate::topic_storage::TopicStore;
 
 #[derive(Debug)]
 pub(crate) enum DeliveryStrategy {
@@ -42,7 +43,7 @@ impl PersistentStorage {
         }
     }
 
-    pub(crate) async fn store_message(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn store_message(&self, message: StreamMessage) -> Result<()> {
         self.topic_store.store_message(message);
         Ok(())
     }

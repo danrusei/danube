@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use metrics::gauge;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +12,6 @@ use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDeliveryStrategy};
 use crate::subscription::ConsumerInfo;
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
-    consumer::MessageToSend,
     error_message::create_error_status,
     policies::Policies,
     resources::Resources,
@@ -534,7 +534,7 @@ impl BrokerService {
     pub(crate) async fn find_consumer_rx(
         &mut self,
         consumer_id: u64,
-    ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
+    ) -> Option<Arc<Mutex<mpsc::Receiver<StreamMessage>>>> {
         if let Some((topic_name, subscription_name)) = self.consumer_index.get(&consumer_id) {
             if let Some(topic) = self.topics.get(topic_name) {
                 if let Some(subscription) = topic.subscriptions.lock().await.get(subscription_name)

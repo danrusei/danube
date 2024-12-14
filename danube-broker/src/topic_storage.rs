@@ -1,7 +1,6 @@
+use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
-
-use crate::consumer::MessageToSend;
 
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
@@ -14,7 +13,7 @@ pub(crate) struct Segment {
     // Segment close time, is the time when the segment is closed for writing
     pub(crate) close_time: u64,
     // Messages in the segment
-    pub(crate) messages: Vec<MessageToSend>,
+    pub(crate) messages: Vec<StreamMessage>,
 }
 
 impl Segment {
@@ -59,7 +58,7 @@ impl TopicStore {
     }
 
     /// Add a new message to the topic
-    pub fn store_message(&self, message: MessageToSend) {
+    pub fn store_message(&self, message: StreamMessage) {
         let mut current_segment_id = self.current_segment_id.write().unwrap();
         let segment_id = *current_segment_id;
 

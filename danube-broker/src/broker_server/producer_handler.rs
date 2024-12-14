@@ -1,9 +1,10 @@
 use crate::proto::{
-    producer_service_server::ProducerService, MessageRequest, MessageResponse, ProducerRequest,
-    ProducerResponse,
+    producer_service_server::ProducerService, MessageResponse, ProducerRequest, ProducerResponse,
+    StreamMessage as ProtoStreamMessage,
 };
 use crate::{broker_metrics::PRODUCER_MSG_OUT_RATE, broker_server::DanubeServerImpl};
 
+use danube_client::StreamMessage;
 use metrics::histogram;
 use std::collections::hash_map::Entry;
 use std::time::Instant;
@@ -86,15 +87,16 @@ impl ProducerService for DanubeServerImpl {
     #[tracing::instrument(level = Level::INFO, skip_all)]
     async fn send_message(
         &self,
-        request: Request<MessageRequest>,
+        request: Request<ProtoStreamMessage>,
     ) -> Result<Response<MessageResponse>, tonic::Status> {
         let req = request.into_inner();
+        let stream_message: StreamMessage = req.into();
 
         trace!(
-            "New message {} from producer {} with metadata {:?} was received",
-            req.request_id,
-            req.producer_id,
-            req.metadata
+            "New message {} from producer {} with sequence id {:?} was received",
+            stream_message.request_id,
+            stream_message.producer_id,
+            stream_message.msg_id.sequence_id,
         );
 
         // Get the start time before sending the message
@@ -104,11 +106,11 @@ impl ProducerService for DanubeServerImpl {
         let mut service = arc_service.lock().await;
 
         // check if the producer exist
-        match service.producer_index.entry(req.producer_id) {
+        match service.producer_index.entry(stream_message.producer_id) {
             Entry::Vacant(_) => {
                 let status = Status::not_found(format!(
                     "The producer with id {} does not exist",
-                    req.producer_id
+                    stream_message.producer_id
                 ));
                 return Err(status);
             }
@@ -116,37 +118,32 @@ impl ProducerService for DanubeServerImpl {
         };
 
         let topic = service
-            .find_topic_by_producer(req.producer_id)
+            .find_topic_by_producer(stream_message.producer_id)
             .ok_or_else(|| {
                 Status::internal(format!(
                     "Unable to get the topic for the producer: {}",
-                    req.producer_id
+                    stream_message.producer_id
                 ))
             })?;
 
-        topic
-            .publish_message(req.producer_id, req.payload, req.metadata.clone())
-            .await
-            .map_err(|err| {
-                Status::permission_denied(format!("Unable to publish the message: {}", err))
-            })?;
+        let seq_id = stream_message.msg_id.sequence_id;
+        let req_id = stream_message.request_id;
+        let producer_id = stream_message.producer_id;
+
+        topic.publish_message(stream_message).await.map_err(|err| {
+            Status::permission_denied(format!("Unable to publish the message: {}", err))
+        })?;
 
         // Measure the elapsed time
         let elapsed_time = start_time.elapsed().as_secs_f64();
 
         // Record the producer rate (messages per second) into the histogram
-        histogram!(PRODUCER_MSG_OUT_RATE.name, "producer" => req.producer_id.to_string())
+        histogram!(PRODUCER_MSG_OUT_RATE.name, "producer" => producer_id.to_string())
             .record(elapsed_time);
 
-        let msg_seq_id: u64 = if let Some(msg_meta) = req.metadata {
-            msg_meta.sequence_id
-        } else {
-            0
-        };
-
         let response = MessageResponse {
-            request_id: req.request_id,
-            sequence_id: msg_seq_id,
+            request_id: req_id,
+            sequence_id: seq_id,
         };
 
         Ok(tonic::Response::new(response))

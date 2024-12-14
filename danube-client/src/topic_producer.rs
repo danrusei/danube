@@ -1,11 +1,11 @@
 use crate::proto::{
-    producer_service_client::ProducerServiceClient, MessageRequest, MessageResponse,
-    ProducerAccessMode, ProducerRequest, ProducerResponse,
+    producer_service_client::ProducerServiceClient, MessageResponse, ProducerAccessMode,
+    ProducerRequest, ProducerResponse, StreamMessage as ProtoStreamMessage,
 };
 use crate::{
     delivery_strategy::ConfigDeliveryStrategy,
     errors::{decode_error_details, DanubeError, Result},
-    message::producer_message::{MessageMetadata, ProducerMessage},
+    message::{MessageID, StreamMessage},
     schema::Schema,
     DanubeClient, ProducerOptions,
 };
@@ -193,23 +193,26 @@ impl TopicProducer {
             HashMap::new()
         };
 
-        let meta_data = MessageMetadata {
-            producer_name: self.producer_name.clone(),
+        let msg_id = MessageID {
             sequence_id: self.message_sequence_id.fetch_add(1, Ordering::SeqCst),
-            publish_time: publish_time,
-            attributes: attr,
+            broker_addr: self.client.uri.to_string(),
+            topic_name: self.topic.clone(),
+            subscription_name: "None".to_string(),
         };
 
-        let send_message = ProducerMessage {
+        let send_message = StreamMessage {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            msg_id: msg_id,
+            payload: data,
+            publish_time: publish_time,
+            producer_name: self.producer_name.clone(),
             producer_id: self
                 .producer_id
                 .expect("Producer ID should be set before sending messages"),
-            metadata: Some(meta_data),
-            message: data,
+            attributes: attr,
         };
 
-        let req: MessageRequest = send_message.to_proto();
+        let req: ProtoStreamMessage = send_message.into();
 
         let mut client = self.stream_client.as_ref().unwrap().clone();
         let response: std::result::Result<Response<MessageResponse>, Status> =

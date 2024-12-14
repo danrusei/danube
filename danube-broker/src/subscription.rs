@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Ok, Result};
+use danube_client::StreamMessage;
 use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -7,7 +8,7 @@ use tracing::trace;
 
 use crate::{
     broker_metrics::TOPIC_CONSUMERS,
-    consumer::{Consumer, MessageToSend},
+    consumer::Consumer,
     delivery_strategy::DeliveryStrategy,
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
@@ -34,7 +35,7 @@ pub(crate) struct ConsumerInfo {
     pub(crate) consumer_id: u64,
     pub(crate) sub_options: SubscriptionOptions,
     pub(crate) status: Arc<Mutex<bool>>,
-    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
+    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<StreamMessage>>>,
 }
 
 impl ConsumerInfo {
@@ -191,7 +192,7 @@ impl Subscription {
         Ok(new_dispatcher)
     }
 
-    pub(crate) async fn send_message_to_dispatcher(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn send_message_to_dispatcher(&self, message: StreamMessage) -> Result<()> {
         // Try to send the message
         if let Some(dispatcher) = self.dispatcher.as_ref() {
             dispatcher.dispatch_message(message).await?;
@@ -204,7 +205,7 @@ impl Subscription {
     pub(crate) fn get_consumer_rx(
         &self,
         consumer_id: u64,
-    ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
+    ) -> Option<Arc<Mutex<mpsc::Receiver<StreamMessage>>>> {
         if let Some(consumer_info) = self.consumers.get(&consumer_id) {
             return Some(consumer_info.rx_cons.clone());
         }

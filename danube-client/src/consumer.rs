@@ -1,8 +1,7 @@
 use crate::{
     errors::{DanubeError, Result},
-    proto::StreamMessage,
     topic_consumer::TopicConsumer,
-    DanubeClient,
+    DanubeClient, MessageID, StreamMessage,
 };
 
 use futures::{future::join_all, StreamExt};
@@ -159,7 +158,8 @@ impl Consumer {
                     while let Some(message) = stream.next().await {
                         match message {
                             Ok(stream_message) => {
-                                if let Err(_) = tx.send(stream_message).await {
+                                let message: StreamMessage = stream_message.into();
+                                if let Err(_) = tx.send(message).await {
                                     // if the channel is closed exit the loop
                                     break;
                                 }
@@ -177,7 +177,7 @@ impl Consumer {
         Ok(rx)
     }
 
-    pub async fn ack(&mut self, message: &StreamMessage) -> Result<()> {
+    pub async fn ack(&mut self, _message: MessageID) -> Result<()> {
         todo!()
     }
 }

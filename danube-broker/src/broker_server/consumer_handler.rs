@@ -127,14 +127,8 @@ impl ConsumerService for DanubeServerImpl {
         tokio::spawn(async move {
             let mut rx_guard = rx_cloned.lock().await;
 
-            while let Some(message) = rx_guard.recv().await {
-                let stream_message = StreamMessage {
-                    request_id: 1, // Placeholder; ideally, map this to a proper request ID
-                    payload: message.payload,
-                    metadata: message.metadata,
-                };
-
-                if grpc_tx.send(Ok(stream_message)).await.is_err() {
+            while let Some(stream_message) = rx_guard.recv().await {
+                if grpc_tx.send(Ok(stream_message.into())).await.is_err() {
                     // Error handling for when the client disconnects
                     warn!("Client disconnected for consumer_id: {}", consumer_id);
                     break;

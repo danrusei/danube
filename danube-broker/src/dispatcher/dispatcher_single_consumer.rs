@@ -1,11 +1,9 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use tokio::sync::mpsc;
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::DispatcherCommand,
-};
+use crate::{consumer::Consumer, dispatcher::DispatcherCommand};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
@@ -67,7 +65,7 @@ impl DispatcherSingleConsumer {
     }
 
     /// Dispatch a message to the active consumer
-    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn dispatch_message(&self, message: StreamMessage) -> Result<()> {
         self.control_tx
             .send(DispatcherCommand::DispatchMessage(message))
             .await
@@ -175,7 +173,7 @@ impl DispatcherSingleConsumer {
     /// Dispatch a message to the active consumer
     async fn handle_dispatch_message(
         active_consumer: &mut Option<Consumer>,
-        message: MessageToSend,
+        message: StreamMessage,
     ) -> Result<()> {
         if let Some(consumer) = active_consumer {
             if consumer.get_status().await {

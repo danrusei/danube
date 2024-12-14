@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use danube_client::StreamMessage;
 use std::sync::{Arc, RwLock};
 use tokio::{
     sync::mpsc,
@@ -7,9 +8,7 @@ use tokio::{
 use tracing::{trace, warn};
 
 use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::ConsumerDispatch,
-    dispatcher::DispatcherCommand,
+    consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
     topic_storage::TopicStore,
 };
 
@@ -155,7 +154,7 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
 /// Dispatch a message to the active consumer
 pub(crate) async fn dispatch_reliable_message_single_consumer(
     active_consumer: &mut Option<Consumer>,
-    message: MessageToSend,
+    message: StreamMessage,
 ) -> Result<()> {
     if let Some(consumer) = active_consumer {
         if consumer.get_status().await {
