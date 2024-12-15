@@ -47,7 +47,7 @@ impl DispatcherReliableMultipleConsumers {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
                             DispatcherCommand::MessageAcked(request_id, msg_id) => {
-                                if let Err(e) = consumer_dispatch.handle_message_acked(message_id).await {
+                                if let Err(e) = consumer_dispatch.handle_message_acked(request_id, msg_id).await {
                                     warn!("Failed to handle message acked: {}", e);
                                 }
                             }
