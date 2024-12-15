@@ -178,6 +178,9 @@ pub struct MsgId {
 pub struct AckRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    /// Identifies the message, associated with a unique topic, subscription and the broker
+    #[prost(message, optional, tag = "2")]
+    pub msg_id: ::core::option::Option<MsgId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

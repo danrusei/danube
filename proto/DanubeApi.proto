@@ -74,13 +74,13 @@ message ConsumerRequest {
 
 // Create Consumer response
 message ConsumerResponse {
-    uint64 request_id =1;
+    uint64 request_id = 1;
     uint64 consumer_id = 2;
     string consumer_name = 3;
 }
 
 message ReceiveRequest {
-    uint64 request_id =1;
+    uint64 request_id = 1;
     uint64 consumer_id = 2;
 }
 
@@ -114,11 +114,13 @@ message MsgID {
 }
 
 message AckRequest {
-    uint64 request_id =1; 
+    uint64 request_id = 1;
+    // Identifies the message, associated with a unique topic, subscription and the broker
+    MsgID msg_id = 2; 
 }
 
 message AckResponse {
-    uint64 request_id =1;
+    uint64 request_id = 1;
 }
 
 // ============================================================================================

@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
             Ok(message_str) => {
                 println!("Received message: {:?}", message_str);
 
-                consumer.ack(message.msg_id).await?;
+                consumer.ack(message.request_id, message.msg_id).await?;
             }
             Err(e) => println!("Failed to convert Payload to String: {}", e),
         }
