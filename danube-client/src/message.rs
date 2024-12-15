@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 
 use crate::proto::{MsgId, StreamMessage as ProtoStreamMessage};
 
@@ -20,6 +21,16 @@ pub struct MessageID {
     // subscription_name is the name of the subscription the consumer is subscribed to
     // this is required by the broker to send the ack to the correct subscription
     pub subscription_name: String,
+}
+
+impl Display for MessageID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}_{}_{}_{}",
+            self.sequence_id, self.broker_addr, self.topic_name, self.subscription_name
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

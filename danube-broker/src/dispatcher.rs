@@ -1,5 +1,5 @@
 use anyhow::Result;
-use danube_client::StreamMessage;
+use danube_client::{MessageID, StreamMessage};
 
 use crate::consumer::Consumer;
 
@@ -33,7 +33,7 @@ enum DispatcherCommand {
     RemoveConsumer(u64),
     DisconnectAllConsumers,
     DispatchMessage(StreamMessage),
-    MessageAcked(u64),
+    MessageAcked(u64, MessageID),
 }
 
 impl Dispatcher {
@@ -52,6 +52,22 @@ impl Dispatcher {
                 unreachable!(
                     "Reliable dispatchers do not receive single messsages, rather segments"
                 )
+            }
+        }
+    }
+    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::ReliableOneConsumer(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::ReliableMultipleConsumers(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
             }
         }
     }

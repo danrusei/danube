@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Ok, Result};
-use danube_client::StreamMessage;
+use danube_client::{MessageID, StreamMessage};
 use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -196,6 +196,15 @@ impl Subscription {
         // Try to send the message
         if let Some(dispatcher) = self.dispatcher.as_ref() {
             dispatcher.dispatch_message(message).await?;
+        } else {
+            return Err(anyhow!("Dispatcher not initialized"));
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        if let Some(dispatcher) = self.dispatcher.as_ref() {
+            dispatcher.ack_message(request_id, msg_id).await?;
         } else {
             return Err(anyhow!("Dispatcher not initialized"));
         }

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
+use danube_client::{MessageID, StreamMessage};
 use std::sync::{Arc, RwLock};
 use tokio::{
     sync::mpsc,
@@ -45,7 +45,7 @@ impl DispatcherReliableSingleConsumer {
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
-                            DispatcherCommand::MessageAcked(message_id) => {
+                            DispatcherCommand::MessageAcked(request_id, msg_id) => {
                                 if let Err(e) = consumer_dispatch.handle_message_acked(message_id).await {
                                     warn!("Failed to handle message acked: {}", e);
                                 }
@@ -65,6 +65,14 @@ impl DispatcherReliableSingleConsumer {
         });
 
         DispatcherReliableSingleConsumer { control_tx }
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    pub(crate) async fn ack_message(&self, request_id: u64, message_id: MessageID) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::MessageAcked(request_id, message_id))
+            .await
+            .map_err(|_| anyhow!("Failed to send message acked command"))
     }
 
     /// Add a consumer

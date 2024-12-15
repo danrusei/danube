@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
+use danube_client::{MessageID, StreamMessage};
 use metrics::counter;
 use std::collections::{hash_map::Entry, HashMap};
 use tokio::sync::Mutex;
@@ -172,6 +172,15 @@ impl Topic {
             }
         };
 
+        Ok(())
+    }
+
+    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        let mut subscriptions = self.subscriptions.lock().await;
+        let subscription = subscriptions
+            .get_mut(msg_id.subscription_name.as_str())
+            .ok_or_else(|| anyhow!("Subscription not found"))?;
+        subscription.ack_message(request_id, msg_id).await?;
         Ok(())
     }
 

@@ -4,6 +4,7 @@ use crate::proto::{
 };
 use crate::{proto::consumer_service_server::ConsumerService, subscription::SubscriptionOptions};
 
+use danube_client::MessageID;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -28,7 +29,8 @@ impl ConsumerService for DanubeServerImpl {
 
         // TODO! check if the subscription is authorized to consume from the topic (isTopicOperationAllowed)
 
-        let mut service = self.service.lock().await;
+        let arc_service = self.service.clone();
+        let mut service = arc_service.lock().await;
 
         // the client is allowed to create the subscription only if the topic is served by this broker
         match service.get_topic(&req.topic_name, None, None, false).await {
@@ -110,7 +112,8 @@ impl ConsumerService for DanubeServerImpl {
 
         info!("Consumer {} is ready to receive messages", consumer_id);
 
-        let mut service = self.service.lock().await;
+        let arc_service = self.service.clone();
+        let mut service = arc_service.lock().await;
 
         let rx = if let Some(consumer) = service.find_consumer_rx(consumer_id).await {
             consumer
@@ -142,8 +145,28 @@ impl ConsumerService for DanubeServerImpl {
     // Consumer acknowledge the received message
     async fn ack(
         &self,
-        _request: tonic::Request<AckRequest>,
+        request: tonic::Request<AckRequest>,
     ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
-        todo!()
+        let ack_request = request.into_inner();
+        let request_id = ack_request.request_id;
+        let message_id: MessageID = ack_request.msg_id.unwrap().into();
+
+        trace!("Received ack request for message_id: {}", message_id);
+
+        let arc_service = self.service.clone();
+        let mut service = arc_service.lock().await;
+
+        match service.ack_message(request_id, message_id.clone()).await {
+            Ok(()) => {
+                trace!("Message with id: {} was acknowledged", message_id);
+                Ok(tonic::Response::new(AckResponse {
+                    request_id: request_id,
+                }))
+            }
+            Err(err) => {
+                let status = Status::internal(format!("Error acknowledging message: {}", err));
+                Err(status)
+            }
+        }
     }
 }

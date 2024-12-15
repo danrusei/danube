@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
+use danube_client::{MessageID, StreamMessage};
 use tokio::sync::mpsc;
 use tracing::{trace, warn};
 
@@ -51,7 +51,7 @@ impl DispatcherSingleConsumer {
                                 warn!("Failed to dispatch message: {}", e);
                             }
                         }
-                        DispatcherCommand::MessageAcked(_) => {
+                        DispatcherCommand::MessageAcked(_, _) => {
                             unreachable!(
                                 "Non-reliable dispatcher does not care about acked messages"
                             );
@@ -70,6 +70,12 @@ impl DispatcherSingleConsumer {
             .send(DispatcherCommand::DispatchMessage(message))
             .await
             .map_err(|err| anyhow!("Failed to dispatch the message {}", err))
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    /// Non-reliable dispatchers do not care about acked messages
+    pub(crate) async fn ack_message(&self, _request_id: u64, _message_id: MessageID) -> Result<()> {
+        Ok(())
     }
 
     /// Add a consumer

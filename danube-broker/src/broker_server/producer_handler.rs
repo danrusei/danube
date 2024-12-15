@@ -26,7 +26,8 @@ impl ProducerService for DanubeServerImpl {
             req.producer_name, req.topic_name,
         );
 
-        let mut service = self.service.lock().await;
+        let arc_service = self.service.clone();
+        let mut service = arc_service.lock().await;
 
         match service
             .get_topic(&req.topic_name, req.delivery_strategy, req.schema, true)
