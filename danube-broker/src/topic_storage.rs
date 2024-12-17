@@ -117,6 +117,10 @@ impl TopicStore {
         None
     }
 
+    pub fn contains_segment(&self, segment_id: usize) -> bool {
+        self.segments.contains_key(&segment_id)
+    }
+
     // Start the TopicStore lifecycle management task that have the following responsibilities:
     // - Clean up acknowledged segments
     // - Remove closed segments that are older than the TTL
