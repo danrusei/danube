@@ -28,7 +28,7 @@ pub struct ProducerRequest {
     #[prost(enumeration = "ProducerAccessMode", tag = "5")]
     pub producer_access_mode: i32,
     #[prost(message, optional, tag = "6")]
-    pub retention_strategy: ::core::option::Option<TopicDeliveryStrategy>,
+    pub delivery_strategy: ::core::option::Option<TopicDeliveryStrategy>,
 }
 /// Create Producer response
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -40,42 +40,6 @@ pub struct ProducerResponse {
     pub producer_id: u64,
     #[prost(string, tag = "3")]
     pub producer_name: ::prost::alloc::string::String,
-}
-/// Producer send the message
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MessageRequest {
-    /// Unique ID for tracking the message request
-    #[prost(uint64, tag = "1")]
-    pub request_id: u64,
-    /// Identifies the producer, associated with a unique topic
-    #[prost(uint64, tag = "2")]
-    pub producer_id: u64,
-    /// The actual payload of the message
-    #[prost(bytes = "vec", tag = "3")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    /// Optional metadata for additional context
-    #[prost(message, optional, tag = "4")]
-    pub metadata: ::core::option::Option<MessageMetadata>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MessageMetadata {
-    /// Optional, identifies the producer’s name
-    #[prost(string, tag = "1")]
-    pub producer_name: ::prost::alloc::string::String,
-    /// Optional, useful for maintaining order and deduplication
-    #[prost(uint64, tag = "2")]
-    pub sequence_id: u64,
-    /// Optional, timestamp for when the message was published
-    #[prost(uint64, tag = "3")]
-    pub publish_time: u64,
-    /// Optional, user-defined properties/attributes
-    #[prost(map = "string, string", tag = "4")]
-    pub attributes: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
 }
 /// Producer receive acknowledge for the sent message
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -171,18 +135,52 @@ pub struct StreamMessage {
     /// Unique ID for tracking the message request
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    /// Identifies the message, associated with a unique topic, subscription and the broker
+    #[prost(message, optional, tag = "2")]
+    pub msg_id: ::core::option::Option<MsgId>,
     /// The actual payload of the message
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes = "vec", tag = "3")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
-    /// Optional metadata for additional context
-    #[prost(message, optional, tag = "3")]
-    pub metadata: ::core::option::Option<MessageMetadata>,
+    /// Timestamp for when the message was published
+    #[prost(uint64, tag = "4")]
+    pub publish_time: u64,
+    /// Identifies the producer’s name
+    #[prost(string, tag = "5")]
+    pub producer_name: ::prost::alloc::string::String,
+    /// Identifies the producer, associated with a unique topic
+    #[prost(uint64, tag = "6")]
+    pub producer_id: u64,
+    /// User-defined properties/attributes
+    #[prost(map = "string, string", tag = "7")]
+    pub attributes: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MsgId {
+    ///   Unique sequnce ID for tracking the order of the message
+    #[prost(uint64, tag = "1")]
+    pub sequence_id: u64,
+    /// Broker address
+    #[prost(string, tag = "2")]
+    pub broker_addr: ::prost::alloc::string::String,
+    /// Topic name the message is published to
+    #[prost(string, tag = "3")]
+    pub topic_name: ::prost::alloc::string::String,
+    /// Subscription name the consumer is subscribed to
+    #[prost(string, tag = "4")]
+    pub subscription_name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AckRequest {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    /// Identifies the message, associated with a unique topic, subscription and the broker
+    #[prost(message, optional, tag = "2")]
+    pub msg_id: ::core::option::Option<MsgId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -622,7 +620,7 @@ pub mod producer_service_client {
         /// Sends a message from the Producer
         pub async fn send_message(
             &mut self,
-            request: impl tonic::IntoRequest<super::MessageRequest>,
+            request: impl tonic::IntoRequest<super::StreamMessage>,
         ) -> std::result::Result<
             tonic::Response<super::MessageResponse>,
             tonic::Status,
@@ -1103,7 +1101,7 @@ pub mod producer_service_server {
         /// Sends a message from the Producer
         async fn send_message(
             &self,
-            request: tonic::Request<super::MessageRequest>,
+            request: tonic::Request<super::StreamMessage>,
         ) -> std::result::Result<tonic::Response<super::MessageResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -1237,7 +1235,7 @@ pub mod producer_service_server {
                     struct SendMessageSvc<T: ProducerService>(pub Arc<T>);
                     impl<
                         T: ProducerService,
-                    > tonic::server::UnaryService<super::MessageRequest>
+                    > tonic::server::UnaryService<super::StreamMessage>
                     for SendMessageSvc<T> {
                         type Response = super::MessageResponse;
                         type Future = BoxFuture<
@@ -1246,7 +1244,7 @@ pub mod producer_service_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::MessageRequest>,
+                            request: tonic::Request<super::StreamMessage>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {

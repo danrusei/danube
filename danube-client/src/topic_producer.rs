@@ -1,11 +1,11 @@
 use crate::proto::{
-    producer_service_client::ProducerServiceClient, MessageRequest, MessageResponse,
-    ProducerAccessMode, ProducerRequest, ProducerResponse,
+    producer_service_client::ProducerServiceClient, MessageResponse, ProducerAccessMode,
+    ProducerRequest, ProducerResponse, StreamMessage as ProtoStreamMessage,
 };
 use crate::{
+    delivery_strategy::ConfigDeliveryStrategy,
     errors::{decode_error_details, DanubeError, Result},
-    message::{MessageMetadata, SendMessage},
-    retention_strategy::ConfigRetentionStrategy,
+    message::{MessageID, StreamMessage},
     schema::Schema,
     DanubeClient, ProducerOptions,
 };
@@ -39,7 +39,7 @@ pub(crate) struct TopicProducer {
     // the schema represent the message payload schema
     schema: Schema,
     // the retention strategy for the topic
-    retention_strategy: ConfigRetentionStrategy,
+    delivery_strategy: ConfigDeliveryStrategy,
     // other configurable options for the producer
     producer_options: ProducerOptions,
     // the grpc client cnx
@@ -54,7 +54,7 @@ impl TopicProducer {
         topic: String,
         producer_name: String,
         schema: Schema,
-        retention_strategy: ConfigRetentionStrategy,
+        delivery_strategy: ConfigDeliveryStrategy,
         producer_options: ProducerOptions,
     ) -> Self {
         TopicProducer {
@@ -65,7 +65,7 @@ impl TopicProducer {
             request_id: AtomicU64::new(0),
             message_sequence_id: AtomicU64::new(0),
             schema,
-            retention_strategy,
+            delivery_strategy,
             producer_options,
             stream_client: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
@@ -81,7 +81,7 @@ impl TopicProducer {
             topic_name: self.topic.clone(),
             schema: Some(self.schema.clone().into()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
-            retention_strategy: Some(self.retention_strategy.clone().into()),
+            delivery_strategy: Some(self.delivery_strategy.clone().into()),
         };
 
         let max_retries = 4;
@@ -193,23 +193,26 @@ impl TopicProducer {
             HashMap::new()
         };
 
-        let meta_data = MessageMetadata {
-            producer_name: self.producer_name.clone(),
+        let msg_id = MessageID {
             sequence_id: self.message_sequence_id.fetch_add(1, Ordering::SeqCst),
-            publish_time: publish_time,
-            attributes: attr,
+            broker_addr: self.client.uri.to_string(),
+            topic_name: self.topic.clone(),
+            subscription_name: "None".to_string(),
         };
 
-        let send_message = SendMessage {
+        let send_message = StreamMessage {
             request_id: self.request_id.fetch_add(1, Ordering::SeqCst),
+            msg_id: msg_id,
+            payload: data,
+            publish_time: publish_time,
+            producer_name: self.producer_name.clone(),
             producer_id: self
                 .producer_id
                 .expect("Producer ID should be set before sending messages"),
-            metadata: Some(meta_data),
-            message: data,
+            attributes: attr,
         };
 
-        let req: MessageRequest = send_message.to_proto();
+        let req: ProtoStreamMessage = send_message.into();
 
         let mut client = self.stream_client.as_ref().unwrap().clone();
         let response: std::result::Result<Response<MessageResponse>, Status> =

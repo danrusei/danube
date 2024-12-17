@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use danube_client::{MessageID, StreamMessage};
 use std::sync::{Arc, RwLock};
 use tokio::{
     sync::mpsc,
@@ -7,9 +8,7 @@ use tokio::{
 use tracing::{trace, warn};
 
 use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::ConsumerDispatch,
-    dispatcher::DispatcherCommand,
+    consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
     topic_storage::TopicStore,
 };
 
@@ -46,8 +45,8 @@ impl DispatcherReliableSingleConsumer {
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
-                            DispatcherCommand::MessageAcked(message_id) => {
-                                if let Err(e) = consumer_dispatch.handle_message_acked(message_id).await {
+                            DispatcherCommand::MessageAcked(request_id, msg_id) => {
+                                if let Err(e) = consumer_dispatch.handle_message_acked(request_id, msg_id).await {
                                     warn!("Failed to handle message acked: {}", e);
                                 }
                             }
@@ -66,6 +65,14 @@ impl DispatcherReliableSingleConsumer {
         });
 
         DispatcherReliableSingleConsumer { control_tx }
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    pub(crate) async fn ack_message(&self, request_id: u64, message_id: MessageID) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::MessageAcked(request_id, message_id))
+            .await
+            .map_err(|_| anyhow!("Failed to send message acked command"))
     }
 
     /// Add a consumer
@@ -155,7 +162,7 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
 /// Dispatch a message to the active consumer
 pub(crate) async fn dispatch_reliable_message_single_consumer(
     active_consumer: &mut Option<Consumer>,
-    message: MessageToSend,
+    message: StreamMessage,
 ) -> Result<()> {
     if let Some(consumer) = active_consumer {
         if consumer.get_status().await {

@@ -1,11 +1,9 @@
 use anyhow::{anyhow, Result};
+use danube_client::{MessageID, StreamMessage};
 use tokio::sync::mpsc;
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::DispatcherCommand,
-};
+use crate::{consumer::Consumer, dispatcher::DispatcherCommand};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherSingleConsumer {
@@ -53,7 +51,7 @@ impl DispatcherSingleConsumer {
                                 warn!("Failed to dispatch message: {}", e);
                             }
                         }
-                        DispatcherCommand::MessageAcked(_) => {
+                        DispatcherCommand::MessageAcked(_, _) => {
                             unreachable!(
                                 "Non-reliable dispatcher does not care about acked messages"
                             );
@@ -67,11 +65,17 @@ impl DispatcherSingleConsumer {
     }
 
     /// Dispatch a message to the active consumer
-    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn dispatch_message(&self, message: StreamMessage) -> Result<()> {
         self.control_tx
             .send(DispatcherCommand::DispatchMessage(message))
             .await
             .map_err(|err| anyhow!("Failed to dispatch the message {}", err))
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    /// Non-reliable dispatchers do not care about acked messages
+    pub(crate) async fn ack_message(&self, _request_id: u64, _message_id: MessageID) -> Result<()> {
+        Ok(())
     }
 
     /// Add a consumer
@@ -175,7 +179,7 @@ impl DispatcherSingleConsumer {
     /// Dispatch a message to the active consumer
     async fn handle_dispatch_message(
         active_consumer: &mut Option<Consumer>,
-        message: MessageToSend,
+        message: StreamMessage,
     ) -> Result<()> {
         if let Some(consumer) = active_consumer {
             if consumer.get_status().await {

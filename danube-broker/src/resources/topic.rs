@@ -65,13 +65,13 @@ impl TopicResources {
         Ok(())
     }
 
-    pub(crate) async fn add_topic_retention(
+    pub(crate) async fn add_topic_delivery(
         &mut self,
         topic_name: &str,
-        ret_strategy: ConfigDeliveryStrategy,
+        delivery_strategy: ConfigDeliveryStrategy,
     ) -> Result<()> {
-        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
-        let data = serde_json::to_value(ret_strategy).unwrap();
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "delivery"]);
+        let data = serde_json::to_value(delivery_strategy).unwrap();
         self.create(&path, data).await?;
 
         Ok(())
@@ -143,15 +143,13 @@ impl TopicResources {
         None
     }
 
-    pub(crate) fn get_retention_strategy(
-        &self,
-        topic_name: &str,
-    ) -> Option<ConfigDeliveryStrategy> {
-        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "retention"]);
+    pub(crate) fn get_delivery_strategy(&self, topic_name: &str) -> Option<ConfigDeliveryStrategy> {
+        let path = join_path(&[BASE_TOPICS_PATH, topic_name, "delivery"]);
         let result = self.local_cache.get(&path);
         if let Some(value) = result {
-            let ret_strategy: Option<ConfigDeliveryStrategy> = serde_json::from_value(value).ok();
-            return ret_strategy;
+            let delivery_strategy: Option<ConfigDeliveryStrategy> =
+                serde_json::from_value(value).ok();
+            return delivery_strategy;
         }
         None
     }

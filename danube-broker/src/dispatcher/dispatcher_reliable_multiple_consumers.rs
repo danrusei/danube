@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use danube_client::{MessageID, StreamMessage};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::{
@@ -8,9 +9,7 @@ use tokio::{
 use tracing::{trace, warn};
 
 use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::ConsumerDispatch,
-    dispatcher::DispatcherCommand,
+    consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
     topic_storage::TopicStore,
 };
 
@@ -47,8 +46,8 @@ impl DispatcherReliableMultipleConsumers {
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
-                            DispatcherCommand::MessageAcked(message_id) => {
-                                if let Err(e) = consumer_dispatch.handle_message_acked(message_id).await {
+                            DispatcherCommand::MessageAcked(request_id, msg_id) => {
+                                if let Err(e) = consumer_dispatch.handle_message_acked(request_id, msg_id).await {
                                     warn!("Failed to handle message acked: {}", e);
                                 }
                             }
@@ -67,6 +66,14 @@ impl DispatcherReliableMultipleConsumers {
         });
 
         DispatcherReliableMultipleConsumers { control_tx }
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    pub(crate) async fn ack_message(&self, request_id: u64, message_id: MessageID) -> Result<()> {
+        self.control_tx
+            .send(DispatcherCommand::MessageAcked(request_id, message_id))
+            .await
+            .map_err(|_| anyhow!("Failed to send message acked command"))
     }
 
     /// Add a new consumer to the dispatcher
@@ -123,7 +130,7 @@ async fn handle_disconnect_all(consumer_dispatch: &mut ConsumerDispatch) {
 pub(crate) async fn dispatch_reliable_message_multiple_consumers(
     consumers: &mut [Consumer],
     index_consumer: Arc<AtomicUsize>,
-    message: MessageToSend,
+    message: StreamMessage,
 ) -> Result<()> {
     let num_consumers = consumers.len();
     if num_consumers == 0 {

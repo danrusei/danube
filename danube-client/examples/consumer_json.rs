@@ -46,6 +46,9 @@ async fn main() -> Result<()> {
         match serde_json::from_slice::<MyMessage>(&payload) {
             Ok(decoded_message) => {
                 println!("Received message: {:?}", decoded_message);
+
+                // Acknowledge the message
+                consumer.ack(message.request_id, message.msg_id).await?;
             }
             Err(e) => {
                 eprintln!("Failed to decode message: {}", e);

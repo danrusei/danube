@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Ok, Result};
+use danube_client::{MessageID, StreamMessage};
 use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -7,7 +8,7 @@ use tracing::trace;
 
 use crate::{
     broker_metrics::TOPIC_CONSUMERS,
-    consumer::{Consumer, MessageToSend},
+    consumer::Consumer,
     delivery_strategy::DeliveryStrategy,
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
@@ -34,7 +35,7 @@ pub(crate) struct ConsumerInfo {
     pub(crate) consumer_id: u64,
     pub(crate) sub_options: SubscriptionOptions,
     pub(crate) status: Arc<Mutex<bool>>,
-    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<MessageToSend>>>,
+    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<StreamMessage>>>,
 }
 
 impl ConsumerInfo {
@@ -77,7 +78,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
-        retention_strategy: &DeliveryStrategy,
+        delivery_strategy: &DeliveryStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -97,7 +98,7 @@ impl Subscription {
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
             let new_dispatcher = self
-                .create_new_dispatcher(options.clone(), retention_strategy)
+                .create_new_dispatcher(options.clone(), delivery_strategy)
                 .await?;
 
             self.dispatcher = Some(new_dispatcher);
@@ -129,9 +130,9 @@ impl Subscription {
     pub(crate) async fn create_new_dispatcher(
         &self,
         options: SubscriptionOptions,
-        retention_strategy: &DeliveryStrategy,
+        delivery_strategy: &DeliveryStrategy,
     ) -> Result<Dispatcher> {
-        let last_acknowledged_segment = match retention_strategy {
+        let last_acknowledged_segment = match delivery_strategy {
             DeliveryStrategy::Reliable(persistent_storage) => Some(
                 persistent_storage
                     .get_last_acknowledged_segment(&options.subscription_name)
@@ -140,7 +141,7 @@ impl Subscription {
             DeliveryStrategy::NonReliable => None,
         };
 
-        let new_dispatcher = match retention_strategy {
+        let new_dispatcher = match delivery_strategy {
             DeliveryStrategy::NonReliable => match options.subscription_type {
                 // Exclusive
                 0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
@@ -191,7 +192,7 @@ impl Subscription {
         Ok(new_dispatcher)
     }
 
-    pub(crate) async fn send_message_to_dispatcher(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn send_message_to_dispatcher(&self, message: StreamMessage) -> Result<()> {
         // Try to send the message
         if let Some(dispatcher) = self.dispatcher.as_ref() {
             dispatcher.dispatch_message(message).await?;
@@ -201,10 +202,19 @@ impl Subscription {
         Ok(())
     }
 
+    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        if let Some(dispatcher) = self.dispatcher.as_ref() {
+            dispatcher.ack_message(request_id, msg_id).await?;
+        } else {
+            return Err(anyhow!("Dispatcher not initialized"));
+        }
+        Ok(())
+    }
+
     pub(crate) fn get_consumer_rx(
         &self,
         consumer_id: u64,
-    ) -> Option<Arc<Mutex<mpsc::Receiver<MessageToSend>>>> {
+    ) -> Option<Arc<Mutex<mpsc::Receiver<StreamMessage>>>> {
         if let Some(consumer_info) = self.consumers.get(&consumer_id) {
             return Some(consumer_info.rx_cons.clone());
         }

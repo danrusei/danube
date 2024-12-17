@@ -52,8 +52,8 @@ impl TopicAdmin for DanubeAdminImpl {
             schema_type = SchemaType::Json(req.schema_data);
         }
 
-        let ret_strategy = TopicDeliveryStrategy {
-            strategy: req.retention_strategy,
+        let delivery_strategy = TopicDeliveryStrategy {
+            strategy: req.delivery_strategy,
             retention_period: 3600,
             segment_size: 50,
         };
@@ -63,7 +63,7 @@ impl TopicAdmin for DanubeAdminImpl {
         let schema = Schema::new(format!("{}_schema", req.name), schema_type);
 
         let success = match service
-            .create_topic_cluster(&req.name, Some(ret_strategy), Some(schema.into()))
+            .create_topic_cluster(&req.name, Some(delivery_strategy), Some(schema.into()))
             .await
         {
             Ok(()) => true,

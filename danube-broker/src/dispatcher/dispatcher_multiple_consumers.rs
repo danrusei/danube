@@ -1,12 +1,10 @@
 use anyhow::{anyhow, Result};
+use danube_client::{MessageID, StreamMessage};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc;
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::{Consumer, MessageToSend},
-    dispatcher::DispatcherCommand,
-};
+use crate::{consumer::Consumer, dispatcher::DispatcherCommand};
 
 #[derive(Debug)]
 pub(crate) struct DispatcherMultipleConsumers {
@@ -48,7 +46,7 @@ impl DispatcherMultipleConsumers {
                                 warn!("Failed to dispatch message: {}", error);
                             }
                         }
-                        DispatcherCommand::MessageAcked(_) => {
+                        DispatcherCommand::MessageAcked(_, _) => {
                             unreachable!(
                                 "Non-reliable dispatcher does not care about acked messages"
                             );
@@ -62,11 +60,17 @@ impl DispatcherMultipleConsumers {
     }
 
     /// Dispatch a message to the active consumer
-    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn dispatch_message(&self, message: StreamMessage) -> Result<()> {
         self.control_tx
             .send(DispatcherCommand::DispatchMessage(message))
             .await
             .map_err(|err| anyhow!("Failed to dispatch the message {}", err))
+    }
+
+    /// Acknowledge a message, which means that the message has been successfully processed by the consumer
+    /// Non-reliable dispatchers do not care about acked messages
+    pub(crate) async fn ack_message(&self, _request_id: u64, _message_id: MessageID) -> Result<()> {
+        Ok(())
     }
 
     /// Add a new consumer to the dispatcher
@@ -98,7 +102,7 @@ impl DispatcherMultipleConsumers {
     async fn handle_dispatch_message(
         consumers: &mut [Consumer],
         index_consumer: &mut AtomicUsize,
-        message: MessageToSend,
+        message: StreamMessage,
     ) -> Result<()> {
         let num_consumers = consumers.len();
         if num_consumers == 0 {

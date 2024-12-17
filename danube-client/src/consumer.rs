@@ -1,11 +1,11 @@
 use crate::{
     errors::{DanubeError, Result},
-    proto::StreamMessage,
     topic_consumer::TopicConsumer,
-    DanubeClient,
+    DanubeClient, MessageID, StreamMessage,
 };
 
 use futures::{future::join_all, StreamExt};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -33,8 +33,8 @@ pub struct Consumer {
     topic_name: String,
     // the name of the Consumer
     consumer_name: String,
-    // the consumers of the topic
-    consumers: Vec<Arc<Mutex<TopicConsumer>>>,
+    // the map between the partitioned topic name and the consumer instance
+    consumers: HashMap<String, Arc<Mutex<TopicConsumer>>>,
     // the name of the subscription the consumer is attached to
     subscription: String,
     // the type of the subscription, that can be Shared and Exclusive
@@ -62,7 +62,7 @@ impl Consumer {
             client,
             topic_name,
             consumer_name,
-            consumers: Vec::new(),
+            consumers: HashMap::new(),
             subscription,
             subscription_type,
             consumer_options,
@@ -103,7 +103,7 @@ impl Consumer {
                     consumer_options,
                 );
                 match topic_consumer.subscribe().await {
-                    Ok(_) => Ok(Arc::new(Mutex::new(topic_consumer))),
+                    Ok(_) => Ok(topic_consumer),
                     Err(e) => Err(e),
                 }
             });
@@ -115,10 +115,15 @@ impl Consumer {
         let results = join_all(tasks).await;
 
         // Collect results
-        let mut topic_consumers = Vec::new();
+        let mut topic_consumers = HashMap::new();
         for result in results {
             match result {
-                Ok(Ok(consumer)) => topic_consumers.push(consumer),
+                Ok(Ok(consumer)) => {
+                    topic_consumers.insert(
+                        consumer.get_topic_name().to_string(),
+                        Arc::new(Mutex::new(consumer)),
+                    );
+                }
                 Ok(Err(e)) => return Err(e),
                 Err(e) => return Err(DanubeError::Unrecoverable(e.to_string())),
             }
@@ -130,7 +135,7 @@ impl Consumer {
             ));
         }
 
-        self.consumers.extend(topic_consumers);
+        self.consumers.extend(topic_consumers.into_iter());
         Ok(())
     }
 
@@ -148,7 +153,7 @@ impl Consumer {
         let (tx, rx) = mpsc::channel(100); // Buffer size of 100, adjust as needed
 
         // Spawn a task for each cloned TopicConsumer
-        for consumer in &self.consumers {
+        for (_, consumer) in &self.consumers {
             let tx = tx.clone();
             let consumer = consumer.clone();
 
@@ -159,7 +164,8 @@ impl Consumer {
                     while let Some(message) = stream.next().await {
                         match message {
                             Ok(stream_message) => {
-                                if let Err(_) = tx.send(stream_message).await {
+                                let message: StreamMessage = stream_message.into();
+                                if let Err(_) = tx.send(message).await {
                                     // if the channel is closed exit the loop
                                     break;
                                 }
@@ -175,6 +181,15 @@ impl Consumer {
         }
 
         Ok(rx)
+    }
+
+    pub async fn ack(&mut self, req_id: u64, msg_id: MessageID) -> Result<()> {
+        let topic_consumer = self.consumers.get_mut(&self.topic_name);
+        if let Some(topic_consumer) = topic_consumer {
+            let mut topic_consumer = topic_consumer.lock().await;
+            let _ = topic_consumer.send_ack(req_id, msg_id).await?;
+        }
+        Ok(())
     }
 }
 

@@ -1,11 +1,11 @@
 use crate::{
     errors::{decode_error_details, DanubeError, Result},
-    ConsumerOptions, DanubeClient, SubType,
+    ConsumerOptions, DanubeClient, MessageID, SubType,
 };
 
 use crate::proto::{
-    consumer_service_client::ConsumerServiceClient, ConsumerRequest, ConsumerResponse,
-    ReceiveRequest, StreamMessage,
+    consumer_service_client::ConsumerServiceClient, AckRequest, AckResponse, ConsumerRequest,
+    ConsumerResponse, ReceiveRequest, StreamMessage,
 };
 
 use futures_core::Stream;
@@ -182,6 +182,29 @@ impl TopicConsumer {
             }
         };
         Ok(response.into_inner())
+    }
+
+    pub(crate) async fn send_ack(&mut self, req_id: u64, msg_id: MessageID) -> Result<AckResponse> {
+        let stream_client = self.stream_client.as_mut().ok_or_else(|| {
+            DanubeError::Unrecoverable("SendAck: Stream client is not initialized".to_string())
+        })?;
+
+        let ack_request = AckRequest {
+            request_id: req_id,
+            msg_id: Some(msg_id.into()),
+        };
+        let response = match stream_client.ack(ack_request).await {
+            Ok(response) => response,
+            Err(status) => {
+                let decoded_message = decode_error_details(&status);
+                return Err(DanubeError::FromStatus(status, decoded_message));
+            }
+        };
+        Ok(response.into_inner())
+    }
+
+    pub(crate) fn get_topic_name(&self) -> &str {
+        &self.topic_name
     }
 
     async fn connect(&mut self, addr: &Uri) -> Result<()> {

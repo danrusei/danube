@@ -29,6 +29,7 @@ pub use schema::{Schema, SchemaType};
 mod schema_service;
 
 mod message;
+pub use message::{MessageID, StreamMessage};
 
 mod lookup_service;
 
@@ -38,4 +39,4 @@ mod rpc_connection;
 
 mod health_check;
 
-mod retention_strategy;
+mod delivery_strategy;

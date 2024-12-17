@@ -1,6 +1,7 @@
 use anyhow::Result;
+use danube_client::{MessageID, StreamMessage};
 
-use crate::consumer::{Consumer, MessageToSend};
+use crate::consumer::Consumer;
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_reliable_multiple_consumers;
@@ -31,12 +32,12 @@ enum DispatcherCommand {
     AddConsumer(Consumer),
     RemoveConsumer(u64),
     DisconnectAllConsumers,
-    DispatchMessage(MessageToSend),
-    MessageAcked(u64),
+    DispatchMessage(StreamMessage),
+    MessageAcked(u64, MessageID),
 }
 
 impl Dispatcher {
-    pub(crate) async fn dispatch_message(&self, message: MessageToSend) -> Result<()> {
+    pub(crate) async fn dispatch_message(&self, message: StreamMessage) -> Result<()> {
         match self {
             Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.dispatch_message(message).await?),
             Dispatcher::MultipleConsumers(dispatcher) => {
@@ -51,6 +52,22 @@ impl Dispatcher {
                 unreachable!(
                     "Reliable dispatchers do not receive single messsages, rather segments"
                 )
+            }
+        }
+    }
+    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        match self {
+            Dispatcher::OneConsumer(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::MultipleConsumers(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::ReliableOneConsumer(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+            }
+            Dispatcher::ReliableMultipleConsumers(dispatcher) => {
+                Ok(dispatcher.ack_message(request_id, msg_id).await?)
             }
         }
     }
