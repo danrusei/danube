@@ -48,7 +48,9 @@ async fn main() -> Result<()> {
                 println!("Received message: {:?}", decoded_message);
 
                 // Acknowledge the message
-                consumer.ack(message.request_id, message.msg_id).await?;
+                if let Err(e) = consumer.ack(message.request_id, message.msg_id).await {
+                    eprintln!("Failed to acknowledge message: {}", e);
+                }
             }
             Err(e) => {
                 eprintln!("Failed to decode message: {}", e);

@@ -155,11 +155,14 @@ impl Consumer {
         // Spawn a task for each cloned TopicConsumer
         for (_, consumer) in &self.consumers {
             let tx = tx.clone();
-            let consumer = consumer.clone();
 
-            tokio::spawn(async move {
+            let stream_result = {
                 let mut consumer = consumer.lock().await;
-                while let Ok(stream) = consumer.receive().await {
+                consumer.receive().await
+            };
+
+            if let Ok(stream) = stream_result {
+                tokio::spawn(async move {
                     let mut stream = stream;
                     while let Some(message) = stream.next().await {
                         match message {
@@ -176,8 +179,8 @@ impl Consumer {
                             }
                         }
                     }
-                }
-            });
+                });
+            }
         }
 
         Ok(rx)
