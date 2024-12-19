@@ -19,7 +19,7 @@ enum ProducerAccessMode {
 message TopicDeliveryStrategy {
     string strategy = 1; // "reliable" or "non_reliable"
     uint64 retention_period = 2; // in seconds, applicable for "reliable"
-    uint64 segment_size = 3; // in number of messages, applicable for "reliable"
+    uint64 segment_size = 3; // in bytes, applicable for "reliable"
 }
 
 // Create Producer request

@@ -40,3 +40,4 @@ mod rpc_connection;
 mod health_check;
 
 mod delivery_strategy;
+pub use delivery_strategy::ConfigDeliveryStrategy;

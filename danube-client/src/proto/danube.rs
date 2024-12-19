@@ -9,7 +9,7 @@ pub struct TopicDeliveryStrategy {
     /// in seconds, applicable for "reliable"
     #[prost(uint64, tag = "2")]
     pub retention_period: u64,
-    /// in number of messages, applicable for "reliable"
+    /// in bytes, applicable for "reliable"
     #[prost(uint64, tag = "3")]
     pub segment_size: u64,
 }

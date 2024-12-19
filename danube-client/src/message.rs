@@ -51,6 +51,12 @@ pub struct StreamMessage {
     pub attributes: HashMap<String, String>,
 }
 
+impl StreamMessage {
+    pub fn size(&self) -> usize {
+        self.payload.len()
+    }
+}
+
 impl From<MsgId> for MessageID {
     fn from(proto_msg_id: MsgId) -> Self {
         MessageID {

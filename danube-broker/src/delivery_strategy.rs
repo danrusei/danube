@@ -28,8 +28,8 @@ pub(crate) struct PersistentStorage {
 }
 
 impl PersistentStorage {
-    pub(crate) fn new(segment_capacity: usize, segment_ttl: u64) -> Self {
-        let topic_store = TopicStore::new(segment_capacity, segment_ttl);
+    pub(crate) fn new(segment_size: usize, segment_ttl: u64) -> Self {
+        let topic_store = TopicStore::new(segment_size, segment_ttl);
         let subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>> = Arc::new(DashMap::new());
         let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
         let subscriptions_cloned = Arc::clone(&subscriptions);
@@ -98,50 +98,3 @@ impl From<TopicDeliveryStrategy> for ConfigDeliveryStrategy {
         }
     }
 }
-
-// impl RetentionStrategy {
-//     // Segment acknowledgment from subscription
-//     pub async fn acknowledge_segment(&mut self, segment_id: u64) -> Result<()> {
-//         match self {
-//             RetentionStrategy::Reliable(store) => {
-//                 store.mark_segment_completed(segment_id).await?;
-//                 Ok(())
-//             }
-//             RetentionStrategy::NonReliable => Ok(()),
-//         }
-//     }
-
-//     // TTL cleanup for completed segments
-//     pub async fn cleanup_expired_segments(&mut self, ttl: Duration) -> Result<()> {
-//         match self {
-//             RetentionStrategy::Reliable(store) => {
-//                 let now = SystemTime::now();
-//                 let completed_segments = store.get_completed_segments().await?;
-
-//                 for segment in completed_segments {
-//                     if now.duration_since(segment.completion_timestamp)? > ttl {
-//                         store.remove_segment(segment.id).await?;
-//                     }
-//                 }
-//                 Ok(())
-//             }
-//             RetentionStrategy::NonReliable => Ok(()),
-//         }
-//     }
-
-//     // Segment-based message handling
-//     pub async fn handle_message_segment(&mut self, segment: MessageSegment) -> Result<()> {
-//         match self {
-//             RetentionStrategy::NonReliable => self.dispatch_segment(segment).await,
-//             RetentionStrategy::Reliable(store) => {
-//                 let segment_id = store.store_segment(segment.clone()).await?;
-//                 let result = self.dispatch_segment(segment).await;
-
-//                 if result.is_err() {
-//                     info!("Segment {} dispatch failed, retained for retry", segment_id);
-//                 }
-//                 Ok(())
-//             }
-//         }
-//     }
-// }
