@@ -186,10 +186,12 @@ impl Consumer {
         Ok(rx)
     }
 
-    pub async fn ack(&mut self, req_id: u64, msg_id: MessageID) -> Result<()> {
+    pub async fn ack(&mut self, req_id: u64, mut msg_id: MessageID) -> Result<()> {
         let topic_consumer = self.consumers.get_mut(&self.topic_name);
         if let Some(topic_consumer) = topic_consumer {
             let mut topic_consumer = topic_consumer.lock().await;
+            // add subscription name to the MessageID
+            msg_id.add_subscription_name(&self.subscription);
             let _ = topic_consumer.send_ack(req_id, msg_id).await?;
         }
         Ok(())
