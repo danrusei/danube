@@ -190,7 +190,7 @@ impl BrokerService {
                 }
             }
         } else {
-            let error_string = "Retention strategy is missing";
+            let error_string = "Delivery strategy is missing";
             let status = create_error_status(
                 Code::InvalidArgument,
                 ErrorType::UnknownError,
@@ -313,9 +313,9 @@ impl BrokerService {
         //get retention strategy from local_cache
         let delivery_strategy = self.resources.topic.get_delivery_strategy(topic_name);
         if delivery_strategy.is_none() {
-            warn!("Unable to create topic without a valid retention strategy");
+            warn!("Unable to create topic without a valid delivery strategy");
             return Err(anyhow!(
-                "Unable to create topic without a valid retention strategy"
+                "Unable to create topic without a valid delivery strategy"
             ));
         }
 

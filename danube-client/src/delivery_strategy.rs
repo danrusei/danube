@@ -8,6 +8,16 @@ pub struct ConfigDeliveryStrategy {
     pub segment_size: usize,
 }
 
+impl ConfigDeliveryStrategy {
+    pub fn new(strategy: &str, retention_period: u64, segment_size: usize) -> Self {
+        ConfigDeliveryStrategy {
+            strategy: strategy.to_string(),
+            retention_period,
+            segment_size,
+        }
+    }
+}
+
 impl Default for ConfigDeliveryStrategy {
     fn default() -> Self {
         ConfigDeliveryStrategy {

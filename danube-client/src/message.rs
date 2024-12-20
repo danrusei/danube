@@ -23,12 +23,18 @@ pub struct MessageID {
     pub subscription_name: String,
 }
 
+impl MessageID {
+    pub fn add_subscription_name(&mut self, subscription_name: &String) {
+        self.subscription_name = subscription_name.into();
+    }
+}
+
 impl Display for MessageID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}_{}_{}_{}",
-            self.sequence_id, self.broker_addr, self.topic_name, self.subscription_name
+            "seq:{}_topic:_{}_subscription:_{}",
+            self.sequence_id, self.topic_name, self.subscription_name
         )
     }
 }
@@ -49,6 +55,12 @@ pub struct StreamMessage {
     pub producer_id: u64,
     // User-defined properties/attributes
     pub attributes: HashMap<String, String>,
+}
+
+impl StreamMessage {
+    pub fn size(&self) -> usize {
+        self.payload.len()
+    }
 }
 
 impl From<MsgId> for MessageID {

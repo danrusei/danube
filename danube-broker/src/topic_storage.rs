@@ -14,6 +14,8 @@ pub(crate) struct Segment {
     pub(crate) close_time: u64,
     // Messages in the segment
     pub(crate) messages: Vec<StreamMessage>,
+    // Current size of the segment in bytes
+    pub(crate) current_size: usize,
 }
 
 impl Segment {
@@ -22,11 +24,17 @@ impl Segment {
             id,
             close_time: 0,
             messages: Vec::with_capacity(capacity),
+            current_size: 0,
         }
     }
 
-    pub fn is_full(&self, capacity: usize) -> bool {
-        self.messages.len() >= capacity
+    pub fn is_full(&self, max_size: usize) -> bool {
+        self.current_size >= max_size
+    }
+
+    pub fn add_message(&mut self, message: StreamMessage) {
+        self.current_size += message.size();
+        self.messages.push(message);
     }
 }
 
@@ -38,8 +46,8 @@ pub(crate) struct TopicStore {
     segments: Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
     // Index of segments in the segments map
     segments_index: Arc<RwLock<Vec<usize>>>,
-    // Maximum messages per segment
-    segment_capacity: usize,
+    // Maximum size per segment in bytes
+    segment_size: usize,
     // Time to live for segments in seconds
     segment_ttl: u64,
     // ID of the current writable segment
@@ -47,11 +55,11 @@ pub(crate) struct TopicStore {
 }
 
 impl TopicStore {
-    pub fn new(segment_capacity: usize, segment_ttl: u64) -> Self {
+    pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
         Self {
             segments: Arc::new(DashMap::new()),
             segments_index: Arc::new(RwLock::new(Vec::new())),
-            segment_capacity,
+            segment_size,
             segment_ttl,
             current_segment_id: Arc::new(RwLock::new(0)),
         }
@@ -69,7 +77,7 @@ impl TopicStore {
             .or_insert_with(|| {
                 // Create a new segment and update the index
                 let new_segment =
-                    Arc::new(RwLock::new(Segment::new(segment_id, self.segment_capacity)));
+                    Arc::new(RwLock::new(Segment::new(segment_id, self.segment_size)));
                 let mut index = self.segments_index.write().unwrap();
                 index.push(segment_id);
                 new_segment
@@ -78,14 +86,12 @@ impl TopicStore {
 
         // Get the writable segment or create a new one if it doesn't exist
         let mut writable_segment = segment.write().unwrap();
-        if writable_segment.is_full(self.segment_capacity) {
+        if writable_segment.is_full(self.segment_size) {
             // Create a new segment
             *current_segment_id += 1;
             let new_segment_id = *current_segment_id;
-            let new_segment = Arc::new(RwLock::new(Segment::new(
-                new_segment_id,
-                self.segment_capacity,
-            )));
+            let new_segment =
+                Arc::new(RwLock::new(Segment::new(new_segment_id, self.segment_size)));
 
             self.segments.insert(new_segment_id, new_segment.clone());
 
@@ -95,10 +101,10 @@ impl TopicStore {
 
             // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().unwrap();
-            new_writable_segment.messages.push(message);
+            new_writable_segment.add_message(message);
         } else {
             // Add the message to the current writable segment
-            writable_segment.messages.push(message);
+            writable_segment.add_message(message);
         }
     }
 
