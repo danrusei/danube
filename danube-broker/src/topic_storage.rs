@@ -56,10 +56,12 @@ pub(crate) struct TopicStore {
 
 impl TopicStore {
     pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
+        // Convert segment size to bytes
+        let segment_size_bytes = segment_size * 1024 * 1024;
         Self {
             segments: Arc::new(DashMap::new()),
             segments_index: Arc::new(RwLock::new(Vec::new())),
-            segment_size,
+            segment_size: segment_size_bytes,
             segment_ttl,
             current_segment_id: Arc::new(RwLock::new(0)),
         }
@@ -102,15 +104,38 @@ impl TopicStore {
             // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().unwrap();
             new_writable_segment.add_message(message);
+            dbg!(
+                "Store message in new segment {}",
+                new_writable_segment.messages.len()
+            );
         } else {
             // Add the message to the current writable segment
             writable_segment.add_message(message);
+            dbg!(
+                "Store message in current segment {}",
+                writable_segment.messages.len()
+            );
         }
     }
 
     // Get the next segment in the list based on the given segment ID
+    // If the current segment is 0, it will return the first segment in the list
     pub fn get_next_segment(&self, current_segment_id: usize) -> Option<Arc<RwLock<Segment>>> {
         let index = self.segments_index.read().unwrap();
+
+        if current_segment_id == 0 {
+            // Get the first segment if it exists
+            if !index.is_empty() {
+                let first_segment_id = index[0];
+                return self
+                    .segments
+                    .get(&first_segment_id)
+                    .map(|entry| entry.clone());
+            }
+            return None;
+        }
+
+        // Find the next segment after current_segment_id
         if let Some(pos) = index.iter().position(|&id| id == current_segment_id) {
             if pos + 1 < index.len() {
                 let next_segment_id = index[pos + 1];

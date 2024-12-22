@@ -184,7 +184,12 @@ impl TopicConsumer {
         Ok(response.into_inner())
     }
 
-    pub(crate) async fn send_ack(&mut self, req_id: u64, msg_id: MessageID) -> Result<AckResponse> {
+    pub(crate) async fn send_ack(
+        &mut self,
+        req_id: u64,
+        msg_id: MessageID,
+        subscription_name: &str,
+    ) -> Result<AckResponse> {
         let stream_client = self.stream_client.as_mut().ok_or_else(|| {
             DanubeError::Unrecoverable("SendAck: Stream client is not initialized".to_string())
         })?;
@@ -192,6 +197,7 @@ impl TopicConsumer {
         let ack_request = AckRequest {
             request_id: req_id,
             msg_id: Some(msg_id.into()),
+            subscription_name: subscription_name.to_string(),
         };
         let response = match stream_client.ack(ack_request).await {
             Ok(response) => response,

@@ -126,8 +126,10 @@ impl ConsumerDispatch {
                 if let Some(msg) = message {
                     self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
                     self.dispatch_message(msg).await?;
+                    dbg!("dispatched message");
                 } else {
                     move_to_next_segment = true;
+                    dbg!("no message to dispatch, move to next segment");
                 }
             }
 
@@ -183,6 +185,7 @@ impl ConsumerDispatch {
 
                 self.segment = Some(next_segment);
                 self.current_segment_id = Some(segment_id);
+                dbg!("first time, moed to  next segment");
             }
         }
         Ok(())
@@ -216,6 +219,16 @@ impl ConsumerDispatch {
         msg_id: MessageID,
     ) -> Result<()> {
         if let Some((pending_request_id, pending_msg_id)) = &self.pending_ack_message {
+            dbg!(
+                "received ack for msg with request_id {} and msg_id {:?}",
+                request_id,
+                &msg_id
+            );
+            dbg!(
+                "pending request_id: {:?}, pending_msg_id: {:?}",
+                pending_request_id,
+                pending_msg_id
+            );
             if *pending_request_id == request_id && *pending_msg_id == msg_id {
                 self.pending_ack_message = None;
                 self.acked_messages.insert(msg_id.clone(), request_id);

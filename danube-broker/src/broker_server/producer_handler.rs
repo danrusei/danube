@@ -96,7 +96,7 @@ impl ProducerService for DanubeServerImpl {
         trace!(
             "New message {} from producer {} with sequence id {:?} was received",
             stream_message.request_id,
-            stream_message.producer_id,
+            stream_message.msg_id.producer_id,
             stream_message.msg_id.sequence_id,
         );
 
@@ -107,11 +107,14 @@ impl ProducerService for DanubeServerImpl {
         let mut service = arc_service.lock().await;
 
         // check if the producer exist
-        match service.producer_index.entry(stream_message.producer_id) {
+        match service
+            .producer_index
+            .entry(stream_message.msg_id.producer_id)
+        {
             Entry::Vacant(_) => {
                 let status = Status::not_found(format!(
                     "The producer with id {} does not exist",
-                    stream_message.producer_id
+                    stream_message.msg_id.producer_id
                 ));
                 return Err(status);
             }
@@ -119,17 +122,17 @@ impl ProducerService for DanubeServerImpl {
         };
 
         let topic = service
-            .find_topic_by_producer(stream_message.producer_id)
+            .find_topic_by_producer(stream_message.msg_id.producer_id)
             .ok_or_else(|| {
                 Status::internal(format!(
                     "Unable to get the topic for the producer: {}",
-                    stream_message.producer_id
+                    stream_message.msg_id.producer_id
                 ))
             })?;
 
         let seq_id = stream_message.msg_id.sequence_id;
         let req_id = stream_message.request_id;
-        let producer_id = stream_message.producer_id;
+        let producer_id = stream_message.msg_id.producer_id;
 
         topic.publish_message(stream_message).await.map_err(|err| {
             Status::permission_denied(format!("Unable to publish the message: {}", err))

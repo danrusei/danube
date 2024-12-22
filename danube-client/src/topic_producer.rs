@@ -195,9 +195,11 @@ impl TopicProducer {
 
         let msg_id = MessageID {
             sequence_id: self.message_sequence_id.fetch_add(1, Ordering::SeqCst),
-            broker_addr: self.client.uri.to_string(),
+            producer_id: self
+                .producer_id
+                .expect("Producer ID should be set before sending messages"),
             topic_name: self.topic.clone(),
-            subscription_name: "None".to_string(),
+            broker_addr: self.client.uri.to_string(),
         };
 
         let send_message = StreamMessage {
@@ -206,9 +208,7 @@ impl TopicProducer {
             payload: data,
             publish_time: publish_time,
             producer_name: self.producer_name.clone(),
-            producer_id: self
-                .producer_id
-                .expect("Producer ID should be set before sending messages"),
+            subscription_name: None,
             attributes: attr,
         };
 

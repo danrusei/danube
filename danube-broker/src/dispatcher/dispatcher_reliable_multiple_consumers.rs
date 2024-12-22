@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::{MessageID, StreamMessage};
+use danube_client::StreamMessage;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::{
@@ -10,7 +10,7 @@ use tracing::{trace, warn};
 
 use crate::{
     consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
-    topic_storage::TopicStore,
+    message::AckMessage, topic_storage::TopicStore,
 };
 
 /// Reliable dispatcher for multiple consumers, it sends ordered messages to multiple consumers
@@ -69,9 +69,12 @@ impl DispatcherReliableMultipleConsumers {
     }
 
     /// Acknowledge a message, which means that the message has been successfully processed by the consumer
-    pub(crate) async fn ack_message(&self, request_id: u64, message_id: MessageID) -> Result<()> {
+    pub(crate) async fn ack_message(&self, ack_msg: AckMessage) -> Result<()> {
         self.control_tx
-            .send(DispatcherCommand::MessageAcked(request_id, message_id))
+            .send(DispatcherCommand::MessageAcked(
+                ack_msg.request_id,
+                ack_msg.msg_id,
+            ))
             .await
             .map_err(|_| anyhow!("Failed to send message acked command"))
     }

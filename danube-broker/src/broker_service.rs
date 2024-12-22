@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::{MessageID, StreamMessage};
+use danube_client::StreamMessage;
 use metrics::gauge;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,13 +9,13 @@ use tracing::{info, warn};
 
 use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDeliveryStrategy};
 
-use crate::subscription::ConsumerInfo;
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
     error_message::create_error_status,
+    message::AckMessage,
     policies::Policies,
     resources::Resources,
-    subscription::SubscriptionOptions,
+    subscription::{ConsumerInfo, SubscriptionOptions},
     topic::Topic,
     utils::get_random_id,
 };
@@ -643,9 +643,9 @@ impl BrokerService {
         }
     }
 
-    pub(crate) async fn ack_message(&mut self, request_id: u64, msg_id: MessageID) -> Result<()> {
-        if let Some(topic) = self.topics.get_mut(&msg_id.topic_name) {
-            topic.ack_message(request_id, msg_id).await?;
+    pub(crate) async fn ack_message(&mut self, ack_msg: AckMessage) -> Result<()> {
+        if let Some(topic) = self.topics.get_mut(&ack_msg.msg_id.topic_name) {
+            topic.ack_message(ack_msg).await?;
         }
         Ok(())
     }

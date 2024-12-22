@@ -129,6 +129,7 @@ pub struct ReceiveRequest {
     #[prost(uint64, tag = "2")]
     pub consumer_id: u64,
 }
+/// The message that is sent by producer to topic and then to consumer
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamMessage {
@@ -147,9 +148,9 @@ pub struct StreamMessage {
     /// Identifies the producer’s name
     #[prost(string, tag = "5")]
     pub producer_name: ::prost::alloc::string::String,
-    /// Identifies the producer, associated with a unique topic
-    #[prost(uint64, tag = "6")]
-    pub producer_id: u64,
+    /// Subscription name the consumer is subscribed to
+    #[prost(string, tag = "6")]
+    pub subscription_name: ::prost::alloc::string::String,
     /// User-defined properties/attributes
     #[prost(map = "string, string", tag = "7")]
     pub attributes: ::std::collections::HashMap<
@@ -157,21 +158,22 @@ pub struct StreamMessage {
         ::prost::alloc::string::String,
     >,
 }
+/// Unique ID of the message
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MsgId {
     ///   Unique sequnce ID for tracking the order of the message
     #[prost(uint64, tag = "1")]
     pub sequence_id: u64,
-    /// Broker address
-    #[prost(string, tag = "2")]
-    pub broker_addr: ::prost::alloc::string::String,
+    /// Identifies the producer, associated with a unique topic
+    #[prost(uint64, tag = "2")]
+    pub producer_id: u64,
     /// Topic name the message is published to
     #[prost(string, tag = "3")]
     pub topic_name: ::prost::alloc::string::String,
-    /// Subscription name the consumer is subscribed to
+    /// Broker address
     #[prost(string, tag = "4")]
-    pub subscription_name: ::prost::alloc::string::String,
+    pub broker_addr: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -181,6 +183,9 @@ pub struct AckRequest {
     /// Identifies the message, associated with a unique topic, subscription and the broker
     #[prost(message, optional, tag = "2")]
     pub msg_id: ::core::option::Option<MsgId>,
+    /// Subscription name the consumer is subscribed to
+    #[prost(string, tag = "3")]
+    pub subscription_name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

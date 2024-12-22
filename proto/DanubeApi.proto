@@ -84,6 +84,7 @@ message ReceiveRequest {
     uint64 consumer_id = 2;
 }
 
+// The message that is sent by producer to topic and then to consumer
 message StreamMessage {
     // Unique ID for tracking the message request
     uint64 request_id = 1;
@@ -95,28 +96,31 @@ message StreamMessage {
     uint64 publish_time = 4;
     // Identifies the producer’s name
     string producer_name = 5;
-    // Identifies the producer, associated with a unique topic
-    uint64 producer_id = 6;
+    // Subscription name the consumer is subscribed to
+    string subscription_name = 6;
     // User-defined properties/attributes
     map<string, string> attributes = 7;
     
 }
 
+// Unique ID of the message
 message MsgID {
     //  Unique sequnce ID for tracking the order of the message
     uint64 sequence_id = 1;
-    // Broker address
-    string broker_addr = 2;
+    // Identifies the producer, associated with a unique topic
+    uint64 producer_id = 2;
     // Topic name the message is published to
     string topic_name = 3;
-    // Subscription name the consumer is subscribed to
-    string subscription_name = 4;
+    // Broker address
+    string broker_addr = 4;
 }
 
 message AckRequest {
     uint64 request_id = 1;
     // Identifies the message, associated with a unique topic, subscription and the broker
     MsgID msg_id = 2; 
+    // Subscription name the consumer is subscribed to
+    string subscription_name = 3;
 }
 
 message AckResponse {

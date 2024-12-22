@@ -39,15 +39,13 @@ async fn main() -> Result<()> {
     let mut message_stream = consumer.receive().await?;
 
     while let Some(message) = message_stream.recv().await {
-        let payload = message.payload;
+        let payload = message.payload.clone();
 
-        let result = String::from_utf8(payload);
-
-        match result {
+        match String::from_utf8(payload) {
             Ok(message_str) => {
                 println!("Received message: {:?}", message_str);
 
-                consumer.ack(message.request_id, message.msg_id).await?;
+                consumer.ack(&message).await?;
             }
             Err(e) => println!("Failed to convert Payload to String: {}", e),
         }

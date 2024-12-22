@@ -12,29 +12,22 @@ use crate::proto::{MsgId, StreamMessage as ProtoStreamMessage};
 pub struct MessageID {
     // the messsage sequence id, this is the sequence id of the message within the topic
     pub sequence_id: u64,
-    // broker_addr is the address of the broker that sent the message to the consumer
-    // this is required by the consumer to send the ack to the correct broker
-    pub broker_addr: String,
+    // Identifies the producer, associated with a unique topic
+    pub producer_id: u64,
     // topic_name is the name of the topic the message belongs to
     // this is required by the broker to send the ack to the correct topic
     pub topic_name: String,
-    // subscription_name is the name of the subscription the consumer is subscribed to
-    // this is required by the broker to send the ack to the correct subscription
-    pub subscription_name: String,
-}
-
-impl MessageID {
-    pub fn add_subscription_name(&mut self, subscription_name: &String) {
-        self.subscription_name = subscription_name.into();
-    }
+    // broker_addr is the address of the broker that sent the message to the consumer
+    // this is required by the consumer to send the ack to the correct broker
+    pub broker_addr: String,
 }
 
 impl Display for MessageID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "seq:{}_topic:_{}_subscription:_{}",
-            self.sequence_id, self.topic_name, self.subscription_name
+            "seq:{}_topic:_{}_producer:_{}",
+            self.sequence_id, self.topic_name, self.producer_id
         )
     }
 }
@@ -51,8 +44,9 @@ pub struct StreamMessage {
     pub publish_time: u64,
     // Identifies the producer’s name
     pub producer_name: String,
-    // Identifies the producer, associated with a unique topic
-    pub producer_id: u64,
+    // subscription_name is the name of the subscription the consumer is subscribed to
+    // this is required by the broker to send the ack to the correct subscription
+    pub subscription_name: Option<String>,
     // User-defined properties/attributes
     pub attributes: HashMap<String, String>,
 }
@@ -61,15 +55,18 @@ impl StreamMessage {
     pub fn size(&self) -> usize {
         self.payload.len()
     }
+    pub fn add_subscription_name(&mut self, subscription_name: &String) {
+        self.subscription_name = Some(subscription_name.into());
+    }
 }
 
 impl From<MsgId> for MessageID {
     fn from(proto_msg_id: MsgId) -> Self {
         MessageID {
             sequence_id: proto_msg_id.sequence_id,
-            broker_addr: proto_msg_id.broker_addr,
+            producer_id: proto_msg_id.producer_id,
             topic_name: proto_msg_id.topic_name,
-            subscription_name: proto_msg_id.subscription_name,
+            broker_addr: proto_msg_id.broker_addr,
         }
     }
 }
@@ -85,7 +82,7 @@ impl From<ProtoStreamMessage> for StreamMessage {
             payload: proto_stream_msg.payload,
             publish_time: proto_stream_msg.publish_time,
             producer_name: proto_stream_msg.producer_name,
-            producer_id: proto_stream_msg.producer_id,
+            subscription_name: Some(proto_stream_msg.subscription_name),
             attributes: proto_stream_msg.attributes,
         }
     }
@@ -95,9 +92,9 @@ impl From<MessageID> for MsgId {
     fn from(msg_id: MessageID) -> Self {
         MsgId {
             sequence_id: msg_id.sequence_id,
-            broker_addr: msg_id.broker_addr,
+            producer_id: msg_id.producer_id,
             topic_name: msg_id.topic_name,
-            subscription_name: msg_id.subscription_name,
+            broker_addr: msg_id.broker_addr,
         }
     }
 }
@@ -110,7 +107,7 @@ impl From<StreamMessage> for ProtoStreamMessage {
             payload: stream_msg.payload,
             publish_time: stream_msg.publish_time,
             producer_name: stream_msg.producer_name,
-            producer_id: stream_msg.producer_id,
+            subscription_name: stream_msg.subscription_name.unwrap_or_default(),
             attributes: stream_msg.attributes,
         }
     }
