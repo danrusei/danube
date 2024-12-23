@@ -20,8 +20,8 @@ async fn main() -> Result<()> {
 
     let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
 
-    // Create a reliable delivery strategy with a retention period of 1 hour and a segment size of 50
-    let delivery_strategy = ConfigDeliveryStrategy::new("reliable", 3600, 50);
+    // Create a reliable delivery strategy with a retention period of 1 hour and a segment size of 10 MB
+    let delivery_strategy = ConfigDeliveryStrategy::new("reliable", 3600, 10);
 
     let mut producer = client
         .new_producer()

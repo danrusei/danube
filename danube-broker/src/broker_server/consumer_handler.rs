@@ -1,10 +1,10 @@
 use crate::broker_server::DanubeServerImpl;
+use crate::message::AckMessage;
 use crate::proto::{
     AckRequest, AckResponse, ConsumerRequest, ConsumerResponse, ReceiveRequest, StreamMessage,
 };
 use crate::{proto::consumer_service_server::ConsumerService, subscription::SubscriptionOptions};
 
-use danube_client::MessageID;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -148,20 +148,24 @@ impl ConsumerService for DanubeServerImpl {
         request: tonic::Request<AckRequest>,
     ) -> std::result::Result<tonic::Response<AckResponse>, tonic::Status> {
         let ack_request = request.into_inner();
-        let request_id = ack_request.request_id;
-        let message_id: MessageID = ack_request.msg_id.unwrap().into();
+        let ack = AckMessage {
+            request_id: ack_request.request_id,
+            msg_id: ack_request.msg_id.unwrap().into(),
+            subscription_name: ack_request.subscription_name,
+        };
 
-        trace!("Received ack request for message_id: {}", message_id);
+        let request_id = ack_request.request_id.clone();
+        let msg_id = ack.msg_id.clone();
+
+        trace!("Received ack request for message_id: {}", ack.msg_id);
 
         let arc_service = self.service.clone();
         let mut service = arc_service.lock().await;
 
-        match service.ack_message(request_id, message_id.clone()).await {
+        match service.ack_message(ack).await {
             Ok(()) => {
-                trace!("Message with id: {} was acknowledged", message_id);
-                Ok(tonic::Response::new(AckResponse {
-                    request_id: request_id,
-                }))
+                trace!("Message with id: {} was acknowledged", msg_id);
+                Ok(tonic::Response::new(AckResponse { request_id }))
             }
             Err(err) => {
                 let status = Status::internal(format!("Error acknowledging message: {}", err));

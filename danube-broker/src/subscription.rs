@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Ok, Result};
-use danube_client::{MessageID, StreamMessage};
+use danube_client::StreamMessage;
 use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -16,6 +16,7 @@ use crate::{
         dispatcher_reliable_single_consumer::DispatcherReliableSingleConsumer,
         dispatcher_single_consumer::DispatcherSingleConsumer, Dispatcher,
     },
+    message::AckMessage,
     utils::get_random_id,
 };
 
@@ -202,9 +203,9 @@ impl Subscription {
         Ok(())
     }
 
-    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+    pub(crate) async fn ack_message(&self, ack_msg: AckMessage) -> Result<()> {
         if let Some(dispatcher) = self.dispatcher.as_ref() {
-            dispatcher.ack_message(request_id, msg_id).await?;
+            dispatcher.ack_message(ack_msg).await?;
         } else {
             return Err(anyhow!("Dispatcher not initialized"));
         }

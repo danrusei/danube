@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = "/default/test_topic";
+    let topic = "/default/reliable_topic";
     let consumer_name = "cons_json";
     let subscription_name = "subs_json";
 
@@ -41,14 +41,14 @@ async fn main() -> Result<()> {
     let mut message_stream = consumer.receive().await?;
 
     while let Some(message) = message_stream.recv().await {
-        let payload = message.payload;
+        let payload = message.payload.clone();
         // Deserialize the message using the schema
         match serde_json::from_slice::<MyMessage>(&payload) {
             Ok(decoded_message) => {
                 println!("Received message: {:?}", decoded_message);
 
                 // Acknowledge the message
-                if let Err(e) = consumer.ack(message.request_id, message.msg_id).await {
+                if let Err(e) = consumer.ack(&message).await {
                     eprintln!("Failed to acknowledge message: {}", e);
                 }
             }

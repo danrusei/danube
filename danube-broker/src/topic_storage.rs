@@ -1,6 +1,7 @@
 use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
@@ -56,10 +57,12 @@ pub(crate) struct TopicStore {
 
 impl TopicStore {
     pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
+        // Convert segment size to bytes
+        let segment_size_bytes = segment_size * 1024 * 1024;
         Self {
             segments: Arc::new(DashMap::new()),
             segments_index: Arc::new(RwLock::new(Vec::new())),
-            segment_size,
+            segment_size: segment_size_bytes,
             segment_ttl,
             current_segment_id: Arc::new(RwLock::new(0)),
         }
@@ -102,15 +105,38 @@ impl TopicStore {
             // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().unwrap();
             new_writable_segment.add_message(message);
+            dbg!(
+                "Store message in new segment {}",
+                new_writable_segment.messages.len()
+            );
         } else {
             // Add the message to the current writable segment
             writable_segment.add_message(message);
+            dbg!(
+                "Store message in current segment {}",
+                writable_segment.messages.len()
+            );
         }
     }
 
     // Get the next segment in the list based on the given segment ID
+    // If the current segment is 0, it will return the first segment in the list
     pub fn get_next_segment(&self, current_segment_id: usize) -> Option<Arc<RwLock<Segment>>> {
         let index = self.segments_index.read().unwrap();
+
+        if current_segment_id == 0 {
+            // Get the first segment if it exists
+            if !index.is_empty() {
+                let first_segment_id = index[0];
+                return self
+                    .segments
+                    .get(&first_segment_id)
+                    .map(|entry| entry.clone());
+            }
+            return None;
+        }
+
+        // Find the next segment after current_segment_id
         if let Some(pos) = index.iter().position(|&id| id == current_segment_id) {
             if pos + 1 < index.len() {
                 let next_segment_id = index[pos + 1];
@@ -135,7 +161,6 @@ impl TopicStore {
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
         subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>>,
     ) {
-        // Clone necessary fields
         let segments = self.segments.clone();
         let segments_index = self.segments_index.clone();
         let segment_ttl = self.segment_ttl;
@@ -146,46 +171,59 @@ impl TopicStore {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        // Cleanup acknowledged segments
-                        {
-                            let min_acknowledged_id = subscriptions
-                                .iter()
-                                .map(|entry| *entry.value().read().unwrap())
-                                .min()
-                                .unwrap_or(0);
-
-                            segments.retain(|id, _| *id > min_acknowledged_id);
-
-                            // Update the segments_index to remove acknowledged segment IDs
-                            let mut index = segments_index.write().unwrap();
-                            index.retain(|&id| id > min_acknowledged_id);
-                        }
-
-                        // Remove segments older than TTL
-                        {
-                            let current_time = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs();
-
-                            segments.retain(|id, segment| {
-                                let segment = segment.read().unwrap();
-                                let keep = segment.close_time == 0 || (current_time - segment.close_time) < segment_ttl;
-                                if !keep {
-                                    // If a segment is removed, also remove its ID from the index
-                                    let mut index = segments_index.write().unwrap();
-                                    index.retain(|&index_id| index_id != *id);
-                                }
-                                keep
-                            });
-                        }
+                        Self::cleanup_acknowledged_segments(&segments, &segments_index, &subscriptions);
+                        Self::cleanup_expired_segments(&segments, &segments_index, segment_ttl);
                     }
-                    _ = shutdown_rx.recv() => {
-                        // Shutdown signal received
-                        break;
-                    }
+                    _ = shutdown_rx.recv() => break
                 }
             }
+        });
+    }
+    fn cleanup_acknowledged_segments(
+        segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
+        segments_index: &Arc<RwLock<Vec<usize>>>,
+        subscriptions: &Arc<DashMap<String, Arc<RwLock<usize>>>>,
+    ) {
+        let min_acknowledged_id = subscriptions
+            .iter()
+            .map(|entry| *entry.value().read().unwrap())
+            .min()
+            .unwrap_or(0);
+
+        segments.retain(|id, _| {
+            let should_keep = *id > min_acknowledged_id;
+            if !should_keep {
+                info!(
+                    "Dropping segment {} from TopicStore - acknowledged by all subscriptions",
+                    id
+                );
+            }
+            should_keep
+        });
+
+        let mut index = segments_index.write().unwrap();
+        index.retain(|&id| id > min_acknowledged_id);
+    }
+
+    fn cleanup_expired_segments(
+        segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
+        segments_index: &Arc<RwLock<Vec<usize>>>,
+        segment_ttl: u64,
+    ) {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        segments.retain(|id, segment| {
+            let segment = segment.read().unwrap();
+            let keep = segment.close_time == 0 || (current_time - segment.close_time) < segment_ttl;
+            if !keep {
+                let mut index = segments_index.write().unwrap();
+                index.retain(|&index_id| index_id != *id);
+                info!("Dropping segment {} from TopicStore - TTL expired", id);
+            }
+            keep
         });
     }
 }

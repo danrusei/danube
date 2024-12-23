@@ -1,7 +1,7 @@
 use anyhow::Result;
 use danube_client::{MessageID, StreamMessage};
 
-use crate::consumer::Consumer;
+use crate::{consumer::Consumer, message::AckMessage};
 
 pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_reliable_multiple_consumers;
@@ -55,19 +55,17 @@ impl Dispatcher {
             }
         }
     }
-    pub(crate) async fn ack_message(&self, request_id: u64, msg_id: MessageID) -> Result<()> {
+    pub(crate) async fn ack_message(&self, ack_msg: AckMessage) -> Result<()> {
         match self {
-            Dispatcher::OneConsumer(dispatcher) => {
-                Ok(dispatcher.ack_message(request_id, msg_id).await?)
-            }
+            Dispatcher::OneConsumer(dispatcher) => Ok(dispatcher.ack_message(ack_msg).await?),
             Dispatcher::MultipleConsumers(dispatcher) => {
-                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+                Ok(dispatcher.ack_message(ack_msg).await?)
             }
             Dispatcher::ReliableOneConsumer(dispatcher) => {
-                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+                Ok(dispatcher.ack_message(ack_msg).await?)
             }
             Dispatcher::ReliableMultipleConsumers(dispatcher) => {
-                Ok(dispatcher.ack_message(request_id, msg_id).await?)
+                Ok(dispatcher.ack_message(ack_msg).await?)
             }
         }
     }
