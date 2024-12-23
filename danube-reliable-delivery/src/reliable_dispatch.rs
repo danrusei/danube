@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Result};
 use danube_client::{MessageID, StreamMessage};
 use std::collections::HashMap;
 use std::sync::{atomic::AtomicUsize, Arc, RwLock};
@@ -9,6 +8,7 @@ use crate::{
     dispatcher::{
         dispatch_reliable_message_multiple_consumers, dispatch_reliable_message_single_consumer,
     },
+    errors::Result,
     topic_storage::{Segment, TopicStore},
 };
 
@@ -80,7 +80,7 @@ impl ConsumerDispatch {
     }
 
     /// Process the current segment and send the messages to the consumer
-    pub(crate) async fn process_current_segment(&mut self) -> anyhow::Result<()> {
+    pub(crate) async fn process_current_segment(&mut self) -> Result<()> {
         if let Some(segment) = self.segment.as_ref() {
             let current_segment_id = self.current_segment_id;
 
@@ -113,7 +113,7 @@ impl ConsumerDispatch {
         &self,
         segment_id: usize,
         segment: &Arc<RwLock<Segment>>,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool> {
         // Check if the segment still exists
         if !self.topic_store.contains_segment(segment_id) {
             tracing::trace!(
@@ -135,7 +135,7 @@ impl ConsumerDispatch {
     }
 
     /// Moves to the next segment in the `TopicStore`.
-    fn move_to_next_segment(&mut self) -> anyhow::Result<()> {
+    fn move_to_next_segment(&mut self) -> Result<()> {
         let next_segment = if let Some(current_segment_id) = self.current_segment_id {
             self.topic_store.get_next_segment(current_segment_id)
         } else {
@@ -173,7 +173,7 @@ impl ConsumerDispatch {
     }
 
     /// Processes the next unacknowledged message in the current segment.
-    async fn process_next_message(&mut self) -> anyhow::Result<()> {
+    async fn process_next_message(&mut self) -> Result<()> {
         // Only process next message if there's no pending acknowledgment
         if self.pending_ack_message.is_none() {
             if let Some(segment) = &self.segment {

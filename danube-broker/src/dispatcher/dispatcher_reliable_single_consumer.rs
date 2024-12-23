@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use danube_client::StreamMessage;
+use danube_reliable_delivery::ConsumerDispatch;
 use std::sync::{Arc, RwLock};
 use tokio::{
     sync::mpsc,
@@ -8,8 +9,8 @@ use tokio::{
 use tracing::{trace, warn};
 
 use crate::{
-    consumer::Consumer, dispatcher::ConsumerDispatch, dispatcher::DispatcherCommand,
-    message::AckMessage, topic_storage::TopicStore,
+    consumer::Consumer, dispatcher::DispatcherCommand, message::AckMessage,
+    topic_storage::TopicStore,
 };
 
 /// Reliable dispatcher for single consumer, it sends ordered messages to a single consumer

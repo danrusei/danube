@@ -2,6 +2,8 @@ mod topic_storage;
 use topic_storage::TopicStore;
 mod errors;
 use errors::Result;
+mod reliable_dispatch;
+use reliable_dispatch::ConsumerDispatch;
 
 use danube_client::StreamMessage;
 use dashmap::DashMap;
