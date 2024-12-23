@@ -79,65 +79,88 @@ impl ConsumerDispatch {
         self.consumers.push(consumer);
     }
 
+    /// Process the current segment and send the messages to the consumer
     pub(crate) async fn process_current_segment(&mut self) -> anyhow::Result<()> {
-        if let Some(segment) = &self.segment {
-            // Use the cached segment_id to verify existence in TopicStore
-            let segment_id = self
-                .current_segment_id
-                .ok_or_else(|| anyhow!("Segment ID not cached while processing segment"))?;
+        if let Some(segment) = self.segment.as_ref() {
+            let current_segment_id = self.current_segment_id;
 
-            // Check if the segment still exists, the opened segment always exists in the TopicStore
-            // if the current segment does not exist, it means that it has been closed and removed from the TopicStore
-            if !self.topic_store.contains_segment(segment_id) {
-                tracing::trace!(
-                    "Segment {} no longer exists, moving to next segment",
-                    segment_id
-                );
-                self.clear_current_segment(); // Clear segment and cached ID
-                self.move_to_next_segment()?; // Fetch the next segment
-                return Ok(());
-            }
+            // Validate the current segment
+            let move_to_next_segment = {
+                let segment_id = current_segment_id
+                    .ok_or_else(|| anyhow!("Segment ID not cached while processing segment"))?;
 
-            // Process messages within the current segment
-            let mut move_to_next_segment = false;
+                self.validate_segment(segment_id, segment).await?
+            };
 
-            if self.pending_ack_message.is_none() {
-                let message = {
-                    let segment_lock = segment
-                        .read()
-                        .map_err(|_| anyhow!("Failed to acquire read lock on segment"))?;
-
-                    // Check if segment is closed and all messages are acknowledged
-                    if segment_lock.close_time > 0
-                        && self.acked_messages.len() == segment_lock.messages.len()
-                    {
-                        move_to_next_segment = true;
-                        None
-                    } else {
-                        // Find the next unacknowledged message
-                        segment_lock
-                            .messages
-                            .iter()
-                            .find(|msg| !self.acked_messages.contains_key(&msg.msg_id))
-                            .cloned()
-                    }
-                };
-
-                if let Some(msg) = message {
-                    self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
-                    self.dispatch_message(msg).await?;
-                    dbg!("dispatched message");
-                } else {
-                    move_to_next_segment = true;
-                    dbg!("no message to dispatch, move to next segment");
-                }
-            }
-
+            // If validation indicates we should move to the next segment
             if move_to_next_segment {
                 self.move_to_next_segment()?;
+                return Ok(());
             }
         } else {
+            // No current segment; attempt to move to the next segment
             self.move_to_next_segment()?;
+        }
+
+        // Process the next message using the stored segment
+        self.process_next_message().await?;
+
+        Ok(())
+    }
+
+    /// Validates the current segment. Returns `true` if the segment was invalidated or closed.
+    async fn validate_segment(
+        &self,
+        segment_id: usize,
+        segment: &Arc<RwLock<Segment>>,
+    ) -> anyhow::Result<bool> {
+        // Check if the segment still exists
+        if !self.topic_store.contains_segment(segment_id) {
+            tracing::trace!(
+                "Segment {} no longer exists, moving to next segment",
+                segment_id
+            );
+            return Ok(true);
+        }
+
+        // Check if the segment is closed and all messages are acknowledged
+        let segment_data = segment
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire read lock on segment"))?;
+        if segment_data.close_time > 0 && self.acked_messages.len() == segment_data.messages.len() {
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    /// Moves to the next segment in the `TopicStore`.
+    fn move_to_next_segment(&mut self) -> anyhow::Result<()> {
+        let next_segment = if let Some(current_segment_id) = self.current_segment_id {
+            self.topic_store.get_next_segment(current_segment_id)
+        } else {
+            self.topic_store.get_next_segment(0) // Start from the first segment
+        };
+
+        if let Some(next_segment) = next_segment {
+            let next_segment_id = next_segment
+                .read()
+                .map(|s| s.id)
+                .map_err(|_| anyhow!("Failed to acquire read lock on next segment"))?;
+
+            // Update the last acknowledged segment
+            if let Some(current_segment_id) = self.current_segment_id {
+                let mut last_acked = self
+                    .last_acked_segment
+                    .write()
+                    .map_err(|_| anyhow!("Failed to acquire write lock on last_acked_segment"))?;
+                *last_acked = current_segment_id;
+            }
+
+            self.segment = Some(next_segment);
+            self.current_segment_id = Some(next_segment_id);
+        } else {
+            self.clear_current_segment();
         }
 
         Ok(())
@@ -149,45 +172,29 @@ impl ConsumerDispatch {
         self.current_segment_id = None;
     }
 
-    // Function to handle segment progress and moving to the next segment
-    fn move_to_next_segment(&mut self) -> Result<()> {
-        if self.segment.is_some() {
-            let next_segment = self
-                .topic_store
-                .get_next_segment(self.current_segment_id.unwrap());
+    /// Processes the next unacknowledged message in the current segment.
+    async fn process_next_message(&mut self) -> anyhow::Result<()> {
+        // Only process next message if there's no pending acknowledgment
+        if self.pending_ack_message.is_none() {
+            if let Some(segment) = &self.segment {
+                let next_message = {
+                    let segment_data = segment
+                        .read()
+                        .map_err(|_| anyhow!("Failed to acquire read lock on segment"))?;
+                    segment_data
+                        .messages
+                        .iter()
+                        .find(|msg| !self.acked_messages.contains_key(&msg.msg_id))
+                        .cloned()
+                };
 
-            if let Some(next_segment) = next_segment {
-                // Update the last acknowledged segment
-                {
-                    let mut last_acked = self.last_acked_segment.write().map_err(|_| {
-                        anyhow!("Failed to acquire write lock on last_acked_segment")
-                    })?;
-                    *last_acked = self.current_segment_id.unwrap();
+                if let Some(msg) = next_message {
+                    self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
+                    self.dispatch_message(msg).await?;
                 }
-                let next_segment_id = next_segment
-                    .read()
-                    .map(|s| s.id)
-                    .map_err(|_| anyhow!("Failed to acquire read lock on next segment"))?;
-
-                self.segment = Some(next_segment);
-                self.current_segment_id = Some(next_segment_id);
-            } else {
-                self.clear_current_segment();
-            }
-        } else {
-            // If no segment, attempt to fetch a new one
-            let next_segment = self.topic_store.get_next_segment(0);
-            if let Some(next_segment) = next_segment {
-                let segment_id = next_segment
-                    .read()
-                    .map(|s| s.id)
-                    .map_err(|_| anyhow!("Failed to acquire read lock on next segment"))?;
-
-                self.segment = Some(next_segment);
-                self.current_segment_id = Some(segment_id);
-                dbg!("first time, moed to  next segment");
             }
         }
+
         Ok(())
     }
 

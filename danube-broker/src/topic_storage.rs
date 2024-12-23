@@ -1,6 +1,7 @@
 use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
@@ -160,7 +161,6 @@ impl TopicStore {
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
         subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>>,
     ) {
-        // Clone necessary fields
         let segments = self.segments.clone();
         let segments_index = self.segments_index.clone();
         let segment_ttl = self.segment_ttl;
@@ -171,46 +171,59 @@ impl TopicStore {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        // Cleanup acknowledged segments
-                        {
-                            let min_acknowledged_id = subscriptions
-                                .iter()
-                                .map(|entry| *entry.value().read().unwrap())
-                                .min()
-                                .unwrap_or(0);
-
-                            segments.retain(|id, _| *id > min_acknowledged_id);
-
-                            // Update the segments_index to remove acknowledged segment IDs
-                            let mut index = segments_index.write().unwrap();
-                            index.retain(|&id| id > min_acknowledged_id);
-                        }
-
-                        // Remove segments older than TTL
-                        {
-                            let current_time = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs();
-
-                            segments.retain(|id, segment| {
-                                let segment = segment.read().unwrap();
-                                let keep = segment.close_time == 0 || (current_time - segment.close_time) < segment_ttl;
-                                if !keep {
-                                    // If a segment is removed, also remove its ID from the index
-                                    let mut index = segments_index.write().unwrap();
-                                    index.retain(|&index_id| index_id != *id);
-                                }
-                                keep
-                            });
-                        }
+                        Self::cleanup_acknowledged_segments(&segments, &segments_index, &subscriptions);
+                        Self::cleanup_expired_segments(&segments, &segments_index, segment_ttl);
                     }
-                    _ = shutdown_rx.recv() => {
-                        // Shutdown signal received
-                        break;
-                    }
+                    _ = shutdown_rx.recv() => break
                 }
             }
+        });
+    }
+    fn cleanup_acknowledged_segments(
+        segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
+        segments_index: &Arc<RwLock<Vec<usize>>>,
+        subscriptions: &Arc<DashMap<String, Arc<RwLock<usize>>>>,
+    ) {
+        let min_acknowledged_id = subscriptions
+            .iter()
+            .map(|entry| *entry.value().read().unwrap())
+            .min()
+            .unwrap_or(0);
+
+        segments.retain(|id, _| {
+            let should_keep = *id > min_acknowledged_id;
+            if !should_keep {
+                info!(
+                    "Dropping segment {} from TopicStore - acknowledged by all subscriptions",
+                    id
+                );
+            }
+            should_keep
+        });
+
+        let mut index = segments_index.write().unwrap();
+        index.retain(|&id| id > min_acknowledged_id);
+    }
+
+    fn cleanup_expired_segments(
+        segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
+        segments_index: &Arc<RwLock<Vec<usize>>>,
+        segment_ttl: u64,
+    ) {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        segments.retain(|id, segment| {
+            let segment = segment.read().unwrap();
+            let keep = segment.close_time == 0 || (current_time - segment.close_time) < segment_ttl;
+            if !keep {
+                let mut index = segments_index.write().unwrap();
+                index.retain(|&index_id| index_id != *id);
+                info!("Dropping segment {} from TopicStore - TTL expired", id);
+            }
+            keep
         });
     }
 }
