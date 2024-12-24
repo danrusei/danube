@@ -4,14 +4,14 @@ use std::sync::{Arc, RwLock};
 use tracing::trace;
 
 use crate::{
-    errors::Result,
+    errors::{ReliableDispatchError, Result},
     topic_storage::{Segment, TopicStore},
 };
 
 /// ConsumerDispatch is holding information about consumers and the messages within a segment
 /// It is used to dispatch messages to consumers and to track the progress of the consumer
 #[derive(Debug)]
-pub(crate) struct ConsumerDispatch {
+pub struct ConsumerDispatch {
     // topic store is the store of segments
     // topic store is used to get the next segment to be sent to the consumer
     pub(crate) topic_store: TopicStore,
@@ -30,7 +30,7 @@ pub(crate) struct ConsumerDispatch {
 }
 
 impl ConsumerDispatch {
-    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
+    pub fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
         Self {
             topic_store,
             last_acked_segment,
@@ -42,14 +42,17 @@ impl ConsumerDispatch {
     }
 
     /// Process the current segment and send the messages to the consumer
-    pub(crate) async fn process_current_segment(&mut self) -> Result<StreamMessage> {
+    pub async fn process_current_segment(&mut self) -> Result<StreamMessage> {
         if let Some(segment) = self.segment.as_ref() {
             let current_segment_id = self.current_segment_id;
 
             // Validate the current segment
             let move_to_next_segment = {
-                let segment_id = current_segment_id
-                    .ok_or_else(|| anyhow!("Segment ID not cached while processing segment"))?;
+                let segment_id = current_segment_id.ok_or_else(|| {
+                    ReliableDispatchError::InvalidState(
+                        "Segment ID not cached while processing segment".to_string(),
+                    )
+                })?;
 
                 self.validate_segment(segment_id, segment).await?
             };
@@ -57,7 +60,9 @@ impl ConsumerDispatch {
             // If validation indicates we should move to the next segment
             if move_to_next_segment {
                 self.move_to_next_segment()?;
-                return Err("to be implemented".into());
+                return Err(ReliableDispatchError::SegmentError(
+                    "Move to next segment".to_string(),
+                ));
             }
         } else {
             // No current segment; attempt to move to the next segment
@@ -84,9 +89,9 @@ impl ConsumerDispatch {
         }
 
         // Check if the segment is closed and all messages are acknowledged
-        let segment_data = segment
-            .read()
-            .map_err(|_| anyhow!("Failed to acquire read lock on segment"))?;
+        let segment_data = segment.read().map_err(|_| {
+            ReliableDispatchError::LockError("Failed to acquire read lock on segment".to_string())
+        })?;
         if segment_data.close_time > 0 && self.acked_messages.len() == segment_data.messages.len() {
             return Ok(true);
         }
@@ -103,17 +108,19 @@ impl ConsumerDispatch {
         };
 
         if let Some(next_segment) = next_segment {
-            let next_segment_id = next_segment
-                .read()
-                .map(|s| s.id)
-                .map_err(|_| anyhow!("Failed to acquire read lock on next segment"))?;
+            let next_segment_id = next_segment.read().map(|s| s.id).map_err(|_| {
+                ReliableDispatchError::LockError(
+                    "Failed to acquire read lock on segment".to_string(),
+                )
+            })?;
 
             // Update the last acknowledged segment
             if let Some(current_segment_id) = self.current_segment_id {
-                let mut last_acked = self
-                    .last_acked_segment
-                    .write()
-                    .map_err(|_| anyhow!("Failed to acquire write lock on last_acked_segment"))?;
+                let mut last_acked = self.last_acked_segment.write().map_err(|_| {
+                    ReliableDispatchError::LockError(
+                        "Failed to acquire read lock on segment".to_string(),
+                    )
+                })?;
                 *last_acked = current_segment_id;
             }
 
@@ -138,9 +145,11 @@ impl ConsumerDispatch {
         if self.pending_ack_message.is_none() {
             if let Some(segment) = &self.segment {
                 let next_message = {
-                    let segment_data = segment
-                        .read()
-                        .map_err(|_| anyhow!("Failed to acquire read lock on segment"))?;
+                    let segment_data = segment.read().map_err(|_| {
+                        ReliableDispatchError::LockError(
+                            "Failed to acquire read lock on segment".to_string(),
+                        )
+                    })?;
                     segment_data
                         .messages
                         .iter()
@@ -150,20 +159,18 @@ impl ConsumerDispatch {
 
                 if let Some(msg) = next_message {
                     self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
-                    Ok(msg)
+                    return Ok(msg);
                 }
             }
         }
 
-        Err("todo").into()
+        Err(ReliableDispatchError::InvalidState(
+            "Pending ack message".to_string(),
+        ))
     }
 
     /// Handle the consumer message acknowledgement
-    pub(crate) async fn handle_message_acked(
-        &mut self,
-        request_id: u64,
-        msg_id: MessageID,
-    ) -> Result<()> {
+    pub async fn handle_message_acked(&mut self, request_id: u64, msg_id: MessageID) -> Result<()> {
         if let Some((pending_request_id, pending_msg_id)) = &self.pending_ack_message {
             dbg!(
                 "received ack for msg with request_id {} and msg_id {:?}",
@@ -186,6 +193,8 @@ impl ConsumerDispatch {
                 return Ok(());
             }
         }
-        Err(anyhow!("Invalid or unexpected acknowledgment"))
+        Err(ReliableDispatchError::AcknowledgmentError(
+            "Invalid or unexpected acknowledgment".to_string(),
+        ))
     }
 }

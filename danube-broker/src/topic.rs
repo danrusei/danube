@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use danube_client::StreamMessage;
+use danube_reliable_dispatch::ReliableDispatch;
 use metrics::counter;
 use std::collections::{hash_map::Entry, HashMap};
 use tokio::sync::Mutex;
@@ -7,9 +8,7 @@ use tracing::{info, warn};
 
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
-    dispatch_strategy::{
-        ConfigDispatchStrategy, DispatchStrategy, DispatchStrategy, PersistentStorage,
-    },
+    dispatch_strategy::{ConfigDispatchStrategy, DispatchStrategy},
     message::AckMessage,
     policies::Policies,
     producer::Producer,
@@ -43,10 +42,10 @@ pub(crate) struct Topic {
 }
 
 impl Topic {
-    pub(crate) fn new(topic_name: &str, dispatch_strategy: ConfigDisptachStrategy) -> Self {
+    pub(crate) fn new(topic_name: &str, dispatch_strategy: ConfigDispatchStrategy) -> Self {
         let dispatch_strategy = match dispatch_strategy.strategy.as_str() {
             "non_reliable" => DispatchStrategy::NonReliable,
-            "reliable" => DispatchStrategy::Reliable(PersistentStorage::new(
+            "reliable" => DispatchStrategy::Reliable(ReliableDispatch::new(
                 dispatch_strategy.segment_size,
                 dispatch_strategy.retention_period,
             )),
@@ -215,7 +214,7 @@ impl Topic {
                 Subscription::new(options.clone(), &self.topic_name, sub_metadata);
 
             // Handle additional logic for reliable storage
-            if let DeliveryStrategy::Reliable(persistent_storage) = &self.dispatch_strategy {
+            if let DispatchStrategy::Reliable(persistent_storage) = &self.dispatch_strategy {
                 persistent_storage
                     .add_subscription(&new_subscription.subscription_name)
                     .await?;

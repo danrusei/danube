@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use danube_client::StreamMessage;
-use danube_reliable_delivery::ConsumerDispatch;
+use danube_reliable_dispatch::{ConsumerDispatch, TopicStore};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::{
@@ -9,10 +9,7 @@ use tokio::{
 };
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::Consumer, dispatcher::DispatcherCommand, message::AckMessage,
-    topic_storage::TopicStore,
-};
+use crate::{consumer::Consumer, dispatcher::DispatcherCommand, message::AckMessage};
 
 /// Reliable dispatcher for multiple consumers, it sends ordered messages to multiple consumers
 #[derive(Debug)]
@@ -27,8 +24,8 @@ impl DispatcherReliableMultipleConsumers {
         // Spawn dispatcher task
         tokio::spawn(async move {
             let mut consumers: Vec<Consumer> = Vec::new();
-            let mut index_consumer = AtomicUsize::new(0);
-            let mut consumer_dispatch = ConsumerDispatch::new(1, topic_store, last_acked_segment);
+            let index_consumer = AtomicUsize::new(0);
+            let mut consumer_dispatch = ConsumerDispatch::new(topic_store, last_acked_segment);
             let mut interval = time::interval(Duration::from_millis(100));
 
             loop {
@@ -65,13 +62,13 @@ impl DispatcherReliableMultipleConsumers {
                             Ok(msg) => {
                                 if let Err(e) = Self::dispatch_reliable_message_multiple_consumers(
                                     &mut consumers,
-                                    &mut index_consumer,
+                                    &index_consumer,
                                     msg,
                                 ).await {
                                     warn!("Failed to dispatch message: {}", e);
                                 }
                             },
-                            Err(err) => {
+                            Err(e) => {
                             warn!("Failed to process current segment: {}", e);
                             }
                         };
@@ -121,7 +118,7 @@ impl DispatcherReliableMultipleConsumers {
 
     pub(crate) async fn dispatch_reliable_message_multiple_consumers(
         consumers: &mut [Consumer],
-        index_consumer: Arc<AtomicUsize>,
+        index_consumer: &AtomicUsize,
         message: StreamMessage,
     ) -> Result<()> {
         let num_consumers = consumers.len();

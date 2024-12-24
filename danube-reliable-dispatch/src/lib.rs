@@ -1,14 +1,15 @@
 mod topic_storage;
-use topic_storage::TopicStore;
+pub use topic_storage::TopicStore;
 mod errors;
-use errors::Result;
+use errors::{ReliableDispatchError, Result};
 mod reliable_dispatch;
-use reliable_dispatch::ConsumerDispatch;
+pub use reliable_dispatch::ConsumerDispatch;
 
 use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
 
+#[derive(Debug)]
 pub struct ReliableDispatch {
     // Topic store is used to store messages in a queue for reliable delivery
     pub topic_store: TopicStore,
@@ -20,7 +21,7 @@ pub struct ReliableDispatch {
 }
 
 impl ReliableDispatch {
-    pub(crate) fn new(segment_size: usize, segment_ttl: u64) -> Self {
+    pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
         let topic_store = TopicStore::new(segment_size, segment_ttl);
         let subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>> = Arc::new(DashMap::new());
         let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
@@ -35,24 +36,26 @@ impl ReliableDispatch {
         }
     }
 
-    pub(crate) async fn store_message(&self, message: StreamMessage) -> Result<()> {
+    pub async fn store_message(&self, message: StreamMessage) -> Result<()> {
         self.topic_store.store_message(message);
         Ok(())
     }
 
-    pub(crate) async fn add_subscription(&self, subscription_name: &str) -> Result<()> {
+    pub async fn add_subscription(&self, subscription_name: &str) -> Result<()> {
         self.subscriptions
             .insert(subscription_name.to_string(), Arc::new(RwLock::new(0)));
         Ok(())
     }
 
-    pub(crate) async fn get_last_acknowledged_segment(
+    pub async fn get_last_acknowledged_segment(
         &self,
         subscription_name: &str,
     ) -> Result<Arc<RwLock<usize>>> {
         match self.subscriptions.get(subscription_name) {
             Some(subscription) => Ok(Arc::clone(subscription.value())),
-            None => Err(anyhow!("Subscription not found")),
+            None => Err(ReliableDispatchError::SubscriptionError(
+                "Subscription not found".to_string(),
+            )),
         }
     }
 }

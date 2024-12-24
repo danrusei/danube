@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use danube_client::StreamMessage;
-use danube_reliable_delivery::ConsumerDispatch;
+use danube_reliable_dispatch::{ConsumerDispatch, TopicStore};
 use std::sync::{Arc, RwLock};
 use tokio::{
     sync::mpsc,
@@ -8,10 +8,7 @@ use tokio::{
 };
 use tracing::{trace, warn};
 
-use crate::{
-    consumer::Consumer, dispatcher::DispatcherCommand, message::AckMessage,
-    topic_storage::TopicStore,
-};
+use crate::{consumer::Consumer, dispatcher::DispatcherCommand, message::AckMessage};
 
 /// Reliable dispatcher for single consumer, it sends ordered messages to a single consumer
 #[derive(Debug)]
@@ -27,7 +24,7 @@ impl DispatcherReliableSingleConsumer {
         tokio::spawn(async move {
             let mut consumers: Vec<Consumer> = Vec::new();
             let mut active_consumer: Option<Consumer> = None;
-            let mut consumer_dispatch = ConsumerDispatch::new(0, topic_store, last_acked_segment);
+            let mut consumer_dispatch = ConsumerDispatch::new(topic_store, last_acked_segment);
             let mut interval = time::interval(Duration::from_millis(100));
 
             loop {
@@ -79,7 +76,7 @@ impl DispatcherReliableSingleConsumer {
                                     warn!("Failed to dispatch message: {}", e);
                                 }
                             },
-                            Err(err) => {
+                            Err(e) => {
                             warn!("Failed to process current segment: {}", e);
                             }
                         };

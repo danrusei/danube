@@ -79,7 +79,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
-        dispatch_strategy: &DeliveryStrategy,
+        dispatch_strategy: &DispatchStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -157,7 +157,7 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            DeliveryStrategy::Reliable(persistent_storage) => {
+            DispatchStrategy::Reliable(persistent_storage) => {
                 let last_acked_segment = last_acknowledged_segment.ok_or_else(|| {
                     anyhow!("Expected last_acknowledged_segment for Reliable strategy")
                 })?;

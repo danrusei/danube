@@ -8,14 +8,10 @@ pub(crate) mod dispatcher_reliable_multiple_consumers;
 pub(crate) mod dispatcher_reliable_single_consumer;
 pub(crate) mod dispatcher_single_consumer;
 pub(crate) use dispatcher_multiple_consumers::DispatcherMultipleConsumers;
-pub(crate) use dispatcher_reliable_multiple_consumers::{
-    dispatch_reliable_message_multiple_consumers, DispatcherReliableMultipleConsumers,
-};
-pub(crate) use dispatcher_reliable_single_consumer::{
-    dispatch_reliable_message_single_consumer, DispatcherReliableSingleConsumer,
-};
+pub(crate) use dispatcher_reliable_multiple_consumers::DispatcherReliableMultipleConsumers;
+
+pub(crate) use dispatcher_reliable_single_consumer::DispatcherReliableSingleConsumer;
 pub(crate) use dispatcher_single_consumer::DispatcherSingleConsumer;
-pub(crate) use reliable_consumer_dispatch::ConsumerDispatch;
 
 // The dispatchers ensure that messages are routed to consumers according to the semantics of the subscription type
 #[derive(Debug)]

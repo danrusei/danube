@@ -8,15 +8,15 @@ use tracing::info;
 /// The segment is immutable after it's closed for writing
 /// The messages in the segment are in the order of arrival
 #[derive(Debug, Clone)]
-pub(crate) struct Segment {
+pub struct Segment {
     // Unique segment ID
-    pub(crate) id: usize,
+    pub id: usize,
     // Segment close time, is the time when the segment is closed for writing
-    pub(crate) close_time: u64,
+    pub close_time: u64,
     // Messages in the segment
-    pub(crate) messages: Vec<StreamMessage>,
+    pub messages: Vec<StreamMessage>,
     // Current size of the segment in bytes
-    pub(crate) current_size: usize,
+    pub current_size: usize,
 }
 
 impl Segment {
@@ -42,7 +42,7 @@ impl Segment {
 // TopicStore is used only for reliable messaging
 // It stores the segments in memory until are acknowledged by every subscription
 #[derive(Debug, Clone)]
-pub(crate) struct TopicStore {
+pub struct TopicStore {
     // Concurrent map of segment ID to segments
     segments: Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
     // Index of segments in the segments map

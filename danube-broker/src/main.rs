@@ -16,7 +16,6 @@ mod schema;
 mod service_configuration;
 mod subscription;
 mod topic;
-mod topic_storage;
 mod utils;
 
 use std::{fs::read_to_string, path::Path, sync::Arc};
