@@ -1,7 +1,7 @@
 use danube_reliable_dispatch::ReliableDispatch;
 use serde::{Deserialize, Serialize};
 
-use crate::proto::TopicDeliveryStrategy;
+use crate::proto::TopicDispatchStrategy;
 
 #[derive(Debug)]
 pub(crate) enum DispatchStrategy {
@@ -31,8 +31,8 @@ impl Default for ConfigDispatchStrategy {
 }
 
 // Implement conversions from ProtoTypeSchema to SchemaType
-impl From<TopicDeliveryStrategy> for ConfigDispatchStrategy {
-    fn from(strategy: TopicDeliveryStrategy) -> Self {
+impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
+    fn from(strategy: TopicDispatchStrategy) -> Self {
         ConfigDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,

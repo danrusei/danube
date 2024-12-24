@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, Mutex};
 use tonic::{Code, Status};
 use tracing::{info, warn};
 
-use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDeliveryStrategy};
+use crate::proto::{ErrorType, Schema as ProtoSchema, TopicDispatchStrategy};
 
 use crate::{
     broker_metrics::{BROKER_TOPICS, TOPIC_CONSUMERS, TOPIC_PRODUCERS},
@@ -60,7 +60,7 @@ impl BrokerService {
     pub(crate) async fn get_topic(
         &mut self,
         topic_name: &str,
-        dispatch_strategy: Option<TopicDeliveryStrategy>,
+        dispatch_strategy: Option<TopicDispatchStrategy>,
         schema: Option<ProtoSchema>,
         create_if_missing: bool,
     ) -> Result<bool, Status> {
@@ -144,7 +144,7 @@ impl BrokerService {
     pub(crate) async fn create_topic_cluster(
         &mut self,
         topic_name: &str,
-        dispatch_strategy: Option<TopicDeliveryStrategy>,
+        dispatch_strategy: Option<TopicDispatchStrategy>,
         schema: Option<ProtoSchema>,
     ) -> Result<(), Status> {
         // The topic format is /{namespace_name}/{topic_name}
@@ -234,7 +234,7 @@ impl BrokerService {
     pub(crate) async fn post_new_topic(
         &mut self,
         topic_name: &str,
-        dispatch_strategy: TopicDeliveryStrategy,
+        dispatch_strategy: TopicDispatchStrategy,
         schema: ProtoSchema,
         policies: Option<Policies>,
     ) -> Result<()> {

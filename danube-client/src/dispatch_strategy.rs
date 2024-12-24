@@ -1,4 +1,4 @@
-use crate::proto::TopicDeliveryStrategy;
+use crate::proto::TopicDispatchStrategy;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,8 +29,8 @@ impl Default for ConfigDispatchStrategy {
 }
 
 // Implement conversions from ProtoTypeSchema to SchemaType
-impl From<TopicDeliveryStrategy> for ConfigDispatchStrategy {
-    fn from(strategy: TopicDeliveryStrategy) -> Self {
+impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
+    fn from(strategy: TopicDispatchStrategy) -> Self {
         ConfigDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
@@ -39,9 +39,9 @@ impl From<TopicDeliveryStrategy> for ConfigDispatchStrategy {
     }
 }
 // Implement conversions from ConfigRetentionStrategy to ProtoTypeSchema
-impl From<ConfigDispatchStrategy> for TopicDeliveryStrategy {
+impl From<ConfigDispatchStrategy> for TopicDispatchStrategy {
     fn from(strategy: ConfigDispatchStrategy) -> Self {
-        TopicDeliveryStrategy {
+        TopicDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
             segment_size: strategy.segment_size as u64,

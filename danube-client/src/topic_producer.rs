@@ -81,7 +81,7 @@ impl TopicProducer {
             topic_name: self.topic.clone(),
             schema: Some(self.schema.clone().into()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
-            delivery_strategy: Some(self.dispatch_strategy.clone().into()),
+            dispatch_strategy: Some(self.dispatch_strategy.clone().into()),
         };
 
         let max_retries = 4;
