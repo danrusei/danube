@@ -18,4 +18,7 @@ pub enum ReliableDispatchError {
 
     #[error("Subscription error: {0}")]
     SubscriptionError(String),
+
+    #[error("Subscription error: {0}")]
+    UnknownSubscription(String),
 }

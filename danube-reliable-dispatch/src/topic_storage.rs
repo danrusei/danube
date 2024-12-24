@@ -8,15 +8,15 @@ use tracing::info;
 /// The segment is immutable after it's closed for writing
 /// The messages in the segment are in the order of arrival
 #[derive(Debug, Clone)]
-pub struct Segment {
+pub(crate) struct Segment {
     // Unique segment ID
-    pub id: usize,
+    pub(crate) id: usize,
     // Segment close time, is the time when the segment is closed for writing
-    pub close_time: u64,
+    pub(crate) close_time: u64,
     // Messages in the segment
-    pub messages: Vec<StreamMessage>,
+    pub(crate) messages: Vec<StreamMessage>,
     // Current size of the segment in bytes
-    pub current_size: usize,
+    pub(crate) current_size: usize,
 }
 
 impl Segment {
@@ -42,7 +42,7 @@ impl Segment {
 // TopicStore is used only for reliable messaging
 // It stores the segments in memory until are acknowledged by every subscription
 #[derive(Debug, Clone)]
-pub struct TopicStore {
+pub(crate) struct TopicStore {
     // Concurrent map of segment ID to segments
     segments: Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
     // Index of segments in the segments map
@@ -56,7 +56,7 @@ pub struct TopicStore {
 }
 
 impl TopicStore {
-    pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
+    pub(crate) fn new(segment_size: usize, segment_ttl: u64) -> Self {
         // Convert segment size to bytes
         let segment_size_bytes = segment_size * 1024 * 1024;
         Self {
@@ -69,7 +69,7 @@ impl TopicStore {
     }
 
     /// Add a new message to the topic
-    pub fn store_message(&self, message: StreamMessage) {
+    pub(crate) fn store_message(&self, message: StreamMessage) {
         let mut current_segment_id = self.current_segment_id.write().unwrap();
         let segment_id = *current_segment_id;
 
@@ -121,7 +121,10 @@ impl TopicStore {
 
     // Get the next segment in the list based on the given segment ID
     // If the current segment is 0, it will return the first segment in the list
-    pub fn get_next_segment(&self, current_segment_id: usize) -> Option<Arc<RwLock<Segment>>> {
+    pub(crate) fn get_next_segment(
+        &self,
+        current_segment_id: usize,
+    ) -> Option<Arc<RwLock<Segment>>> {
         let index = self.segments_index.read().unwrap();
 
         if current_segment_id == 0 {
@@ -149,7 +152,7 @@ impl TopicStore {
         None
     }
 
-    pub fn contains_segment(&self, segment_id: usize) -> bool {
+    pub(crate) fn contains_segment(&self, segment_id: usize) -> bool {
         self.segments.contains_key(&segment_id)
     }
 
