@@ -101,11 +101,7 @@ impl SubscriptionDispatch {
 
     /// Moves to the next segment in the `TopicStore`.
     fn move_to_next_segment(&mut self) -> Result<()> {
-        let next_segment = if let Some(current_segment_id) = self.current_segment_id {
-            self.topic_store.get_next_segment(current_segment_id)
-        } else {
-            self.topic_store.get_next_segment(0) // Start from the first segment
-        };
+        let next_segment = self.topic_store.get_next_segment(self.current_segment_id);
 
         if let Some(next_segment) = next_segment {
             let next_segment_id = next_segment.read().map(|s| s.id).map_err(|_| {

@@ -66,8 +66,9 @@ impl DispatcherReliableMultipleConsumers {
                                     warn!("Failed to dispatch message: {}", e);
                                 }
                             },
-                            Err(e) => {
-                            warn!("Failed to process current segment: {}", e);
+                            Err(_) => {
+                            // as this loops, the error is due to waiting for a new message, so we just ignore it
+                            // warn!("Failed to process current segment: {}", e);
                             }
                         };
                     }

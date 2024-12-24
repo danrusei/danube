@@ -90,6 +90,12 @@ impl TopicStore {
         // Get the writable segment or create a new one if it doesn't exist
         let mut writable_segment = segment.write().unwrap();
         if writable_segment.is_full(self.segment_size) {
+            // Mark current segment as closed for writing
+            writable_segment.close_time = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
             // Create a new segment
             *current_segment_id += 1;
             let new_segment_id = *current_segment_id;
@@ -123,33 +129,36 @@ impl TopicStore {
     // If the current segment is 0, it will return the first segment in the list
     pub(crate) fn get_next_segment(
         &self,
-        current_segment_id: usize,
+        current_segment_id: Option<usize>,
     ) -> Option<Arc<RwLock<Segment>>> {
         let index = self.segments_index.read().unwrap();
 
-        if current_segment_id == 0 {
-            // Get the first segment if it exists
-            if !index.is_empty() {
-                let first_segment_id = index[0];
-                return self
-                    .segments
-                    .get(&first_segment_id)
-                    .map(|entry| entry.clone());
+        match current_segment_id {
+            None => {
+                // Get the first segment if index is not empty
+                if !index.is_empty() {
+                    let first_segment_id = index[0];
+                    return self
+                        .segments
+                        .get(&first_segment_id)
+                        .map(|entry| entry.clone());
+                }
+                None
             }
-            return None;
-        }
-
-        // Find the next segment after current_segment_id
-        if let Some(pos) = index.iter().position(|&id| id == current_segment_id) {
-            if pos + 1 < index.len() {
-                let next_segment_id = index[pos + 1];
-                return self
-                    .segments
-                    .get(&next_segment_id)
-                    .map(|entry| entry.clone());
+            Some(segment_id) => {
+                // Find the next segment after current_segment_id
+                if let Some(pos) = index.iter().position(|&id| id == segment_id) {
+                    if pos + 1 < index.len() {
+                        let next_segment_id = index[pos + 1];
+                        return self
+                            .segments
+                            .get(&next_segment_id)
+                            .map(|entry| entry.clone());
+                    }
+                }
+                None
             }
         }
-        None
     }
 
     pub(crate) fn contains_segment(&self, segment_id: usize) -> bool {
@@ -193,8 +202,10 @@ impl TopicStore {
             .min()
             .unwrap_or(0);
 
-        segments.retain(|id, _| {
-            let should_keep = *id > min_acknowledged_id;
+        segments.retain(|id, segment| {
+            let segment_read = segment.read().unwrap();
+            // Keep segments that are not closed or have an ID greater than the minimum acknowledged ID
+            let should_keep = segment_read.close_time == 0 || *id > min_acknowledged_id;
             if !should_keep {
                 info!(
                     "Dropping segment {} from TopicStore - acknowledged by all subscriptions",
