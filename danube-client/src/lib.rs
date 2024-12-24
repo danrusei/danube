@@ -39,5 +39,5 @@ mod rpc_connection;
 
 mod health_check;
 
-mod delivery_strategy;
-pub use delivery_strategy::ConfigDeliveryStrategy;
+mod dispatch_strategy;
+pub use dispatch_strategy::ConfigDispatchStrategy;

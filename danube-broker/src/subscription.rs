@@ -9,7 +9,7 @@ use tracing::trace;
 use crate::{
     broker_metrics::TOPIC_CONSUMERS,
     consumer::Consumer,
-    delivery_strategy::DeliveryStrategy,
+    dispatch_strategy::DispatchStrategy,
     dispatcher::{
         dispatcher_multiple_consumers::DispatcherMultipleConsumers,
         dispatcher_reliable_multiple_consumers::DispatcherReliableMultipleConsumers,
@@ -79,7 +79,7 @@ impl Subscription {
         &mut self,
         topic_name: &str,
         options: SubscriptionOptions,
-        delivery_strategy: &DeliveryStrategy,
+        dispatch_strategy: &DispatchStrategy,
     ) -> Result<u64> {
         //for communication with client consumer
         let (tx_cons, rx_cons) = mpsc::channel(4);
@@ -99,7 +99,7 @@ impl Subscription {
         // if not initialize a new dispatcher based on the subscription type: Exclusive, Shared, Failover
         if self.dispatcher.is_none() {
             let new_dispatcher = self
-                .create_new_dispatcher(options.clone(), delivery_strategy)
+                .create_new_dispatcher(options.clone(), dispatch_strategy)
                 .await?;
 
             self.dispatcher = Some(new_dispatcher);
@@ -131,19 +131,19 @@ impl Subscription {
     pub(crate) async fn create_new_dispatcher(
         &self,
         options: SubscriptionOptions,
-        delivery_strategy: &DeliveryStrategy,
+        dispatch_strategy: &DispatchStrategy,
     ) -> Result<Dispatcher> {
-        let last_acknowledged_segment = match delivery_strategy {
-            DeliveryStrategy::Reliable(persistent_storage) => Some(
+        let last_acknowledged_segment = match dispatch_strategy {
+            DispatchStrategy::Reliable(persistent_storage) => Some(
                 persistent_storage
                     .get_last_acknowledged_segment(&options.subscription_name)
                     .await?,
             ),
-            DeliveryStrategy::NonReliable => None,
+            DispatchStrategy::NonReliable => None,
         };
 
-        let new_dispatcher = match delivery_strategy {
-            DeliveryStrategy::NonReliable => match options.subscription_type {
+        let new_dispatcher = match dispatch_strategy {
+            DispatchStrategy::NonReliable => match options.subscription_type {
                 // Exclusive
                 0 => Dispatcher::OneConsumer(DispatcherSingleConsumer::new()),
 
@@ -157,7 +157,7 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            DeliveryStrategy::Reliable(persistent_storage) => {
+            DispatchStrategy::Reliable(persistent_storage) => {
                 let last_acked_segment = last_acknowledged_segment.ok_or_else(|| {
                     anyhow!("Expected last_acknowledged_segment for Reliable strategy")
                 })?;

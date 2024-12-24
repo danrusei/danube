@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 danube-client = {path = "../danube-client"}
+danube-reliable-dispatch = {path = "../danube-reliable-dispatch"}
 
 clap = { version = "4.5.4", features = ["derive"] }
 dashmap = "5.5.3"

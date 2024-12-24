@@ -3,7 +3,7 @@ use crate::proto::{
     ProducerRequest, ProducerResponse, StreamMessage as ProtoStreamMessage,
 };
 use crate::{
-    delivery_strategy::ConfigDeliveryStrategy,
+    dispatch_strategy::ConfigDispatchStrategy,
     errors::{decode_error_details, DanubeError, Result},
     message::{MessageID, StreamMessage},
     schema::Schema,
@@ -39,7 +39,7 @@ pub(crate) struct TopicProducer {
     // the schema represent the message payload schema
     schema: Schema,
     // the retention strategy for the topic
-    delivery_strategy: ConfigDeliveryStrategy,
+    dispatch_strategy: ConfigDispatchStrategy,
     // other configurable options for the producer
     producer_options: ProducerOptions,
     // the grpc client cnx
@@ -54,7 +54,7 @@ impl TopicProducer {
         topic: String,
         producer_name: String,
         schema: Schema,
-        delivery_strategy: ConfigDeliveryStrategy,
+        dispatch_strategy: ConfigDispatchStrategy,
         producer_options: ProducerOptions,
     ) -> Self {
         TopicProducer {
@@ -65,7 +65,7 @@ impl TopicProducer {
             request_id: AtomicU64::new(0),
             message_sequence_id: AtomicU64::new(0),
             schema,
-            delivery_strategy,
+            dispatch_strategy,
             producer_options,
             stream_client: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
@@ -81,7 +81,7 @@ impl TopicProducer {
             topic_name: self.topic.clone(),
             schema: Some(self.schema.clone().into()),
             producer_access_mode: ProducerAccessMode::Shared.into(),
-            delivery_strategy: Some(self.delivery_strategy.clone().into()),
+            dispatch_strategy: Some(self.dispatch_strategy.clone().into()),
         };
 
         let max_retries = 4;

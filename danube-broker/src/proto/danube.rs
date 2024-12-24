@@ -2,7 +2,7 @@
 /// Message representing topic retention strategy
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TopicDeliveryStrategy {
+pub struct TopicDispatchStrategy {
     /// "reliable" or "non_reliable"
     #[prost(string, tag = "1")]
     pub strategy: ::prost::alloc::string::String,
@@ -28,7 +28,7 @@ pub struct ProducerRequest {
     #[prost(enumeration = "ProducerAccessMode", tag = "5")]
     pub producer_access_mode: i32,
     #[prost(message, optional, tag = "6")]
-    pub delivery_strategy: ::core::option::Option<TopicDeliveryStrategy>,
+    pub dispatch_strategy: ::core::option::Option<TopicDispatchStrategy>,
 }
 /// Create Producer response
 #[allow(clippy::derive_partial_eq_without_eq)]

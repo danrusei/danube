@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    delivery_strategy::ConfigDeliveryStrategy,
+    dispatch_strategy::ConfigDispatchStrategy,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::BASE_TOPICS_PATH,
@@ -68,10 +68,10 @@ impl TopicResources {
     pub(crate) async fn add_topic_delivery(
         &mut self,
         topic_name: &str,
-        delivery_strategy: ConfigDeliveryStrategy,
+        dispatch_strategy: ConfigDispatchStrategy,
     ) -> Result<()> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "delivery"]);
-        let data = serde_json::to_value(delivery_strategy).unwrap();
+        let data = serde_json::to_value(dispatch_strategy).unwrap();
         self.create(&path, data).await?;
 
         Ok(())
@@ -143,13 +143,13 @@ impl TopicResources {
         None
     }
 
-    pub(crate) fn get_delivery_strategy(&self, topic_name: &str) -> Option<ConfigDeliveryStrategy> {
+    pub(crate) fn get_dispatch_strategy(&self, topic_name: &str) -> Option<ConfigDispatchStrategy> {
         let path = join_path(&[BASE_TOPICS_PATH, topic_name, "delivery"]);
         let result = self.local_cache.get(&path);
         if let Some(value) = result {
-            let delivery_strategy: Option<ConfigDeliveryStrategy> =
+            let dispatch_strategy: Option<ConfigDispatchStrategy> =
                 serde_json::from_value(value).ok();
-            return delivery_strategy;
+            return dispatch_strategy;
         }
         None
     }

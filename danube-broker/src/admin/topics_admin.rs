@@ -3,7 +3,7 @@ use crate::admin_proto::{
     topic_admin_server::TopicAdmin, NamespaceRequest, NewTopicRequest, SubscriptionListResponse,
     SubscriptionRequest, SubscriptionResponse, TopicListResponse, TopicRequest, TopicResponse,
 };
-use crate::proto::TopicDeliveryStrategy;
+use crate::proto::TopicDispatchStrategy;
 use crate::schema::{Schema, SchemaType};
 
 use tonic::{Request, Response, Status};
@@ -52,7 +52,7 @@ impl TopicAdmin for DanubeAdminImpl {
             schema_type = SchemaType::Json(req.schema_data);
         }
 
-        let delivery_strategy = TopicDeliveryStrategy {
+        let delivery_strategy = TopicDispatchStrategy {
             strategy: req.delivery_strategy,
             retention_period: 3600,
             segment_size: 50,

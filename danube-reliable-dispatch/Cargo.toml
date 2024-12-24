@@ -1,0 +1,14 @@
+[package]
+name = "danube-reliable-dispatch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+danube-client = {path = "../danube-client"}
+dashmap = "5.5.3"
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = "1.0.59"
+
+[lints]
+workspace = true

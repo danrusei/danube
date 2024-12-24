@@ -1,5 +1,5 @@
 use crate::{
-    delivery_strategy::ConfigDeliveryStrategy, errors::Result, message_router::MessageRouter,
+    dispatch_strategy::ConfigDispatchStrategy, errors::Result, message_router::MessageRouter,
     topic_producer::TopicProducer, DanubeClient, Schema, SchemaType,
 };
 
@@ -16,7 +16,7 @@ pub struct Producer {
     client: DanubeClient,
     topic_name: String,
     schema: Schema,
-    delivery_strategy: ConfigDeliveryStrategy,
+    dispatch_strategy: ConfigDispatchStrategy,
     producer_name: String,
     partitions: Option<usize>,
     message_router: Option<MessageRouter>,
@@ -29,7 +29,7 @@ impl Producer {
         client: DanubeClient,
         topic_name: String,
         schema: Option<Schema>,
-        delivery_strategy: Option<ConfigDeliveryStrategy>,
+        dispatch_strategy: Option<ConfigDispatchStrategy>,
         producer_name: String,
         partitions: Option<usize>,
         message_router: Option<MessageRouter>,
@@ -42,17 +42,17 @@ impl Producer {
             Schema::new("string_schema".into(), SchemaType::String)
         };
 
-        let delivery_strategy = if let Some(retention) = delivery_strategy {
+        let dispatch_strategy = if let Some(retention) = dispatch_strategy {
             retention
         } else {
-            ConfigDeliveryStrategy::default()
+            ConfigDispatchStrategy::default()
         };
 
         Producer {
             client,
             topic_name,
             schema,
-            delivery_strategy,
+            dispatch_strategy,
             producer_name,
             partitions,
             message_router,
@@ -74,7 +74,7 @@ impl Producer {
                     self.topic_name.clone(),
                     self.producer_name.clone(),
                     self.schema.clone(),
-                    self.delivery_strategy.clone(),
+                    self.dispatch_strategy.clone(),
                     self.producer_options.clone(),
                 )]
             }
@@ -91,7 +91,7 @@ impl Producer {
                             topic,
                             format!("{}-{}", self.producer_name, partition_id),
                             self.schema.clone(),
-                            self.delivery_strategy.clone(),
+                            self.dispatch_strategy.clone(),
                             self.producer_options.clone(),
                         )
                     })
@@ -157,7 +157,7 @@ pub struct ProducerBuilder {
     num_partitions: Option<usize>,
     producer_name: Option<String>,
     schema: Option<Schema>,
-    delivery_strategy: Option<ConfigDeliveryStrategy>,
+    dispatch_strategy: Option<ConfigDispatchStrategy>,
     producer_options: ProducerOptions,
 }
 
@@ -169,7 +169,7 @@ impl ProducerBuilder {
             num_partitions: None,
             producer_name: None,
             schema: None,
-            delivery_strategy: None,
+            dispatch_strategy: None,
             producer_options: ProducerOptions::default(),
         }
     }
@@ -223,9 +223,9 @@ impl ProducerBuilder {
     ///
     /// # Parameters
     ///
-    /// - `delivery_strategy`: The delivery strategy to be used by the producer. This should be an instance of a `ConfigDeliveryStrategy` implementation.
-    pub fn with_delivery_strategy(mut self, delivery_strategy: ConfigDeliveryStrategy) -> Self {
-        self.delivery_strategy = Some(delivery_strategy);
+    /// - `dispatch_strategy`: The delivery strategy to be used by the producer. This should be an instance of a `ConfigDeliveryStrategy` implementation.
+    pub fn with_dispatch_strategy(mut self, dispatch_strategy: ConfigDispatchStrategy) -> Self {
+        self.dispatch_strategy = Some(dispatch_strategy);
         self
     }
 
@@ -283,7 +283,7 @@ impl ProducerBuilder {
             self.client,
             topic_name,
             self.schema,
-            self.delivery_strategy,
+            self.dispatch_strategy,
             producer_name,
             self.num_partitions,
             None,

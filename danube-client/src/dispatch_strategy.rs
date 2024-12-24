@@ -1,16 +1,16 @@
-use crate::proto::TopicDeliveryStrategy;
+use crate::proto::TopicDispatchStrategy;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfigDeliveryStrategy {
+pub struct ConfigDispatchStrategy {
     pub strategy: String,
     pub retention_period: u64,
     pub segment_size: usize,
 }
 
-impl ConfigDeliveryStrategy {
+impl ConfigDispatchStrategy {
     pub fn new(strategy: &str, retention_period: u64, segment_size: usize) -> Self {
-        ConfigDeliveryStrategy {
+        ConfigDispatchStrategy {
             strategy: strategy.to_string(),
             retention_period,
             segment_size,
@@ -18,9 +18,9 @@ impl ConfigDeliveryStrategy {
     }
 }
 
-impl Default for ConfigDeliveryStrategy {
+impl Default for ConfigDispatchStrategy {
     fn default() -> Self {
-        ConfigDeliveryStrategy {
+        ConfigDispatchStrategy {
             strategy: "non_reliable".to_string(),
             retention_period: 3600,
             segment_size: 50,
@@ -29,9 +29,9 @@ impl Default for ConfigDeliveryStrategy {
 }
 
 // Implement conversions from ProtoTypeSchema to SchemaType
-impl From<TopicDeliveryStrategy> for ConfigDeliveryStrategy {
-    fn from(strategy: TopicDeliveryStrategy) -> Self {
-        ConfigDeliveryStrategy {
+impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
+    fn from(strategy: TopicDispatchStrategy) -> Self {
+        ConfigDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
             segment_size: strategy.segment_size as usize,
@@ -39,9 +39,9 @@ impl From<TopicDeliveryStrategy> for ConfigDeliveryStrategy {
     }
 }
 // Implement conversions from ConfigRetentionStrategy to ProtoTypeSchema
-impl From<ConfigDeliveryStrategy> for TopicDeliveryStrategy {
-    fn from(strategy: ConfigDeliveryStrategy) -> Self {
-        TopicDeliveryStrategy {
+impl From<ConfigDispatchStrategy> for TopicDispatchStrategy {
+    fn from(strategy: ConfigDispatchStrategy) -> Self {
+        TopicDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
             segment_size: strategy.segment_size as u64,
