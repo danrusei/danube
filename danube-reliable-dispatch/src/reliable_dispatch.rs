@@ -1,13 +1,9 @@
 use danube_client::{MessageID, StreamMessage};
 use std::collections::HashMap;
-use std::sync::{atomic::AtomicUsize, Arc, RwLock};
+use std::sync::{Arc, RwLock};
 use tracing::trace;
 
 use crate::{
-    consumer::Consumer,
-    dispatcher::{
-        dispatch_reliable_message_multiple_consumers, dispatch_reliable_message_single_consumer,
-    },
     errors::Result,
     topic_storage::{Segment, TopicStore},
 };
@@ -16,16 +12,6 @@ use crate::{
 /// It is used to dispatch messages to consumers and to track the progress of the consumer
 #[derive(Debug)]
 pub(crate) struct ConsumerDispatch {
-    // dispatcher type is 0 for single consumer and 1 for multiple consumers
-    pub(crate) dispatcher_type: usize,
-    // list of consumers
-    pub(crate) consumers: Vec<Consumer>,
-    // active consumer is the consumer that is currently receiving messages
-    // it is used only for single consumer subscriptions
-    pub(crate) active_consumer: Option<Consumer>,
-    // index consumer is the index of the consumer in the consumers list
-    // it is used only for multiple consumer subscriptions
-    pub(crate) index_consumer: Arc<AtomicUsize>,
     // topic store is the store of segments
     // topic store is used to get the next segment to be sent to the consumer
     pub(crate) topic_store: TopicStore,
@@ -44,16 +30,8 @@ pub(crate) struct ConsumerDispatch {
 }
 
 impl ConsumerDispatch {
-    pub(crate) fn new(
-        dispatcher_type: usize,
-        topic_store: TopicStore,
-        last_acked_segment: Arc<RwLock<usize>>,
-    ) -> Self {
+    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
         Self {
-            dispatcher_type,
-            consumers: Vec::new(),
-            active_consumer: None,
-            index_consumer: Arc::new(AtomicUsize::new(0)),
             topic_store,
             last_acked_segment,
             segment: None,
@@ -63,24 +41,8 @@ impl ConsumerDispatch {
         }
     }
 
-    pub(crate) fn add_single_consumer(&mut self, consumer: Consumer) {
-        self.consumers.push(consumer.clone());
-        if self.active_consumer.is_none() {
-            self.active_consumer = Some(consumer.clone());
-        }
-
-        trace!(
-            "Consumer {} added to single-consumer dispatcher",
-            consumer.consumer_name
-        );
-    }
-
-    pub(crate) fn add_multiple_consumers(&mut self, consumer: Consumer) {
-        self.consumers.push(consumer);
-    }
-
     /// Process the current segment and send the messages to the consumer
-    pub(crate) async fn process_current_segment(&mut self) -> Result<()> {
+    pub(crate) async fn process_current_segment(&mut self) -> Result<StreamMessage> {
         if let Some(segment) = self.segment.as_ref() {
             let current_segment_id = self.current_segment_id;
 
@@ -95,7 +57,7 @@ impl ConsumerDispatch {
             // If validation indicates we should move to the next segment
             if move_to_next_segment {
                 self.move_to_next_segment()?;
-                return Ok(());
+                return Err("to be implemented".into());
             }
         } else {
             // No current segment; attempt to move to the next segment
@@ -103,9 +65,7 @@ impl ConsumerDispatch {
         }
 
         // Process the next message using the stored segment
-        self.process_next_message().await?;
-
-        Ok(())
+        self.process_next_message().await
     }
 
     /// Validates the current segment. Returns `true` if the segment was invalidated or closed.
@@ -173,7 +133,7 @@ impl ConsumerDispatch {
     }
 
     /// Processes the next unacknowledged message in the current segment.
-    async fn process_next_message(&mut self) -> Result<()> {
+    async fn process_next_message(&mut self) -> Result<StreamMessage> {
         // Only process next message if there's no pending acknowledgment
         if self.pending_ack_message.is_none() {
             if let Some(segment) = &self.segment {
@@ -190,33 +150,12 @@ impl ConsumerDispatch {
 
                 if let Some(msg) = next_message {
                     self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
-                    self.dispatch_message(msg).await?;
+                    Ok(msg)
                 }
             }
         }
 
-        Ok(())
-    }
-
-    // Function to handle message dispatching
-    async fn dispatch_message(&mut self, msg: StreamMessage) -> anyhow::Result<()> {
-        match self.dispatcher_type {
-            0 => {
-                dispatch_reliable_message_single_consumer(&mut self.active_consumer, msg).await?;
-            }
-            1 => {
-                dispatch_reliable_message_multiple_consumers(
-                    &mut self.consumers,
-                    self.index_consumer.clone(),
-                    msg,
-                )
-                .await?;
-            }
-            _ => {
-                anyhow::bail!("Invalid dispatcher type: {}", self.dispatcher_type);
-            }
-        }
-        Ok(())
+        Err("todo").into()
     }
 
     /// Handle the consumer message acknowledgement
