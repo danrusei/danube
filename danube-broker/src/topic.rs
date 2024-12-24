@@ -169,8 +169,8 @@ impl Topic {
                     //TODO! delete the subscription from the metadata store
                 }
             }
-            DispatchStrategy::Reliable(persistent_storage) => {
-                persistent_storage.store_message(stream_message).await?;
+            DispatchStrategy::Reliable(reliable_dispatch) => {
+                reliable_dispatch.store_message(stream_message).await?;
             }
         };
 
@@ -214,8 +214,8 @@ impl Topic {
                 Subscription::new(options.clone(), &self.topic_name, sub_metadata);
 
             // Handle additional logic for reliable storage
-            if let DispatchStrategy::Reliable(persistent_storage) = &self.dispatch_strategy {
-                persistent_storage
+            if let DispatchStrategy::Reliable(reliable_dispatch) = &self.dispatch_strategy {
+                reliable_dispatch
                     .add_subscription(&new_subscription.subscription_name)
                     .await?;
             }

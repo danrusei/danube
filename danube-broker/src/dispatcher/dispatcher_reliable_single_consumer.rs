@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use danube_client::StreamMessage;
-use danube_reliable_dispatch::{ConsumerDispatch, TopicStore};
-use std::sync::{Arc, RwLock};
+use danube_reliable_dispatch::SubscriptionDispatch;
 use tokio::{
     sync::mpsc,
     time::{self, Duration},
@@ -17,14 +16,13 @@ pub(crate) struct DispatcherReliableSingleConsumer {
 }
 
 impl DispatcherReliableSingleConsumer {
-    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
+    pub(crate) fn new(mut subscription_dispatch: SubscriptionDispatch) -> Self {
         let (control_tx, mut control_rx) = mpsc::channel(16);
 
         // Spawn dispatcher task
         tokio::spawn(async move {
             let mut consumers: Vec<Consumer> = Vec::new();
             let mut active_consumer: Option<Consumer> = None;
-            let mut consumer_dispatch = ConsumerDispatch::new(topic_store, last_acked_segment);
             let mut interval = time::interval(Duration::from_millis(100));
 
             loop {
@@ -57,7 +55,7 @@ impl DispatcherReliableSingleConsumer {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
                             DispatcherCommand::MessageAcked(request_id, msg_id) => {
-                                if let Err(e) = consumer_dispatch.handle_message_acked(request_id, msg_id).await {
+                                if let Err(e) = subscription_dispatch.handle_message_acked(request_id, msg_id).await {
                                     warn!("Failed to handle message acked: {}", e);
                                 }
                             }
@@ -67,7 +65,7 @@ impl DispatcherReliableSingleConsumer {
                         // Send ordered messages from the segment to the consumers
                         // Go to the next segment if all messages are acknowledged by consumers
                         // Go to tne next segment if it passed the TTL since closed
-                        match consumer_dispatch.process_current_segment().await {
+                        match subscription_dispatch.process_current_segment().await {
                             Ok(msg) => {
                                 if let Err(e) = Self::dispatch_reliable_message_single_consumer(
                                     &mut active_consumer,

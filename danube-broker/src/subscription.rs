@@ -133,15 +133,6 @@ impl Subscription {
         options: SubscriptionOptions,
         dispatch_strategy: &DispatchStrategy,
     ) -> Result<Dispatcher> {
-        let last_acknowledged_segment = match dispatch_strategy {
-            DispatchStrategy::Reliable(persistent_storage) => Some(
-                persistent_storage
-                    .get_last_acknowledged_segment(&options.subscription_name)
-                    .await?,
-            ),
-            DispatchStrategy::NonReliable => None,
-        };
-
         let new_dispatcher = match dispatch_strategy {
             DispatchStrategy::NonReliable => match options.subscription_type {
                 // Exclusive
@@ -157,30 +148,25 @@ impl Subscription {
                     return Err(anyhow!("Should not get here"));
                 }
             },
-            DispatchStrategy::Reliable(persistent_storage) => {
-                let last_acked_segment = last_acknowledged_segment.ok_or_else(|| {
-                    anyhow!("Expected last_acknowledged_segment for Reliable strategy")
-                })?;
+            DispatchStrategy::Reliable(reliable_dispatcher) => {
+                let subscription_dispatch = reliable_dispatcher
+                    .new_subscription_dispatch(&options.subscription_name)
+                    .await?;
 
                 match options.subscription_type {
                     // Exclusive
                     0 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                        persistent_storage.topic_store.clone(),
-                        last_acked_segment,
+                        subscription_dispatch,
                     )),
 
                     // Shared
                     1 => Dispatcher::ReliableMultipleConsumers(
-                        DispatcherReliableMultipleConsumers::new(
-                            persistent_storage.topic_store.clone(),
-                            last_acked_segment,
-                        ),
+                        DispatcherReliableMultipleConsumers::new(subscription_dispatch),
                     ),
 
                     // Failover
                     2 => Dispatcher::ReliableOneConsumer(DispatcherReliableSingleConsumer::new(
-                        persistent_storage.topic_store.clone(),
-                        last_acked_segment,
+                        subscription_dispatch,
                     )),
 
                     _ => {

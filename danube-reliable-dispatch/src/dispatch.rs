@@ -8,10 +8,10 @@ use crate::{
     topic_storage::{Segment, TopicStore},
 };
 
-/// ConsumerDispatch is holding information about consumers and the messages within a segment
+/// SubscriptionDispatch is holding information about consumers and the messages within a segment
 /// It is used to dispatch messages to consumers and to track the progress of the consumer
 #[derive(Debug)]
-pub struct ConsumerDispatch {
+pub struct SubscriptionDispatch {
     // topic store is the store of segments
     // topic store is used to get the next segment to be sent to the consumer
     pub(crate) topic_store: TopicStore,
@@ -29,8 +29,8 @@ pub struct ConsumerDispatch {
     pub(crate) acked_messages: HashMap<MessageID, u64>,
 }
 
-impl ConsumerDispatch {
-    pub fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
+impl SubscriptionDispatch {
+    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
         Self {
             topic_store,
             last_acked_segment,
