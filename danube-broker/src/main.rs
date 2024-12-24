@@ -4,7 +4,7 @@ mod broker_server;
 mod broker_service;
 mod consumer;
 mod danube_service;
-mod delivery_strategy;
+mod dispatch_strategy;
 mod dispatcher;
 mod error_message;
 mod message;

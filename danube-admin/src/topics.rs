@@ -22,7 +22,7 @@ pub(crate) enum TopicsCommands {
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
         #[arg(short, long, default_value = "non_reliable")]
-        delivery_strategy: String,
+        dispatch_strategy: String,
     },
     #[command(about = "Create a partitioned topic")]
     CreatePartitioned {
@@ -33,7 +33,7 @@ pub(crate) enum TopicsCommands {
         #[arg(short = 'd', long, default_value = "{}")]
         schema_data: String,
         #[arg(short, long, default_value = "non_reliable")]
-        delivery_strategy: String,
+        dispatch_strategy: String,
     },
     #[command(about = "Delete an existing topic")]
     Delete { topic: String },
@@ -69,7 +69,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             topic,
             mut schema_type,
             schema_data,
-            delivery_strategy,
+            dispatch_strategy,
         } => {
             if !validate_topic_format(&topic) {
                 return Err("wrong topic format, should be /namespace/topic".into());
@@ -82,7 +82,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
                 name: topic,
                 schema_type,
                 schema_data,
-                delivery_strategy: delivery_strategy,
+                delivery_strategy: dispatch_strategy,
             };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
@@ -94,7 +94,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
             partitions,
             mut schema_type,
             schema_data,
-            delivery_strategy,
+            dispatch_strategy,
         } => {
             if !validate_topic_format(&topic) {
                 return Err("wrong topic format, should be /namespace/topic".into());
@@ -111,7 +111,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
                         name: topic,
                         schema_type: schema_type.clone(),
                         schema_data: schema_data.clone(),
-                        delivery_strategy: delivery_strategy.clone(),
+                        delivery_strategy: dispatch_strategy.clone(),
                     }
                 })
                 .collect();

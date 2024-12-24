@@ -1,5 +1,5 @@
 use anyhow::Result;
-use danube_client::{ConfigDeliveryStrategy, DanubeClient, SchemaType};
+use danube_client::{ConfigDispatchStrategy, DanubeClient, SchemaType};
 use serde_json::json;
 use std::thread;
 use std::time::Duration;
@@ -21,14 +21,14 @@ async fn main() -> Result<()> {
     let json_schema = r#"{"type": "object", "properties": {"field1": {"type": "string"}, "field2": {"type": "integer"}}}"#.to_string();
 
     // Create a reliable delivery strategy with a retention period of 1 hour and a segment size of 10 MB
-    let delivery_strategy = ConfigDeliveryStrategy::new("reliable", 3600, 10);
+    let dispatch_strategy = ConfigDispatchStrategy::new("reliable", 3600, 10);
 
     let mut producer = client
         .new_producer()
         .with_topic(topic)
         .with_name(producer_name)
         .with_schema("my_app".into(), SchemaType::Json(json_schema))
-        .with_delivery_strategy(delivery_strategy)
+        .with_dispatch_strategy(dispatch_strategy)
         .build();
 
     producer.create().await?;

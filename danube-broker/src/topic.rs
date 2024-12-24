@@ -7,7 +7,9 @@ use tracing::{info, warn};
 
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
-    delivery_strategy::{ConfigDeliveryStrategy, DeliveryStrategy, PersistentStorage},
+    dispatch_strategy::{
+        ConfigDispatchStrategy, DispatchStrategy, DispatchStrategy, PersistentStorage,
+    },
     message::AckMessage,
     policies::Policies,
     producer::Producer,
@@ -37,16 +39,16 @@ pub(crate) struct Topic {
     // the producers currently connected to this topic, producer_id -> Producer
     pub(crate) producers: HashMap<u64, Producer>,
     // the retention strategy for the topic, Reliable vs NonReliable
-    pub(crate) delivery_strategy: DeliveryStrategy,
+    pub(crate) dispatch_strategy: DispatchStrategy,
 }
 
 impl Topic {
-    pub(crate) fn new(topic_name: &str, delivery_strategy: ConfigDeliveryStrategy) -> Self {
-        let delivery_strategy = match delivery_strategy.strategy.as_str() {
-            "non_reliable" => DeliveryStrategy::NonReliable,
-            "reliable" => DeliveryStrategy::Reliable(PersistentStorage::new(
-                delivery_strategy.segment_size,
-                delivery_strategy.retention_period,
+    pub(crate) fn new(topic_name: &str, dispatch_strategy: ConfigDisptachStrategy) -> Self {
+        let dispatch_strategy = match dispatch_strategy.strategy.as_str() {
+            "non_reliable" => DispatchStrategy::NonReliable,
+            "reliable" => DispatchStrategy::Reliable(PersistentStorage::new(
+                dispatch_strategy.segment_size,
+                dispatch_strategy.retention_period,
             )),
             _ => panic!("Invalid retention strategy"),
         };
@@ -57,7 +59,7 @@ impl Topic {
             topic_policies: None,
             subscriptions: Mutex::new(HashMap::new()),
             producers: HashMap::new(),
-            delivery_strategy,
+            dispatch_strategy,
         }
     }
 
@@ -138,8 +140,8 @@ impl Topic {
             }
         }
 
-        match &self.delivery_strategy {
-            DeliveryStrategy::NonReliable => {
+        match &self.dispatch_strategy {
+            DispatchStrategy::NonReliable => {
                 // Collect subscriptions that need to be unsubscribed, if contain no active consumers
                 let subscriptions_to_remove: Vec<String> = {
                     let subscriptions = self.subscriptions.lock().await;
@@ -168,7 +170,7 @@ impl Topic {
                     //TODO! delete the subscription from the metadata store
                 }
             }
-            DeliveryStrategy::Reliable(persistent_storage) => {
+            DispatchStrategy::Reliable(persistent_storage) => {
                 persistent_storage.store_message(stream_message).await?;
             }
         };
@@ -213,7 +215,7 @@ impl Topic {
                 Subscription::new(options.clone(), &self.topic_name, sub_metadata);
 
             // Handle additional logic for reliable storage
-            if let DeliveryStrategy::Reliable(persistent_storage) = &self.delivery_strategy {
+            if let DeliveryStrategy::Reliable(persistent_storage) = &self.dispatch_strategy {
                 persistent_storage
                     .add_subscription(&new_subscription.subscription_name)
                     .await?;
@@ -234,7 +236,7 @@ impl Topic {
         //Todo! Check the topic policies with max_consumers per topic
 
         let consumer_id = subscription
-            .add_consumer(topic_name, options, &self.delivery_strategy)
+            .add_consumer(topic_name, options, &self.dispatch_strategy)
             .await?;
 
         Ok(consumer_id)

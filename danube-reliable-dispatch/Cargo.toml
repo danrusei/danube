@@ -1,5 +1,5 @@
 [package]
-name = "danube-reliable-delivery"
+name = "danube-reliable-dispatch"
 version = "0.1.0"
 edition = "2021"
 

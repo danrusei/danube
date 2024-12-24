@@ -7,7 +7,6 @@ pub(crate) mod dispatcher_multiple_consumers;
 pub(crate) mod dispatcher_reliable_multiple_consumers;
 pub(crate) mod dispatcher_reliable_single_consumer;
 pub(crate) mod dispatcher_single_consumer;
-pub(crate) mod reliable_consumer_dispatch;
 pub(crate) use dispatcher_multiple_consumers::DispatcherMultipleConsumers;
 pub(crate) use dispatcher_reliable_multiple_consumers::{
     dispatch_reliable_message_multiple_consumers, DispatcherReliableMultipleConsumers,

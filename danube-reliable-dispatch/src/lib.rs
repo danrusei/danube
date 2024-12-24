@@ -9,7 +9,7 @@ use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
 
-pub struct ReliableDelivery {
+pub struct ReliableDispatch {
     // Topic store is used to store messages in a queue for reliable delivery
     pub topic_store: TopicStore,
     // subscriptions: SubscriptionManager,
@@ -19,7 +19,7 @@ pub struct ReliableDelivery {
     shutdown_tx: tokio::sync::mpsc::Sender<()>,
 }
 
-impl ReliableDelivery {
+impl ReliableDispatch {
     pub(crate) fn new(segment_size: usize, segment_ttl: u64) -> Self {
         let topic_store = TopicStore::new(segment_size, segment_ttl);
         let subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>> = Arc::new(DashMap::new());
@@ -57,7 +57,7 @@ impl ReliableDelivery {
     }
 }
 
-impl Drop for ReliableDelivery {
+impl Drop for ReliableDispatch {
     fn drop(&mut self) {
         let _ = self.shutdown_tx.try_send(());
     }
