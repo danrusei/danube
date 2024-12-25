@@ -111,16 +111,13 @@ impl TopicStore {
             // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().unwrap();
             new_writable_segment.add_message(message);
-            dbg!(
-                "Store message in new segment {}",
-                new_writable_segment.messages.len()
-            );
+            dbg!("Store message in new segment {}", new_writable_segment.id);
         } else {
             // Add the message to the current writable segment
             writable_segment.add_message(message);
             dbg!(
-                "Store message in current segment {}",
-                writable_segment.messages.len()
+                "Store message in current segment with size {}",
+                writable_segment.current_size
             );
         }
     }
