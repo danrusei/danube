@@ -1,6 +1,6 @@
 use danube_client::StreamMessage;
 use dashmap::DashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{atomic::AtomicUsize, Arc, RwLock};
 use tracing::info;
 
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
@@ -171,7 +171,7 @@ impl TopicStore {
     pub(crate) fn start_lifecycle_management_task(
         &self,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-        subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>>,
+        subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>>,
     ) {
         let segments = self.segments.clone();
         let segments_index = self.segments_index.clone();
@@ -194,11 +194,11 @@ impl TopicStore {
     fn cleanup_acknowledged_segments(
         segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
         segments_index: &Arc<RwLock<Vec<usize>>>,
-        subscriptions: &Arc<DashMap<String, Arc<RwLock<usize>>>>,
+        subscriptions: &Arc<DashMap<String, Arc<AtomicUsize>>>,
     ) {
         let min_acknowledged_id = subscriptions
             .iter()
-            .map(|entry| *entry.value().read().unwrap())
+            .map(|entry| entry.value().load(std::sync::atomic::Ordering::Acquire))
             .min()
             .unwrap_or(0);
 

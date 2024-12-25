@@ -1,5 +1,6 @@
 use danube_client::{MessageID, StreamMessage};
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
 use tracing::trace;
 
@@ -17,7 +18,7 @@ pub struct SubscriptionDispatch {
     pub(crate) topic_store: TopicStore,
     // last acked segment is the last segment that has all messages acknowledged by the consumer
     // it is used to track the progress of the subscription
-    pub(crate) last_acked_segment: Arc<RwLock<usize>>,
+    pub(crate) last_acked_segment: Arc<AtomicUsize>,
     // segment holds the messages to be sent to the consumer
     // segment is replaced when the consumer is done with the segment and if there is another available segment
     pub(crate) segment: Option<Arc<RwLock<Segment>>>,
@@ -30,7 +31,7 @@ pub struct SubscriptionDispatch {
 }
 
 impl SubscriptionDispatch {
-    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<RwLock<usize>>) -> Self {
+    pub(crate) fn new(topic_store: TopicStore, last_acked_segment: Arc<AtomicUsize>) -> Self {
         Self {
             topic_store,
             last_acked_segment,
@@ -112,12 +113,8 @@ impl SubscriptionDispatch {
 
             // Update the last acknowledged segment
             if let Some(current_segment_id) = self.current_segment_id {
-                let mut last_acked = self.last_acked_segment.write().map_err(|_| {
-                    ReliableDispatchError::LockError(
-                        "Failed to acquire read lock on segment".to_string(),
-                    )
-                })?;
-                *last_acked = current_segment_id;
+                self.last_acked_segment
+                    .store(current_segment_id, std::sync::atomic::Ordering::Release);
             }
 
             self.segment = Some(next_segment);
