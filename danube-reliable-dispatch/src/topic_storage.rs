@@ -1,7 +1,7 @@
 use danube_client::StreamMessage;
 use dashmap::DashMap;
 use std::sync::{atomic::AtomicUsize, Arc, RwLock};
-use tracing::info;
+use tracing::trace;
 
 /// Segment is a collection of messages, the segment is closed for writing when it's capacity is reached
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
@@ -111,14 +111,10 @@ impl TopicStore {
             // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().unwrap();
             new_writable_segment.add_message(message);
-            dbg!("Store message in new segment {}", new_writable_segment.id);
+            trace!("Store message in new segment {}", new_writable_segment.id);
         } else {
             // Add the message to the current writable segment
             writable_segment.add_message(message);
-            dbg!(
-                "Store message in current segment with size {}",
-                writable_segment.current_size
-            );
         }
     }
 
@@ -204,7 +200,7 @@ impl TopicStore {
             // Keep segments that are not closed or have an ID greater than the minimum acknowledged ID
             let should_keep = segment_read.close_time == 0 || *id > min_acknowledged_id;
             if !should_keep {
-                info!(
+                trace!(
                     "Dropping segment {} from TopicStore - acknowledged by all subscriptions",
                     id
                 );
@@ -232,7 +228,7 @@ impl TopicStore {
             if !keep {
                 let mut index = segments_index.write().unwrap();
                 index.retain(|&index_id| index_id != *id);
-                info!("Dropping segment {} from TopicStore - TTL expired", id);
+                trace!("Dropping segment {} from TopicStore - TTL expired", id);
             }
             keep
         });

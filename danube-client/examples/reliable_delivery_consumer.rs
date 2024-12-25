@@ -37,13 +37,20 @@ async fn main() -> Result<()> {
 
     // Start receiving messages
     let mut message_stream = consumer.receive().await?;
+    let mut total_received_size = 0;
 
     while let Some(message) = message_stream.recv().await {
         let payload = message.payload.clone();
+        total_received_size += payload.len();
 
         match String::from_utf8(payload) {
             Ok(message_str) => {
-                println!("Received message: {:?}", message_str);
+                println!(
+                    "Received message: {:?} , with id: {}, total received bytes: {}",
+                    message_str.split_once("!").unwrap().0,
+                    &message.msg_id.sequence_id,
+                    total_received_size
+                );
 
                 consumer.ack(&message).await?;
             }

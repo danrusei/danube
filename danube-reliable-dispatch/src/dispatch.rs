@@ -93,7 +93,15 @@ impl SubscriptionDispatch {
         let segment_data = segment.read().map_err(|_| {
             ReliableDispatchError::LockError("Failed to acquire read lock on segment".to_string())
         })?;
+
+        // When processing the last message of a segment, there's a brief window where:
+        // 1. The message is sent to the consumer
+        // 2. The segment is marked as closed
+        // 3. We're still waiting for the final acknowledgment
+        // During this window, acked_messages.len() will naturally be one less than segment_data.messages.len(),
+        // but this is a valid state rather than an error condition.
         if segment_data.close_time > 0 && self.acked_messages.len() == segment_data.messages.len() {
+            trace!("The subscription dispatcher id moving to the next segment, the current segment is closed and all messages consumed");
             return Ok(true);
         }
 
@@ -117,6 +125,9 @@ impl SubscriptionDispatch {
                     .store(current_segment_id, std::sync::atomic::Ordering::Release);
             }
 
+            // Clear acknowledgments before switching to a new segment
+            self.acked_messages.clear();
+
             self.segment = Some(next_segment);
             self.current_segment_id = Some(next_segment_id);
         } else {
@@ -130,6 +141,7 @@ impl SubscriptionDispatch {
     fn clear_current_segment(&mut self) {
         self.segment = None;
         self.current_segment_id = None;
+        self.acked_messages.clear();
     }
 
     /// Processes the next unacknowledged message in the current segment.
@@ -164,17 +176,18 @@ impl SubscriptionDispatch {
 
     /// Handle the consumer message acknowledgement
     pub async fn handle_message_acked(&mut self, request_id: u64, msg_id: MessageID) -> Result<()> {
+        // Validate that the message belongs to current segment
+        // Not sure if needed
+        // if !self.segment.as_ref().map_or(false, |seg| {
+        //     seg.read()
+        //         .map_or(false, |s| s.messages.iter().any(|m| m.msg_id == msg_id))
+        // }) {
+        //     return Err(ReliableDispatchError::AcknowledgmentError(
+        //         "Acked message does not belong to current segment".to_string(),
+        //     ));
+        // }
+
         if let Some((pending_request_id, pending_msg_id)) = &self.pending_ack_message {
-            dbg!(
-                "received ack for msg with request_id {} and msg_id {:?}",
-                request_id,
-                &msg_id
-            );
-            dbg!(
-                "pending request_id: {:?}, pending_msg_id: {:?}",
-                pending_request_id,
-                pending_msg_id
-            );
             if *pending_request_id == request_id && *pending_msg_id == msg_id {
                 self.pending_ack_message = None;
                 self.acked_messages.insert(msg_id.clone(), request_id);
