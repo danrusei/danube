@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         .build()
         .unwrap();
 
-    let topic = "/default/reliable_topic";
+    let topic = "/default/test_topic";
     let consumer_name = "cons_json";
     let subscription_name = "subs_json";
 
