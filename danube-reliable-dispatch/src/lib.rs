@@ -1,11 +1,13 @@
 mod topic_storage;
 mod topic_storage_test;
+use storage_backend::StorageBackendType;
 use topic_storage::TopicStore;
 mod errors;
 use errors::{ReliableDispatchError, Result};
 mod dispatch;
 mod dispatch_test;
 pub use dispatch::SubscriptionDispatch;
+mod storage_backend;
 
 use danube_client::StreamMessage;
 use dashmap::DashMap;
@@ -24,12 +26,13 @@ pub struct ReliableDispatch {
 }
 
 impl ReliableDispatch {
-    pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
+    pub fn new(storage: StorageBackendType, segment_size: usize, segment_ttl: u64) -> Self {
         let subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>> = Arc::new(DashMap::new());
         let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
         let subscriptions_cloned = Arc::clone(&subscriptions);
 
-        let topic_store = TopicStore::new(segment_size, segment_ttl);
+        let storage_backend = storage.create_backend();
+        let topic_store = TopicStore::new(storage_backend, segment_size, segment_ttl);
         // Start the lifecycle management task
         topic_store.start_lifecycle_management_task(shutdown_rx, subscriptions_cloned);
 
