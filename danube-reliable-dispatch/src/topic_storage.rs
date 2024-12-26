@@ -44,15 +44,15 @@ impl Segment {
 #[derive(Debug, Clone)]
 pub(crate) struct TopicStore {
     // Concurrent map of segment ID to segments
-    segments: Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
+    pub(crate) segments: Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
     // Index of segments in the segments map
-    segments_index: Arc<RwLock<Vec<usize>>>,
+    pub(crate) segments_index: Arc<RwLock<Vec<usize>>>,
     // Maximum size per segment in bytes
-    segment_size: usize,
+    pub(crate) segment_size: usize,
     // Time to live for segments in seconds
-    segment_ttl: u64,
+    pub(crate) segment_ttl: u64,
     // ID of the current writable segment
-    current_segment_id: Arc<RwLock<usize>>,
+    pub(crate) current_segment_id: Arc<RwLock<usize>>,
 }
 
 impl TopicStore {
@@ -184,7 +184,7 @@ impl TopicStore {
             }
         });
     }
-    fn cleanup_acknowledged_segments(
+    pub(crate) fn cleanup_acknowledged_segments(
         segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
         segments_index: &Arc<RwLock<Vec<usize>>>,
         subscriptions: &Arc<DashMap<String, Arc<AtomicUsize>>>,
@@ -212,7 +212,7 @@ impl TopicStore {
         index.retain(|&id| id > min_acknowledged_id);
     }
 
-    fn cleanup_expired_segments(
+    pub(crate) fn cleanup_expired_segments(
         segments: &Arc<DashMap<usize, Arc<RwLock<Segment>>>>,
         segments_index: &Arc<RwLock<Vec<usize>>>,
         segment_ttl: u64,
