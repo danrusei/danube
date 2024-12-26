@@ -60,7 +60,7 @@ impl ReliableDispatch {
     }
 
     pub async fn store_message(&self, message: StreamMessage) -> Result<()> {
-        self.topic_store.store_message(message);
+        self.topic_store.store_message(message).await;
         Ok(())
     }
 

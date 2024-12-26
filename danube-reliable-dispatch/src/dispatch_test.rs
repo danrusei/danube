@@ -2,6 +2,7 @@
 use crate::{
     dispatch::SubscriptionDispatch,
     errors::ReliableDispatchError,
+    storage_backend::{InMemoryStorage, StorageBackend},
     topic_storage::{Segment, TopicStore},
 };
 #[cfg(test)]
@@ -11,15 +12,18 @@ use std::collections::HashMap;
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
 #[cfg(test)]
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use tokio::sync::RwLock;
 
 /// Test helper to create a TopicStore with default settings
 #[cfg(test)]
 fn create_test_topic_store() -> TopicStore {
     // Using 1MB segment size and 60s TTL for testing
-    TopicStore::new(1, 60)
+    let storage = Arc::new(InMemoryStorage::new());
+    TopicStore::new(storage, 1, 60)
 }
 
 #[cfg(test)]
@@ -143,7 +147,7 @@ async fn test_segment_transition() {
     dispatch.current_segment_id = Some(1);
 
     let result = dispatch.move_to_next_segment();
-    assert!(result.is_ok());
+    assert!(result.await.is_ok());
     assert!(dispatch.acked_messages.is_empty());
 }
 
@@ -177,16 +181,22 @@ async fn test_clear_current_segment() {
 /// 4. Segment transition signals
 #[tokio::test]
 async fn test_validate_segment() {
-    let topic_store = create_test_topic_store();
+    let storage = Arc::new(InMemoryStorage::new());
+    let topic_store = TopicStore::new(storage.clone(), 1, 60);
     let last_acked = Arc::new(AtomicUsize::new(0));
     let mut dispatch = SubscriptionDispatch::new(topic_store, last_acked);
 
     // Create a test segment and add it to topic_store
     let segment = Arc::new(RwLock::new(Segment::new(1, 1024 * 1024)));
 
-    // Add segment to topic store manually
-    dispatch.topic_store.segments.insert(1, segment.clone());
-    dispatch.topic_store.segments_index.write().unwrap().push(1);
+    // Store segment using the storage backend
+    storage.put_segment(1, segment.clone()).await.unwrap();
+    dispatch
+        .topic_store
+        .segments_index
+        .write()
+        .await
+        .push((1, 0));
 
     // Test 1: Valid segment that exists and is not closed
     let result = dispatch.validate_segment(1, &segment).await;
@@ -194,7 +204,7 @@ async fn test_validate_segment() {
 
     // Test 2: Closed segment with properly acknowledged message
     {
-        let mut segment_write = segment.write().unwrap();
+        let mut segment_write = segment.write().await;
         segment_write.close_time = 1;
         let message = create_test_message(vec![1]);
         let msg_id = message.msg_id.clone();

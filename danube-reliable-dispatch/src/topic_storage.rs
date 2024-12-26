@@ -190,7 +190,7 @@ impl TopicStore {
         });
     }
 
-    async fn cleanup_acknowledged_segments(
+    pub(crate) async fn cleanup_acknowledged_segments(
         storage: &Arc<dyn StorageBackend>,
         segments_index: &Arc<RwLock<Vec<(usize, u64)>>>,
         subscriptions: &Arc<DashMap<String, Arc<AtomicUsize>>>,
@@ -222,7 +222,7 @@ impl TopicStore {
         index.retain(|(id, _)| *id > min_acknowledged_id);
     }
 
-    async fn cleanup_expired_segments(
+    pub(crate) async fn cleanup_expired_segments(
         storage: &Arc<dyn StorageBackend>,
         segments_index: &Arc<RwLock<Vec<(usize, u64)>>>,
         segment_ttl: u64,
