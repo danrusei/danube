@@ -7,7 +7,7 @@ pub use dispatch::SubscriptionDispatch;
 
 use danube_client::StreamMessage;
 use dashmap::DashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{atomic::AtomicUsize, Arc};
 
 #[derive(Debug)]
 pub struct ReliableDispatch {
@@ -16,14 +16,14 @@ pub struct ReliableDispatch {
     //TODO here to stop the dispatcher ?
     //pub(crate) subscription_dispatch: HashMap<String, String>,
     // Map of subscription name to last acknowledged segment id
-    pub(crate) subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>>,
+    pub(crate) subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>>,
     // Channel to send shutdown signal to the lifecycle management task
     shutdown_tx: tokio::sync::mpsc::Sender<()>,
 }
 
 impl ReliableDispatch {
     pub fn new(segment_size: usize, segment_ttl: u64) -> Self {
-        let subscriptions: Arc<DashMap<String, Arc<RwLock<usize>>>> = Arc::new(DashMap::new());
+        let subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>> = Arc::new(DashMap::new());
         let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
         let subscriptions_cloned = Arc::clone(&subscriptions);
 
@@ -61,14 +61,14 @@ impl ReliableDispatch {
 
     pub async fn add_subscription(&self, subscription_name: &str) -> Result<()> {
         self.subscriptions
-            .insert(subscription_name.to_string(), Arc::new(RwLock::new(0)));
+            .insert(subscription_name.to_string(), Arc::new(AtomicUsize::new(0)));
         Ok(())
     }
 
     pub async fn get_last_acknowledged_segment(
         &self,
         subscription_name: &str,
-    ) -> Result<Arc<RwLock<usize>>> {
+    ) -> Result<Arc<AtomicUsize>> {
         match self.subscriptions.get(subscription_name) {
             Some(subscription) => Ok(Arc::clone(subscription.value())),
             None => Err(ReliableDispatchError::SubscriptionError(
