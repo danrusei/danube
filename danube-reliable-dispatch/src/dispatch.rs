@@ -75,7 +75,7 @@ impl SubscriptionDispatch {
     }
 
     /// Validates the current segment. Returns `true` if the segment was invalidated or closed.
-    async fn validate_segment(
+    pub(crate) async fn validate_segment(
         &self,
         segment_id: usize,
         segment: &Arc<RwLock<Segment>>,
@@ -109,7 +109,7 @@ impl SubscriptionDispatch {
     }
 
     /// Moves to the next segment in the `TopicStore`.
-    fn move_to_next_segment(&mut self) -> Result<()> {
+    pub(crate) fn move_to_next_segment(&mut self) -> Result<()> {
         let next_segment = self.topic_store.get_next_segment(self.current_segment_id);
 
         if let Some(next_segment) = next_segment {
@@ -138,7 +138,7 @@ impl SubscriptionDispatch {
     }
 
     /// Clear the current segment and cached segment_id
-    fn clear_current_segment(&mut self) {
+    pub(crate) fn clear_current_segment(&mut self) {
         self.segment = None;
         self.current_segment_id = None;
         self.acked_messages.clear();
