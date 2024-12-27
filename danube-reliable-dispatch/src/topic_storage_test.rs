@@ -1,5 +1,8 @@
 #[cfg(test)]
-use crate::topic_storage::{Segment, TopicStore};
+use crate::{
+    storage_backend::InMemoryStorage,
+    topic_storage::{Segment, TopicStore},
+};
 #[cfg(test)]
 use danube_client::{MessageID, StreamMessage};
 #[cfg(test)]
@@ -84,14 +87,15 @@ fn test_segment_size_limit() {
 /// - Message storage functionality
 /// - Initial segment creation
 /// - Message retrieval
-#[test]
-fn test_topic_store_message_storage() {
-    let store = TopicStore::new(1, 3600);
+#[tokio::test]
+async fn test_topic_store_message_storage() {
+    let storage = Arc::new(InMemoryStorage::new());
+    let store = TopicStore::new(storage, 1, 3600);
     let message = create_test_message(vec![1, 2, 3]);
 
-    store.store_message(message.clone());
-    let segment = store.get_next_segment(None).unwrap();
-    let segment_read = segment.read().unwrap();
+    store.store_message(message.clone()).await.unwrap();
+    let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    let segment_read = segment.read().await;
     assert_eq!(segment_read.messages.len(), 1);
 }
 
@@ -100,23 +104,26 @@ fn test_topic_store_message_storage() {
 /// - New segment creation on size limit
 /// - Segment ID progression
 /// - Message distribution across segments
-#[test]
-fn test_topic_store_segment_transition() {
-    let store = TopicStore::new(1, 3600); // 1MB segment size
+#[tokio::test]
+async fn test_topic_store_segment_transition() {
+    let storage = Arc::new(InMemoryStorage::new());
+    let store = TopicStore::new(storage, 1, 3600); // 1MB segment size
     let large_message = create_test_message(vec![0; 1024 * 1024]); // 1MB message
 
-    store.store_message(large_message.clone());
+    store.store_message(large_message.clone()).await.unwrap();
     let message = create_test_message(vec![1]);
-    store.store_message(message); // Should create new segment
+    store.store_message(message).await.unwrap(); // Should create new segment
 
-    let first_segment = store.get_next_segment(None).unwrap();
+    let first_segment = store.get_next_segment(None).await.unwrap().unwrap();
     let second_segment = store
-        .get_next_segment(Some(first_segment.read().unwrap().id))
+        .get_next_segment(Some(first_segment.read().await.id))
+        .await
+        .unwrap()
         .unwrap();
 
     assert_ne!(
-        first_segment.read().unwrap().id,
-        second_segment.read().unwrap().id
+        first_segment.read().await.id,
+        second_segment.read().await.id
     );
 }
 
@@ -125,30 +132,41 @@ fn test_topic_store_segment_transition() {
 /// - Expired segment removal
 /// - TTL enforcement
 /// - Segment tracking after cleanup
-#[test]
-fn test_topic_store_cleanup() {
-    let store = TopicStore::new(1, 1);
+#[tokio::test]
+async fn test_topic_store_cleanup() {
+    let storage = Arc::new(InMemoryStorage::new());
+    let store = TopicStore::new(storage, 1, 1);
     let subscriptions = Arc::new(DashMap::new());
     let subscription_id = "test_sub".to_string();
     subscriptions.insert(subscription_id.clone(), Arc::new(AtomicUsize::new(0)));
 
     let message = create_test_message(vec![1, 2, 3]);
-    store.store_message(message);
+    store.store_message(message).await.unwrap();
 
-    // Force segment close time to be in the past
-    let segment = store.get_next_segment(None).unwrap();
+    let close_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 2;
+
     {
-        let mut segment_write = segment.write().unwrap();
-        segment_write.close_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            - 2;
+        // Get the segment and update its close time
+        let segment = store.get_next_segment(None).await.unwrap().unwrap();
+        let mut segment_write = segment.write().await;
+        segment_write.close_time = close_time;
     }
 
-    TopicStore::cleanup_expired_segments(&store.segments, &store.segments_index, 1);
+    // Update the segments_index with the new close_time
+    {
+        let mut index = store.segments_index.write().await;
+        if let Some(entry) = index.get_mut(0) {
+            entry.1 = close_time;
+        }
+    }
 
-    assert!(!store.contains_segment(0));
+    TopicStore::cleanup_expired_segments(&store.storage, &store.segments_index, 1).await;
+
+    assert!(!store.contains_segment(0).await.unwrap());
 }
 
 /// Tests segment cleanup based on acknowledgments
@@ -156,27 +174,40 @@ fn test_topic_store_cleanup() {
 /// - Acknowledged segment removal
 /// - Subscription tracking
 /// - Segment cleanup based on subscription state
-#[test]
-fn test_topic_store_acknowledged_cleanup() {
-    let store = TopicStore::new(1, 3600);
+#[tokio::test]
+async fn test_topic_store_acknowledged_cleanup() {
+    let storage = Arc::new(InMemoryStorage::new());
+    let store = TopicStore::new(storage, 1, 3600);
     let subscriptions = Arc::new(DashMap::new());
     let subscription_id = "test_sub".to_string();
     subscriptions.insert(subscription_id.clone(), Arc::new(AtomicUsize::new(1)));
 
     let message = create_test_message(vec![1, 2, 3]);
-    store.store_message(message);
+    store.store_message(message).await.unwrap();
 
-    let segment = store.get_next_segment(None).unwrap();
+    let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    let close_time = 1;
+
+    // Update segment in a separate scope
     {
-        let mut segment_write = segment.write().unwrap();
-        segment_write.close_time = 1;
+        let mut segment_write = segment.write().await;
+        segment_write.close_time = close_time;
+    }
+
+    // Update index in a separate scope
+    {
+        let mut index = store.segments_index.write().await;
+        if let Some(entry) = index.get_mut(0) {
+            entry.1 = close_time;
+        }
     }
 
     TopicStore::cleanup_acknowledged_segments(
-        &store.segments,
+        &store.storage,
         &store.segments_index,
         &subscriptions,
-    );
+    )
+    .await;
 
-    assert!(!store.contains_segment(0));
+    assert!(!store.contains_segment(0).await.unwrap());
 }

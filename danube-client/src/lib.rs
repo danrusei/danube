@@ -40,4 +40,4 @@ mod rpc_connection;
 mod health_check;
 
 mod dispatch_strategy;
-pub use dispatch_strategy::ConfigDispatchStrategy;
+pub use dispatch_strategy::{ConfigDispatchStrategy, StorageType};

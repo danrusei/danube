@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
@@ -8,7 +9,7 @@ use crate::proto::{MsgId, StreamMessage as ProtoStreamMessage};
 // the consumer will used the messageID in the ack mechanism so the Broker will easily identify the acked message
 // the below struct will be used by both client SDK and broker to identify the message.
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MessageID {
     // the messsage sequence id, this is the sequence id of the message within the topic
     pub sequence_id: u64,
@@ -32,7 +33,7 @@ impl Display for MessageID {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamMessage {
     // Unique ID for tracking the message request
     pub request_id: u64,

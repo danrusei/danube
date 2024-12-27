@@ -1,7 +1,8 @@
 use danube_client::{MessageID, StreamMessage};
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
@@ -60,14 +61,14 @@ impl SubscriptionDispatch {
 
             // If validation indicates we should move to the next segment
             if move_to_next_segment {
-                self.move_to_next_segment()?;
+                self.move_to_next_segment().await?;
                 return Err(ReliableDispatchError::SegmentError(
                     "Move to next segment".to_string(),
                 ));
             }
         } else {
             // No current segment; attempt to move to the next segment
-            self.move_to_next_segment()?;
+            self.move_to_next_segment().await?;
         }
 
         // Process the next message using the stored segment
@@ -81,7 +82,7 @@ impl SubscriptionDispatch {
         segment: &Arc<RwLock<Segment>>,
     ) -> Result<bool> {
         // Check if the segment still exists
-        if !self.topic_store.contains_segment(segment_id) {
+        if !self.topic_store.contains_segment(segment_id).await? {
             tracing::trace!(
                 "Segment {} no longer exists, moving to next segment",
                 segment_id
@@ -90,9 +91,8 @@ impl SubscriptionDispatch {
         }
 
         // Check if the segment is closed and all messages are acknowledged
-        let segment_data = segment.read().map_err(|_| {
-            ReliableDispatchError::LockError("Failed to acquire read lock on segment".to_string())
-        })?;
+        // Attempt to acquire a read lock on the segment
+        let segment_data = segment.read().await;
 
         // When processing the last message of a segment, there's a brief window where:
         // 1. The message is sent to the consumer
@@ -109,15 +109,17 @@ impl SubscriptionDispatch {
     }
 
     /// Moves to the next segment in the `TopicStore`.
-    pub(crate) fn move_to_next_segment(&mut self) -> Result<()> {
-        let next_segment = self.topic_store.get_next_segment(self.current_segment_id);
+    pub(crate) async fn move_to_next_segment(&mut self) -> Result<()> {
+        let next_segment = self
+            .topic_store
+            .get_next_segment(self.current_segment_id)
+            .await?;
 
         if let Some(next_segment) = next_segment {
-            let next_segment_id = next_segment.read().map(|s| s.id).map_err(|_| {
-                ReliableDispatchError::LockError(
-                    "Failed to acquire read lock on segment".to_string(),
-                )
-            })?;
+            let next_segment_id = {
+                let segment_data = next_segment.read().await;
+                segment_data.id
+            };
 
             // Update the last acknowledged segment
             if let Some(current_segment_id) = self.current_segment_id {
@@ -150,11 +152,7 @@ impl SubscriptionDispatch {
         if self.pending_ack_message.is_none() {
             if let Some(segment) = &self.segment {
                 let next_message = {
-                    let segment_data = segment.read().map_err(|_| {
-                        ReliableDispatchError::LockError(
-                            "Failed to acquire read lock on segment".to_string(),
-                        )
-                    })?;
+                    let segment_data = segment.read().await;
                     segment_data
                         .messages
                         .iter()
