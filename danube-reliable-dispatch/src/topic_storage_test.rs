@@ -143,15 +143,25 @@ async fn test_topic_store_cleanup() {
     let message = create_test_message(vec![1, 2, 3]);
     store.store_message(message).await.unwrap();
 
-    // Force segment close time to be in the past
-    let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    let close_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 2;
+
     {
+        // Get the segment and update its close time
+        let segment = store.get_next_segment(None).await.unwrap().unwrap();
         let mut segment_write = segment.write().await;
-        segment_write.close_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            - 2;
+        segment_write.close_time = close_time;
+    }
+
+    // Update the segments_index with the new close_time
+    {
+        let mut index = store.segments_index.write().await;
+        if let Some(entry) = index.get_mut(0) {
+            entry.1 = close_time;
+        }
     }
 
     TopicStore::cleanup_expired_segments(&store.storage, &store.segments_index, 1).await;
@@ -176,9 +186,20 @@ async fn test_topic_store_acknowledged_cleanup() {
     store.store_message(message).await.unwrap();
 
     let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    let close_time = 1;
+
+    // Update segment in a separate scope
     {
         let mut segment_write = segment.write().await;
-        segment_write.close_time = 1;
+        segment_write.close_time = close_time;
+    }
+
+    // Update index in a separate scope
+    {
+        let mut index = store.segments_index.write().await;
+        if let Some(entry) = index.get_mut(0) {
+            entry.1 = close_time;
+        }
     }
 
     TopicStore::cleanup_acknowledged_segments(

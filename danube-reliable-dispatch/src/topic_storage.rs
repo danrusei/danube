@@ -77,12 +77,11 @@ impl TopicStore {
         }
     }
 
-    /// Add a new message to the topic
+    /// Add a new message to the topic, if the segment is full, a new segment is created
     pub(crate) async fn store_message(&self, message: StreamMessage) -> Result<()> {
         let mut current_segment_id = self.current_segment_id.write().await;
         let segment_id = *current_segment_id;
 
-        // Get the current segment or create a new one if it doesn't exist
         let segment = match self.storage.get_segment(segment_id).await? {
             Some(segment) => segment,
             None => {
@@ -97,16 +96,28 @@ impl TopicStore {
             }
         };
 
-        // Get the writable segment or create a new one if it doesn't exist
-        let mut writable_segment = segment.write().await;
-        if writable_segment.is_full(self.segment_size) {
-            // Mark current segment as closed for writing
-            writable_segment.close_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+        let close_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
-            // Create a new segment
+        let should_create_new_segment = {
+            let mut writable_segment = segment.write().await;
+            if writable_segment.is_full(self.segment_size) {
+                writable_segment.close_time = close_time;
+                true
+            } else {
+                writable_segment.add_message(message.clone());
+                false
+            }
+        };
+
+        if should_create_new_segment {
+            let mut index = self.segments_index.write().await;
+            if let Some(entry) = index.iter_mut().find(|(id, _)| *id == segment_id) {
+                entry.1 = close_time;
+            }
+
             *current_segment_id += 1;
             let new_segment_id = *current_segment_id;
             let new_segment =
@@ -115,19 +126,12 @@ impl TopicStore {
             self.storage
                 .put_segment(new_segment_id, new_segment.clone())
                 .await?;
-
-            // Update the index with the new segment ID
-            let mut index = self.segments_index.write().await;
             index.push((new_segment_id, 0));
 
-            // Add the message to the new segment
             let mut new_writable_segment = new_segment.write().await;
             new_writable_segment.add_message(message);
-            trace!("Store message in new segment {}", new_writable_segment.id);
-        } else {
-            // Add the message to the current writable segment
-            writable_segment.add_message(message);
         }
+
         Ok(())
     }
 
@@ -208,8 +212,8 @@ impl TopicStore {
             .map(|(id, _)| *id)
             .collect();
 
-        for segment_id in segments_to_remove {
-            if let Err(e) = storage.remove_segment(segment_id).await {
+        for segment_id in &segments_to_remove {
+            if let Err(e) = storage.remove_segment(*segment_id).await {
                 trace!("Failed to remove segment {}: {:?}", segment_id, e);
                 continue;
             }
@@ -219,7 +223,8 @@ impl TopicStore {
             );
         }
 
-        index.retain(|(id, _)| *id > min_acknowledged_id);
+        //index.retain(|(id, _)| *id >= min_acknowledged_id);
+        index.retain(|(id, _)| !segments_to_remove.contains(id));
     }
 
     pub(crate) async fn cleanup_expired_segments(
@@ -233,6 +238,7 @@ impl TopicStore {
             .as_secs();
 
         let mut index = segments_index.write().await;
+
         let expired_segments: Vec<usize> = index
             .iter()
             .filter(|(_, close_time)| {
@@ -241,16 +247,14 @@ impl TopicStore {
             .map(|(id, _)| *id)
             .collect();
 
-        for segment_id in expired_segments {
-            if let Err(e) = storage.remove_segment(segment_id).await {
+        for segment_id in &expired_segments {
+            if let Err(e) = storage.remove_segment(*segment_id).await {
                 trace!("Failed to remove expired segment {}: {:?}", segment_id, e);
                 continue;
             }
             trace!("Dropped segment {} - TTL expired", segment_id);
         }
 
-        index.retain(|(_, close_time)| {
-            *close_time == 0 || (current_time - *close_time) < segment_ttl
-        });
+        index.retain(|(id, _)| !expired_segments.contains(id));
     }
 }
