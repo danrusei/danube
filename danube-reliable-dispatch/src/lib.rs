@@ -17,8 +17,6 @@ use std::sync::{atomic::AtomicUsize, Arc};
 pub struct ReliableDispatch {
     // Topic store is used to store messages in a queue for reliable delivery
     pub(crate) topic_store: TopicStore,
-    //TODO here to stop the dispatcher ?
-    //pub(crate) subscription_dispatch: HashMap<String, String>,
     // Map of subscription name to last acknowledged segment id
     pub(crate) subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>>,
     // Channel to send shutdown signal to the lifecycle management task
@@ -60,7 +58,7 @@ impl ReliableDispatch {
     }
 
     pub async fn store_message(&self, message: StreamMessage) -> Result<()> {
-        self.topic_store.store_message(message).await;
+        self.topic_store.store_message(message).await?;
         Ok(())
     }
 

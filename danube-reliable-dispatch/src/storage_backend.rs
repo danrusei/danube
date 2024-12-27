@@ -31,8 +31,8 @@ impl StorageBackendType {
     pub(crate) fn create_backend(&self) -> Arc<dyn StorageBackend> {
         match self {
             StorageBackendType::InMemory => Arc::new(InMemoryStorage::new()),
-            StorageBackendType::Disk(path) => Arc::new(DiskStorage::new(path.clone())),
-            StorageBackendType::S3(bucket) => Arc::new(S3Storage::new(bucket.clone())),
+            StorageBackendType::Disk(path) => Arc::new(DiskStorage::new(path)),
+            StorageBackendType::S3(bucket) => Arc::new(S3Storage::new(bucket)),
         }
     }
 }

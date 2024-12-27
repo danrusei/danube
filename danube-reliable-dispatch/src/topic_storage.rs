@@ -1,5 +1,6 @@
 use danube_client::StreamMessage;
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::sync::{atomic::AtomicUsize, Arc};
 use tokio::sync::RwLock;
 use tracing::trace;
@@ -10,7 +11,7 @@ use crate::{errors::Result, storage_backend::StorageBackend};
 /// The segment is closed for reading when all subscriptions have acknowledged the segment
 /// The segment is immutable after it's closed for writing
 /// The messages in the segment are in the order of arrival
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Segment {
     // Unique segment ID
     pub(crate) id: usize,
