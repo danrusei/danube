@@ -1,4 +1,5 @@
 use danube_reliable_dispatch::ReliableDispatch;
+use danube_reliable_dispatch::StorageBackendType;
 use serde::{Deserialize, Serialize};
 
 use crate::proto::TopicDispatchStrategy;
@@ -18,6 +19,7 @@ pub(crate) struct ConfigDispatchStrategy {
     pub(crate) strategy: String,
     pub(crate) retention_period: u64,
     pub(crate) segment_size: usize,
+    pub(crate) storage_type: StorageBackendType,
 }
 
 impl Default for ConfigDispatchStrategy {
@@ -26,6 +28,7 @@ impl Default for ConfigDispatchStrategy {
             strategy: "non_reliable".to_string(),
             retention_period: 3600,
             segment_size: 50,
+            storage_type: StorageBackendType::InMemory,
         }
     }
 }
@@ -33,10 +36,17 @@ impl Default for ConfigDispatchStrategy {
 // Implement conversions from ProtoTypeSchema to SchemaType
 impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
     fn from(strategy: TopicDispatchStrategy) -> Self {
+        let storage_type = match strategy.storage_backend {
+            0 => StorageBackendType::InMemory,
+            1 => StorageBackendType::Disk(strategy.storage_path),
+            2 => StorageBackendType::S3(strategy.storage_path),
+            _ => StorageBackendType::InMemory,
+        };
         ConfigDispatchStrategy {
             strategy: strategy.strategy,
             retention_period: strategy.retention_period,
             segment_size: strategy.segment_size as usize,
+            storage_type,
         }
     }
 }

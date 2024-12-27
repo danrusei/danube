@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -19,6 +20,7 @@ pub(crate) trait StorageBackend: Send + Sync + std::fmt::Debug + 'static {
     async fn contains_segment(&self, id: usize) -> Result<bool>;
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageBackendType {
     InMemory,
     Disk(String), // Path for local disk storage

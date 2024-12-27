@@ -46,6 +46,7 @@ impl Topic {
         let dispatch_strategy = match dispatch_strategy.strategy.as_str() {
             "non_reliable" => DispatchStrategy::NonReliable,
             "reliable" => DispatchStrategy::Reliable(ReliableDispatch::new(
+                dispatch_strategy.storage_type,
                 dispatch_strategy.segment_size,
                 dispatch_strategy.retention_period,
             )),

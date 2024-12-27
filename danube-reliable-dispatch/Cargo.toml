@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 danube-client = {path = "../danube-client"}
 dashmap = "5.5.3"
+serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = "1.0.59"

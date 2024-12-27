@@ -56,6 +56,8 @@ impl TopicAdmin for DanubeAdminImpl {
             strategy: req.delivery_strategy,
             retention_period: 3600,
             segment_size: 50,
+            storage_backend: 0, //In_Memory, to be changed later
+            storage_path: "None".to_string(),
         };
 
         let mut service = self.broker_service.lock().await;

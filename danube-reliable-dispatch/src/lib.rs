@@ -1,6 +1,6 @@
 mod topic_storage;
 mod topic_storage_test;
-use storage_backend::StorageBackendType;
+pub use storage_backend::StorageBackendType;
 use topic_storage::TopicStore;
 mod errors;
 use errors::{ReliableDispatchError, Result};
