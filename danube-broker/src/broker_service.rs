@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
+use danube_client::{ConfigDispatchStrategy, StreamMessage};
 use metrics::gauge;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -174,9 +174,9 @@ impl BrokerService {
         }
 
         if let Some(dispatch_strategy) = &dispatch_strategy {
-            match dispatch_strategy.strategy.as_str() {
-                "reliable" => {}
-                "non_reliable" => {}
+            match dispatch_strategy.strategy {
+                0 => {}
+                1 => {}
                 _ => {
                     let error_string =
                         "Unable to create a topic with the specified retention strategy";
@@ -253,9 +253,10 @@ impl BrokerService {
             .await?;
 
         // store new topic retention strategy: /topics/{namespace}/{topic}/retention
+        let dispatch_strategy: ConfigDispatchStrategy = dispatch_strategy.into();
         self.resources
             .topic
-            .add_topic_delivery(topic_name, dispatch_strategy.into())
+            .add_topic_delivery(topic_name, dispatch_strategy)
             .await?;
 
         // store new topic policy: /topics/{namespace}/{topic}/policy

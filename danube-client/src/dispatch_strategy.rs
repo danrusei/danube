@@ -1,14 +1,52 @@
-use crate::proto::TopicDispatchStrategy;
+use crate::proto::{ReliableOptions as ProtoReliableOptions, TopicDispatchStrategy};
 use serde::{Deserialize, Serialize};
 
+/// Dispatch strategy for a topic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfigDispatchStrategy {
-    pub strategy: String,
-    pub retention_period: u64,
-    pub segment_size: usize,
-    pub storage_type: StorageType,
+pub enum ConfigDispatchStrategy {
+    /// Non-reliable dispatch strategy.It means that messages are not guaranteed to be delivered.
+    NonReliable,
+    /// Reliable dispatch strategy.It means that messages are guaranteed to be delivered.
+    Reliable(ReliableOptions),
 }
 
+/// Reliable dispatch strategy options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReliableOptions {
+    /// Segment size in bytes.
+    pub segment_size: usize,
+    /// Storage type for messages in the topic.Could be in-memory, disk, or S3.
+    pub storage_type: StorageType,
+    /// Retention policy for messages in the topic.Could be retain until ack or expire.
+    pub retention_policy: RetentionPolicy,
+    /// Retention period in seconds.
+    pub retention_period: u64,
+}
+
+impl ReliableOptions {
+    pub fn new(
+        segment_size: usize,
+        storage_type: StorageType,
+        retention_policy: RetentionPolicy,
+        retention_period: u64,
+    ) -> Self {
+        ReliableOptions {
+            segment_size,
+            storage_type,
+            retention_policy,
+            retention_period,
+        }
+    }
+}
+
+/// Retention policy for messages in the topic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RetentionPolicy {
+    RetainUntilAck,
+    RetainUntilExpire,
+}
+
+/// Storage type for messages in the topic. Could be in-memory, disk, or S3.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageType {
     InMemory,
@@ -16,66 +54,78 @@ pub enum StorageType {
     S3(String),   // S3 bucket name
 }
 
-impl ConfigDispatchStrategy {
-    pub fn new(
-        strategy: &str,
-        retention_period: u64,
-        segment_size: usize,
-        storage_type: StorageType,
-    ) -> Self {
-        ConfigDispatchStrategy {
-            strategy: strategy.to_string(),
-            retention_period,
-            segment_size,
-            storage_type,
-        }
-    }
-}
-
 impl Default for ConfigDispatchStrategy {
     fn default() -> Self {
-        ConfigDispatchStrategy {
-            strategy: "non_reliable".to_string(),
-            retention_period: 3600,
-            segment_size: 50,
-            storage_type: StorageType::InMemory,
-        }
+        ConfigDispatchStrategy::NonReliable
     }
 }
 
-// Implement conversions from ProtoTypeSchema to SchemaType
+// Implement conversions from TopicDispatchStrategy to ConfigDispatchStrategy
 impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
     fn from(strategy: TopicDispatchStrategy) -> Self {
-        let storage_type = match strategy.storage_backend {
-            0 => StorageType::InMemory,
-            1 => StorageType::Disk(strategy.storage_path),
-            2 => StorageType::S3(strategy.storage_path),
-            _ => StorageType::InMemory,
-        };
+        match strategy.strategy {
+            0 => ConfigDispatchStrategy::NonReliable,
+            1 => {
+                if let Some(reliable_opts) = strategy.reliable_options {
+                    let storage_type = match reliable_opts.storage_backend {
+                        0 => StorageType::InMemory,
+                        1 => StorageType::Disk(reliable_opts.storage_path),
+                        2 => StorageType::S3(reliable_opts.storage_path),
+                        _ => StorageType::InMemory,
+                    };
 
-        ConfigDispatchStrategy {
-            strategy: strategy.strategy,
-            retention_period: strategy.retention_period,
-            segment_size: strategy.segment_size as usize,
-            storage_type,
+                    let retention_policy = match reliable_opts.retention_policy {
+                        0 => RetentionPolicy::RetainUntilAck,
+                        1 => RetentionPolicy::RetainUntilExpire,
+                        _ => RetentionPolicy::RetainUntilAck,
+                    };
+
+                    ConfigDispatchStrategy::Reliable(ReliableOptions {
+                        segment_size: reliable_opts.segment_size as usize,
+                        storage_type,
+                        retention_policy,
+                        retention_period: reliable_opts.retention_period,
+                    })
+                } else {
+                    ConfigDispatchStrategy::NonReliable
+                }
+            }
+            _ => ConfigDispatchStrategy::NonReliable,
         }
     }
 }
-// Implement conversions from ConfigRetentionStrategy to ProtoTypeSchema
+
+// Implement conversions from ConfigDispatchStrategy to TopicDispatchStrategy
 impl From<ConfigDispatchStrategy> for TopicDispatchStrategy {
     fn from(config: ConfigDispatchStrategy) -> Self {
-        let (storage_backend, storage_path) = match config.storage_type {
-            StorageType::InMemory => (0, String::new()),
-            StorageType::Disk(path) => (1, path),
-            StorageType::S3(bucket) => (2, bucket),
-        };
+        match config {
+            ConfigDispatchStrategy::NonReliable => TopicDispatchStrategy {
+                strategy: 0,
+                reliable_options: None,
+            },
+            ConfigDispatchStrategy::Reliable(opts) => {
+                let (storage_backend, storage_path) = match opts.storage_type {
+                    StorageType::InMemory => (0, String::new()),
+                    StorageType::Disk(path) => (1, path),
+                    StorageType::S3(bucket) => (2, bucket),
+                };
 
-        TopicDispatchStrategy {
-            strategy: config.strategy,
-            retention_period: config.retention_period,
-            segment_size: config.segment_size as u64,
-            storage_backend,
-            storage_path,
+                let retention_policy = match opts.retention_policy {
+                    RetentionPolicy::RetainUntilAck => 0,
+                    RetentionPolicy::RetainUntilExpire => 1,
+                };
+
+                TopicDispatchStrategy {
+                    strategy: 1,
+                    reliable_options: Some(ProtoReliableOptions {
+                        segment_size: opts.segment_size as u64,
+                        storage_backend,
+                        storage_path,
+                        retention_policy,
+                        retention_period: opts.retention_period,
+                    }),
+                }
+            }
         }
     }
 }

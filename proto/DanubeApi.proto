@@ -22,13 +22,28 @@ enum StorageBackend {
     S3 = 2;
 }
 
+enum DispatchStrategy {
+    NonReliable = 0;
+    Reliable = 1;
+}
+
+enum RetentionPolicy {
+    RetainUntilAck = 0;
+    RetainUntilExpire = 1;
+}
+
+message ReliableOptions {
+    uint64 segment_size = 1; // in bytes
+    StorageBackend storage_backend = 2; // IN_MEMORY, DISK or S3
+    string storage_path = 3; // used for Disk or S3 storage backend
+    RetentionPolicy retention_policy = 4; // RetainUntilAck or RetainUntilExpire
+    uint64 retention_period = 5; // in seconds
+}
+
 // Message representing topic retention strategy
 message TopicDispatchStrategy {
-    string strategy = 1; // "reliable" or "non_reliable"
-    uint64 retention_period = 2; // in seconds, applicable for "reliable"
-    uint64 segment_size = 3; // in bytes, applicable for "reliable"
-    StorageBackend storage_backend = 4; // applicable for "reliable"
-    string storage_path = 5; // used for Disk or S3 storage backend
+    DispatchStrategy strategy = 1; // NonReliable or Reliable
+    ReliableOptions reliable_options = 2; // options for Reliable dispatch strategy
 }
 
 // Create Producer request

@@ -1,5 +1,7 @@
 use anyhow::Result;
-use danube_client::{ConfigDispatchStrategy, DanubeClient, StorageType};
+use danube_client::{
+    ConfigDispatchStrategy, DanubeClient, ReliableOptions, RetentionPolicy, StorageType,
+};
 use std::fs;
 use std::thread;
 use std::time::Duration;
@@ -22,8 +24,13 @@ async fn main() -> Result<()> {
     let blob_data = fs::read("./examples/test.blob")?;
 
     let storage_type = StorageType::InMemory;
-    // Create a reliable delivery strategy with a retention period of 1 hour and a segment size of 1 MB
-    let dispatch_strategy = ConfigDispatchStrategy::new("reliable", 3600, 1, storage_type);
+    let reliable_options = ReliableOptions::new(
+        5, // segment size in MB
+        storage_type,
+        RetentionPolicy::RetainUntilExpire,
+        3600, // 1 hour
+    );
+    let dispatch_strategy = ConfigDispatchStrategy::Reliable(reliable_options);
 
     let mut producer = client
         .new_producer()

@@ -40,4 +40,6 @@ mod rpc_connection;
 mod health_check;
 
 mod dispatch_strategy;
-pub use dispatch_strategy::{ConfigDispatchStrategy, StorageType};
+pub use dispatch_strategy::{
+    ConfigDispatchStrategy, ReliableOptions, RetentionPolicy, StorageType,
+};

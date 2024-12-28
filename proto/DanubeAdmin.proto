@@ -42,7 +42,7 @@ message NewTopicRequest {
   string name = 1;
   string schema_type = 2;
   string schema_data = 3;
-  string delivery_strategy = 4;
+  string dispatch_strategy = 4;
 }
 
 message TopicRequest {

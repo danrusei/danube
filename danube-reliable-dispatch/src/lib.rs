@@ -1,6 +1,6 @@
 mod topic_storage;
 mod topic_storage_test;
-pub use storage_backend::StorageBackendType;
+use storage_backend::create_backend;
 use topic_storage::TopicStore;
 mod errors;
 use errors::{ReliableDispatchError, Result};
@@ -9,7 +9,7 @@ mod dispatch_test;
 pub use dispatch::SubscriptionDispatch;
 mod storage_backend;
 
-use danube_client::StreamMessage;
+use danube_client::{ReliableOptions, StreamMessage};
 use dashmap::DashMap;
 use std::sync::{atomic::AtomicUsize, Arc};
 
@@ -24,13 +24,13 @@ pub struct ReliableDispatch {
 }
 
 impl ReliableDispatch {
-    pub fn new(storage: StorageBackendType, segment_size: usize, segment_ttl: u64) -> Self {
+    pub fn new(reliable_options: ReliableOptions) -> Self {
         let subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>> = Arc::new(DashMap::new());
         let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
         let subscriptions_cloned = Arc::clone(&subscriptions);
 
-        let storage_backend = storage.create_backend();
-        let topic_store = TopicStore::new(storage_backend, segment_size, segment_ttl);
+        let storage_backend = create_backend(&reliable_options.storage_type);
+        let topic_store = TopicStore::new(storage_backend, reliable_options);
         // Start the lifecycle management task
         topic_store.start_lifecycle_management_task(shutdown_rx, subscriptions_cloned);
 

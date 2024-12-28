@@ -1,6 +1,5 @@
+use danube_client::{ConfigDispatchStrategy, ReliableOptions, RetentionPolicy, StorageType};
 use danube_reliable_dispatch::ReliableDispatch;
-use danube_reliable_dispatch::StorageBackendType;
-use serde::{Deserialize, Serialize};
 
 use crate::proto::TopicDispatchStrategy;
 
@@ -14,39 +13,36 @@ pub(crate) enum DispatchStrategy {
     Reliable(ReliableDispatch),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ConfigDispatchStrategy {
-    pub(crate) strategy: String,
-    pub(crate) retention_period: u64,
-    pub(crate) segment_size: usize,
-    pub(crate) storage_type: StorageBackendType,
-}
-
-impl Default for ConfigDispatchStrategy {
-    fn default() -> Self {
-        ConfigDispatchStrategy {
-            strategy: "non_reliable".to_string(),
-            retention_period: 3600,
-            segment_size: 50,
-            storage_type: StorageBackendType::InMemory,
-        }
-    }
-}
-
-// Implement conversions from ProtoTypeSchema to SchemaType
 impl From<TopicDispatchStrategy> for ConfigDispatchStrategy {
     fn from(strategy: TopicDispatchStrategy) -> Self {
-        let storage_type = match strategy.storage_backend {
-            0 => StorageBackendType::InMemory,
-            1 => StorageBackendType::Disk(strategy.storage_path),
-            2 => StorageBackendType::S3(strategy.storage_path),
-            _ => StorageBackendType::InMemory,
-        };
-        ConfigDispatchStrategy {
-            strategy: strategy.strategy,
-            retention_period: strategy.retention_period,
-            segment_size: strategy.segment_size as usize,
-            storage_type,
+        match strategy.strategy {
+            0 => ConfigDispatchStrategy::NonReliable,
+            1 => {
+                if let Some(reliable_opts) = strategy.reliable_options {
+                    let storage_type = match reliable_opts.storage_backend {
+                        0 => StorageType::InMemory,
+                        1 => StorageType::Disk(reliable_opts.storage_path),
+                        2 => StorageType::S3(reliable_opts.storage_path),
+                        _ => StorageType::InMemory,
+                    };
+
+                    let retention_policy = match reliable_opts.retention_policy {
+                        0 => RetentionPolicy::RetainUntilAck,
+                        1 => RetentionPolicy::RetainUntilExpire,
+                        _ => RetentionPolicy::RetainUntilAck,
+                    };
+
+                    ConfigDispatchStrategy::Reliable(ReliableOptions {
+                        segment_size: reliable_opts.segment_size as usize,
+                        storage_type,
+                        retention_policy,
+                        retention_period: reliable_opts.retention_period,
+                    })
+                } else {
+                    ConfigDispatchStrategy::NonReliable
+                }
+            }
+            _ => ConfigDispatchStrategy::NonReliable,
         }
     }
 }

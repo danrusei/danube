@@ -3,7 +3,7 @@ name: Unit Tests
 on:
   push:
     branches:
-      - '**'  # This will trigger on every branch
+      - '**'  # This will trigger on all branches
 
 jobs:
   test:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Protobuf Compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -22,5 +22,10 @@ jobs:
           toolchain: stable
           profile: minimal
 
-      - name: Run unit tests
+      - name: Run broker tests
         run: cargo test --bin danube-broker
+
+      - name: Run library tests
+        run: |
+          cargo test --lib -p danube-reliable-dispatch
+          cargo test --lib -p danube-client
