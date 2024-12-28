@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
+use danube_client::{ConfigDispatchStrategy, StreamMessage};
 use danube_reliable_dispatch::ReliableDispatch;
 use metrics::counter;
 use std::collections::{hash_map::Entry, HashMap};
@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::{
     broker_metrics::{TOPIC_BYTES_IN_COUNTER, TOPIC_MSG_IN_COUNTER},
-    dispatch_strategy::{ConfigDispatchStrategy, DispatchStrategy},
+    dispatch_strategy::DispatchStrategy,
     message::AckMessage,
     policies::Policies,
     producer::Producer,
@@ -43,14 +43,11 @@ pub(crate) struct Topic {
 
 impl Topic {
     pub(crate) fn new(topic_name: &str, dispatch_strategy: ConfigDispatchStrategy) -> Self {
-        let dispatch_strategy = match dispatch_strategy.strategy.as_str() {
-            "non_reliable" => DispatchStrategy::NonReliable,
-            "reliable" => DispatchStrategy::Reliable(ReliableDispatch::new(
-                dispatch_strategy.storage_type,
-                dispatch_strategy.segment_size,
-                dispatch_strategy.retention_period,
-            )),
-            _ => panic!("Invalid retention strategy"),
+        let dispatch_strategy = match dispatch_strategy {
+            ConfigDispatchStrategy::NonReliable => DispatchStrategy::NonReliable,
+            ConfigDispatchStrategy::Reliable(reliable_options) => {
+                DispatchStrategy::Reliable(ReliableDispatch::new(reliable_options))
+            }
         };
 
         Topic {

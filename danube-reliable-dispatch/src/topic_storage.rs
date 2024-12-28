@@ -1,4 +1,4 @@
-use danube_client::StreamMessage;
+use danube_client::{ReliableOptions, StreamMessage};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic::AtomicUsize, Arc};
@@ -56,24 +56,20 @@ pub(crate) struct TopicStore {
     // Maximum size per segment in bytes
     pub(crate) segment_size: usize,
     // Time to live for segments in seconds
-    pub(crate) segment_ttl: u64,
+    pub(crate) retention_period: u64,
     // ID of the current writable segment
     pub(crate) current_segment_id: Arc<RwLock<usize>>,
 }
 
 impl TopicStore {
-    pub(crate) fn new(
-        storage: Arc<dyn StorageBackend>,
-        segment_size: usize,
-        segment_ttl: u64,
-    ) -> Self {
-        // Convert segment size to bytes
-        let segment_size_bytes = segment_size * 1024 * 1024;
+    pub(crate) fn new(storage: Arc<dyn StorageBackend>, reliable_options: ReliableOptions) -> Self {
+        // Convert segment size from MB to Bytes
+        let segment_size_bytes = reliable_options.segment_size * 1024 * 1024;
         Self {
             storage,
             segments_index: Arc::new(RwLock::new(Vec::new())),
             segment_size: segment_size_bytes,
-            segment_ttl,
+            retention_period: reliable_options.retention_period,
             current_segment_id: Arc::new(RwLock::new(0)),
         }
     }
@@ -178,7 +174,7 @@ impl TopicStore {
     ) {
         let storage = self.storage.clone();
         let segments_index = self.segments_index.clone();
-        let segment_ttl = self.segment_ttl;
+        let retention_period = self.retention_period;
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
@@ -187,7 +183,7 @@ impl TopicStore {
                 tokio::select! {
                     _ = interval.tick() => {
                         Self::cleanup_acknowledged_segments(&storage, &segments_index, &subscriptions).await;
-                        Self::cleanup_expired_segments(&storage, &segments_index, segment_ttl).await;
+                        Self::cleanup_expired_segments(&storage, &segments_index, retention_period).await;
                     }
                     _ = shutdown_rx.recv() => break
                 }
@@ -231,7 +227,7 @@ impl TopicStore {
     pub(crate) async fn cleanup_expired_segments(
         storage: &Arc<dyn StorageBackend>,
         segments_index: &Arc<RwLock<Vec<(usize, u64)>>>,
-        segment_ttl: u64,
+        retention_period: u64,
     ) {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -243,7 +239,7 @@ impl TopicStore {
         let expired_segments: Vec<usize> = index
             .iter()
             .filter(|(_, close_time)| {
-                *close_time > 0 && (current_time - *close_time) >= segment_ttl
+                *close_time > 0 && (current_time - *close_time) >= retention_period
             })
             .map(|(id, _)| *id)
             .collect();

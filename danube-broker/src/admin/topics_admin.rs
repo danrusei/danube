@@ -52,12 +52,13 @@ impl TopicAdmin for DanubeAdminImpl {
             schema_type = SchemaType::Json(req.schema_data);
         }
 
-        let delivery_strategy = TopicDispatchStrategy {
-            strategy: req.delivery_strategy,
-            retention_period: 3600,
-            segment_size: 50,
-            storage_backend: 0, //In_Memory, to be changed later
-            storage_path: "None".to_string(),
+        // Todo!: Implement dispatch strategy for admin service
+        let dispatch_strategy = match req.dispatch_strategy.as_ref() {
+            "non-reliable" => TopicDispatchStrategy {
+                strategy: 0,
+                reliable_options: None,
+            },
+            _ => unimplemented!("not implemented yet for admin"),
         };
 
         let mut service = self.broker_service.lock().await;
@@ -65,7 +66,7 @@ impl TopicAdmin for DanubeAdminImpl {
         let schema = Schema::new(format!("{}_schema", req.name), schema_type);
 
         let success = match service
-            .create_topic_cluster(&req.name, Some(delivery_strategy), Some(schema.into()))
+            .create_topic_cluster(&req.name, Some(dispatch_strategy), Some(schema.into()))
             .await
         {
             Ok(()) => true,

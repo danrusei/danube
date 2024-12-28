@@ -4,16 +4,22 @@ use serde::{Deserialize, Serialize};
 /// Dispatch strategy for a topic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfigDispatchStrategy {
+    /// Non-reliable dispatch strategy.It means that messages are not guaranteed to be delivered.
     NonReliable,
+    /// Reliable dispatch strategy.It means that messages are guaranteed to be delivered.
     Reliable(ReliableOptions),
 }
 
 /// Reliable dispatch strategy options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReliableOptions {
+    /// Segment size in bytes.
     pub segment_size: usize,
+    /// Storage type for messages in the topic.Could be in-memory, disk, or S3.
     pub storage_type: StorageType,
+    /// Retention policy for messages in the topic.Could be retain until ack or expire.
     pub retention_policy: RetentionPolicy,
+    /// Retention period in seconds.
     pub retention_period: u64,
 }
 

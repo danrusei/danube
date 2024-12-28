@@ -4,7 +4,7 @@ use crate::{
     topic_storage::{Segment, TopicStore},
 };
 #[cfg(test)]
-use danube_client::{MessageID, StreamMessage};
+use danube_client::{MessageID, ReliableOptions, RetentionPolicy, StorageType, StreamMessage};
 #[cfg(test)]
 use dashmap::DashMap;
 #[cfg(test)]
@@ -90,11 +90,17 @@ fn test_segment_size_limit() {
 #[tokio::test]
 async fn test_topic_store_message_storage() {
     let storage = Arc::new(InMemoryStorage::new());
-    let store = TopicStore::new(storage, 1, 3600);
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        3600, // 3600s retention period
+    );
+    let topic_store = TopicStore::new(storage.clone(), reliable_options);
     let message = create_test_message(vec![1, 2, 3]);
 
-    store.store_message(message.clone()).await.unwrap();
-    let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    topic_store.store_message(message.clone()).await.unwrap();
+    let segment = topic_store.get_next_segment(None).await.unwrap().unwrap();
     let segment_read = segment.read().await;
     assert_eq!(segment_read.messages.len(), 1);
 }
@@ -107,15 +113,24 @@ async fn test_topic_store_message_storage() {
 #[tokio::test]
 async fn test_topic_store_segment_transition() {
     let storage = Arc::new(InMemoryStorage::new());
-    let store = TopicStore::new(storage, 1, 3600); // 1MB segment size
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        3600, // 3600s retention period
+    );
+    let topic_store = TopicStore::new(storage.clone(), reliable_options);
     let large_message = create_test_message(vec![0; 1024 * 1024]); // 1MB message
 
-    store.store_message(large_message.clone()).await.unwrap();
+    topic_store
+        .store_message(large_message.clone())
+        .await
+        .unwrap();
     let message = create_test_message(vec![1]);
-    store.store_message(message).await.unwrap(); // Should create new segment
+    topic_store.store_message(message).await.unwrap(); // Should create new segment
 
-    let first_segment = store.get_next_segment(None).await.unwrap().unwrap();
-    let second_segment = store
+    let first_segment = topic_store.get_next_segment(None).await.unwrap().unwrap();
+    let second_segment = topic_store
         .get_next_segment(Some(first_segment.read().await.id))
         .await
         .unwrap()
@@ -135,13 +150,19 @@ async fn test_topic_store_segment_transition() {
 #[tokio::test]
 async fn test_topic_store_cleanup() {
     let storage = Arc::new(InMemoryStorage::new());
-    let store = TopicStore::new(storage, 1, 1);
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        1, // 1s retention period
+    );
+    let topic_store = TopicStore::new(storage.clone(), reliable_options);
     let subscriptions = Arc::new(DashMap::new());
     let subscription_id = "test_sub".to_string();
     subscriptions.insert(subscription_id.clone(), Arc::new(AtomicUsize::new(0)));
 
     let message = create_test_message(vec![1, 2, 3]);
-    store.store_message(message).await.unwrap();
+    topic_store.store_message(message).await.unwrap();
 
     let close_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -151,22 +172,23 @@ async fn test_topic_store_cleanup() {
 
     {
         // Get the segment and update its close time
-        let segment = store.get_next_segment(None).await.unwrap().unwrap();
+        let segment = topic_store.get_next_segment(None).await.unwrap().unwrap();
         let mut segment_write = segment.write().await;
         segment_write.close_time = close_time;
     }
 
     // Update the segments_index with the new close_time
     {
-        let mut index = store.segments_index.write().await;
+        let mut index = topic_store.segments_index.write().await;
         if let Some(entry) = index.get_mut(0) {
             entry.1 = close_time;
         }
     }
 
-    TopicStore::cleanup_expired_segments(&store.storage, &store.segments_index, 1).await;
+    TopicStore::cleanup_expired_segments(&topic_store.storage, &topic_store.segments_index, 1)
+        .await;
 
-    assert!(!store.contains_segment(0).await.unwrap());
+    assert!(!topic_store.contains_segment(0).await.unwrap());
 }
 
 /// Tests segment cleanup based on acknowledgments
@@ -177,15 +199,21 @@ async fn test_topic_store_cleanup() {
 #[tokio::test]
 async fn test_topic_store_acknowledged_cleanup() {
     let storage = Arc::new(InMemoryStorage::new());
-    let store = TopicStore::new(storage, 1, 3600);
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        3600, // 3600s retention period
+    );
+    let topic_store = TopicStore::new(storage.clone(), reliable_options);
     let subscriptions = Arc::new(DashMap::new());
     let subscription_id = "test_sub".to_string();
     subscriptions.insert(subscription_id.clone(), Arc::new(AtomicUsize::new(1)));
 
     let message = create_test_message(vec![1, 2, 3]);
-    store.store_message(message).await.unwrap();
+    topic_store.store_message(message).await.unwrap();
 
-    let segment = store.get_next_segment(None).await.unwrap().unwrap();
+    let segment = topic_store.get_next_segment(None).await.unwrap().unwrap();
     let close_time = 1;
 
     // Update segment in a separate scope
@@ -196,18 +224,18 @@ async fn test_topic_store_acknowledged_cleanup() {
 
     // Update index in a separate scope
     {
-        let mut index = store.segments_index.write().await;
+        let mut index = topic_store.segments_index.write().await;
         if let Some(entry) = index.get_mut(0) {
             entry.1 = close_time;
         }
     }
 
     TopicStore::cleanup_acknowledged_segments(
-        &store.storage,
-        &store.segments_index,
+        &topic_store.storage,
+        &topic_store.segments_index,
         &subscriptions,
     )
     .await;
 
-    assert!(!store.contains_segment(0).await.unwrap());
+    assert!(!topic_store.contains_segment(0).await.unwrap());
 }

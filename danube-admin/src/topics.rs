@@ -82,7 +82,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
                 name: topic,
                 schema_type,
                 schema_data,
-                delivery_strategy: dispatch_strategy,
+                dispatch_strategy: dispatch_strategy,
             };
             let response = client.create_topic(request).await?;
             println!("Topic Created: {:?}", response.into_inner().success);
@@ -111,7 +111,7 @@ pub async fn handle_command(topics: Topics) -> Result<(), Box<dyn std::error::Er
                         name: topic,
                         schema_type: schema_type.clone(),
                         schema_data: schema_data.clone(),
-                        delivery_strategy: dispatch_strategy.clone(),
+                        dispatch_strategy: dispatch_strategy.clone(),
                     }
                 })
                 .collect();

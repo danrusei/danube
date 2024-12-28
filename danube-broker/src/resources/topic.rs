@@ -1,8 +1,8 @@
 use anyhow::Result;
+use danube_client::ConfigDispatchStrategy;
 use serde_json::Value;
 
 use crate::{
-    dispatch_strategy::ConfigDispatchStrategy,
     metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::BASE_TOPICS_PATH,

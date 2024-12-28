@@ -6,7 +6,7 @@ use crate::{
     topic_storage::{Segment, TopicStore},
 };
 #[cfg(test)]
-use danube_client::{MessageID, StreamMessage};
+use danube_client::{MessageID, ReliableOptions, RetentionPolicy, StorageType, StreamMessage};
 #[cfg(test)]
 use std::collections::HashMap;
 #[cfg(test)]
@@ -23,7 +23,13 @@ use tokio::sync::RwLock;
 fn create_test_topic_store() -> TopicStore {
     // Using 1MB segment size and 60s TTL for testing
     let storage = Arc::new(InMemoryStorage::new());
-    TopicStore::new(storage, 1, 60)
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        60, // 60s retention period
+    );
+    TopicStore::new(storage, reliable_options)
 }
 
 #[cfg(test)]
@@ -182,7 +188,13 @@ async fn test_clear_current_segment() {
 #[tokio::test]
 async fn test_validate_segment() {
     let storage = Arc::new(InMemoryStorage::new());
-    let topic_store = TopicStore::new(storage.clone(), 1, 60);
+    let reliable_options = ReliableOptions::new(
+        1, // 1MB segment size
+        StorageType::InMemory,
+        RetentionPolicy::RetainUntilAck,
+        60, // 60s retention period
+    );
+    let topic_store = TopicStore::new(storage.clone(), reliable_options);
     let last_acked = Arc::new(AtomicUsize::new(0));
     let mut dispatch = SubscriptionDispatch::new(topic_store, last_acked);
 
