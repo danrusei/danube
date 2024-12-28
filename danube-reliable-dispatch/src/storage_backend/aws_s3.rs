@@ -109,19 +109,4 @@ impl StorageBackend for S3Storage {
 
         Ok(())
     }
-
-    async fn contains_segment(&self, id: usize) -> Result<bool> {
-        let key = self.segment_key(id);
-
-        let client = self.get_client()?;
-
-        let response = client
-            .head_object()
-            .bucket(&self.bucket_name)
-            .key(&key)
-            .send()
-            .await;
-
-        Ok(response.is_ok())
-    }
 }

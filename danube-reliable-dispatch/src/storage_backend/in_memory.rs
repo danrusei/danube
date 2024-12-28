@@ -33,8 +33,4 @@ impl StorageBackend for InMemoryStorage {
         self.segments.remove(&id);
         Ok(())
     }
-
-    async fn contains_segment(&self, id: usize) -> Result<bool> {
-        Ok(self.segments.contains_key(&id))
-    }
 }
