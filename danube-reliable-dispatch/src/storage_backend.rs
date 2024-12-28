@@ -18,7 +18,6 @@ pub(crate) trait StorageBackend: Send + Sync + std::fmt::Debug + 'static {
     async fn get_segment(&self, id: usize) -> Result<Option<Arc<RwLock<Segment>>>>;
     async fn put_segment(&self, id: usize, segment: Arc<RwLock<Segment>>) -> Result<()>;
     async fn remove_segment(&self, id: usize) -> Result<()>;
-    async fn contains_segment(&self, id: usize) -> Result<bool>;
 }
 
 pub(crate) fn create_backend(storage_type: &StorageType) -> Arc<dyn StorageBackend> {

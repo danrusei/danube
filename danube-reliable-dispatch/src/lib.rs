@@ -30,9 +30,14 @@ impl ReliableDispatch {
         let subscriptions_cloned = Arc::clone(&subscriptions);
 
         let storage_backend = create_backend(&reliable_options.storage_type);
+        let retention_policy = reliable_options.retention_policy.clone();
         let topic_store = TopicStore::new(storage_backend, reliable_options);
         // Start the lifecycle management task
-        topic_store.start_lifecycle_management_task(shutdown_rx, subscriptions_cloned);
+        topic_store.start_lifecycle_management_task(
+            shutdown_rx,
+            subscriptions_cloned,
+            retention_policy,
+        );
 
         Self {
             topic_store,

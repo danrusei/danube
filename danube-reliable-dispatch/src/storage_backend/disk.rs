@@ -19,6 +19,11 @@ impl DiskStorage {
     fn segment_path(&self, id: usize) -> PathBuf {
         self.base_path.join(format!("segment_{}.bin", id))
     }
+    #[allow(dead_code)]
+    async fn contains_segment(&self, id: usize) -> Result<bool> {
+        let path = self.segment_path(id);
+        Ok(path.exists())
+    }
 }
 
 #[async_trait]
@@ -49,11 +54,6 @@ impl StorageBackend for DiskStorage {
             fs::remove_file(path).await?;
         }
         Ok(())
-    }
-
-    async fn contains_segment(&self, id: usize) -> Result<bool> {
-        let path = self.segment_path(id);
-        Ok(path.exists())
     }
 }
 

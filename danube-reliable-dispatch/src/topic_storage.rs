@@ -1,8 +1,8 @@
-use danube_client::{ReliableOptions, StreamMessage};
+use danube_client::{ReliableOptions, RetentionPolicy, StreamMessage};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic::AtomicUsize, Arc};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
 
 use crate::{errors::Result, storage_backend::StorageBackend};
@@ -59,6 +59,8 @@ pub(crate) struct TopicStore {
     pub(crate) retention_period: u64,
     // ID of the current writable segment
     pub(crate) current_segment_id: Arc<RwLock<usize>>,
+    // Cached segment, used to avoid expensive call to storage while storing a message
+    cached_segment: Arc<Mutex<Option<Arc<RwLock<Segment>>>>>,
 }
 
 impl TopicStore {
@@ -71,33 +73,20 @@ impl TopicStore {
             segment_size: segment_size_bytes,
             retention_period: reliable_options.retention_period,
             current_segment_id: Arc::new(RwLock::new(0)),
+            cached_segment: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Add a new message to the topic, if the segment is full, a new segment is created
     pub(crate) async fn store_message(&self, message: StreamMessage) -> Result<()> {
-        let mut current_segment_id = self.current_segment_id.write().await;
-        let segment_id = *current_segment_id;
-
-        let segment = match self.storage.get_segment(segment_id).await? {
-            Some(segment) => segment,
-            None => {
-                let new_segment =
-                    Arc::new(RwLock::new(Segment::new(segment_id, self.segment_size)));
-                self.storage
-                    .put_segment(segment_id, new_segment.clone())
-                    .await?;
-                let mut index = self.segments_index.write().await;
-                index.push((segment_id, 0));
-                new_segment
-            }
-        };
+        let segment_id = *self.current_segment_id.write().await;
+        let segment = self.get_or_create_segment(segment_id).await?;
 
         let close_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
+        // check if segment is full, if so mark it as closed and create a new segment
         let should_create_new_segment = {
             let mut writable_segment = segment.write().await;
             if writable_segment.is_full(self.segment_size) {
@@ -110,24 +99,64 @@ impl TopicStore {
         };
 
         if should_create_new_segment {
-            let mut index = self.segments_index.write().await;
-            if let Some(entry) = index.iter_mut().find(|(id, _)| *id == segment_id) {
-                entry.1 = close_time;
-            }
-
-            *current_segment_id += 1;
-            let new_segment_id = *current_segment_id;
-            let new_segment =
-                Arc::new(RwLock::new(Segment::new(new_segment_id, self.segment_size)));
-
-            self.storage
-                .put_segment(new_segment_id, new_segment.clone())
+            self.handle_segment_full(segment_id, close_time, message)
                 .await?;
-            index.push((new_segment_id, 0));
-
-            let mut new_writable_segment = new_segment.write().await;
-            new_writable_segment.add_message(message);
         }
+
+        Ok(())
+    }
+
+    // Checks if the segment is present in the cache, if not it fetches it from the storage
+    // if no segment is found in the storage, it creates a new segment
+    async fn get_or_create_segment(&self, segment_id: usize) -> Result<Arc<RwLock<Segment>>> {
+        let mut cached = self.cached_segment.lock().await;
+        match &*cached {
+            Some(seg) => Ok(seg.clone()),
+            None => {
+                let new_seg = match self.storage.get_segment(segment_id).await? {
+                    Some(seg) => seg,
+                    None => {
+                        let new_segment =
+                            Arc::new(RwLock::new(Segment::new(segment_id, self.segment_size)));
+                        self.storage
+                            .put_segment(segment_id, new_segment.clone())
+                            .await?;
+                        let mut index = self.segments_index.write().await;
+                        index.push((segment_id, 0));
+                        new_segment
+                    }
+                };
+                *cached = Some(new_seg.clone());
+                Ok(new_seg)
+            }
+        }
+    }
+
+    // if the segment is full, it will close the segment and create a new one with next ID
+    async fn handle_segment_full(
+        &self,
+        segment_id: usize,
+        close_time: u64,
+        message: StreamMessage,
+    ) -> Result<()> {
+        let mut index = self.segments_index.write().await;
+        if let Some(entry) = index.iter_mut().find(|(id, _)| *id == segment_id) {
+            entry.1 = close_time;
+        }
+
+        let new_segment_id = segment_id + 1;
+        let new_segment = Arc::new(RwLock::new(Segment::new(new_segment_id, self.segment_size)));
+
+        self.storage
+            .put_segment(new_segment_id, new_segment.clone())
+            .await?;
+        index.push((new_segment_id, 0));
+
+        *self.cached_segment.lock().await = Some(new_segment.clone());
+        *self.current_segment_id.write().await = new_segment_id;
+
+        let mut new_writable_segment = new_segment.write().await;
+        new_writable_segment.add_message(message);
 
         Ok(())
     }
@@ -161,7 +190,8 @@ impl TopicStore {
     }
 
     pub(crate) async fn contains_segment(&self, segment_id: usize) -> Result<bool> {
-        self.storage.contains_segment(segment_id).await
+        let index = self.segments_index.read().await;
+        Ok(index.iter().any(|(id, _)| *id == segment_id))
     }
 
     // Start the TopicStore lifecycle management task that have the following responsibilities:
@@ -171,6 +201,7 @@ impl TopicStore {
         &self,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
         subscriptions: Arc<DashMap<String, Arc<AtomicUsize>>>,
+        retention_policy: RetentionPolicy,
     ) {
         let storage = self.storage.clone();
         let segments_index = self.segments_index.clone();
@@ -182,8 +213,14 @@ impl TopicStore {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        Self::cleanup_acknowledged_segments(&storage, &segments_index, &subscriptions).await;
-                        Self::cleanup_expired_segments(&storage, &segments_index, retention_period).await;
+                        match retention_policy {
+                            RetentionPolicy::RetainUntilAck => {
+                                Self::cleanup_acknowledged_segments(&storage, &segments_index, &subscriptions).await;
+                            }
+                            RetentionPolicy::RetainUntilExpire => {
+                                Self::cleanup_expired_segments(&storage, &segments_index, retention_period).await;
+                            }
+                        }
                     }
                     _ = shutdown_rx.recv() => break
                 }
