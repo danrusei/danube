@@ -33,10 +33,10 @@ async fn setup_reliable_producer(
     // Create a reliable delivery strategy with 1 hour retention and 1MB segment size
     let storage_type = StorageType::InMemory;
     let reliable_options = ReliableOptions::new(
-        1024 * 1024,
+        5, // segment size in MB
         storage_type,
         RetentionPolicy::RetainUntilExpire,
-        3600,
+        3600, // 1 hour
     );
     let dispatch_strategy = ConfigDispatchStrategy::Reliable(reliable_options);
 

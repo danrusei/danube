@@ -3,7 +3,7 @@ name: Unit Tests
 on:
   push:
     branches:
-      - 'main'  # This will trigger on push on main branch
+      - '**'  # This will trigger on all branches
 
 jobs:
   test:

@@ -25,10 +25,10 @@ async fn main() -> Result<()> {
 
     let storage_type = StorageType::InMemory;
     let reliable_options = ReliableOptions::new(
-        1024 * 1024,
+        5, // segment size in MB
         storage_type,
         RetentionPolicy::RetainUntilExpire,
-        3600,
+        3600, // 1 hour
     );
     let dispatch_strategy = ConfigDispatchStrategy::Reliable(reliable_options);
 
