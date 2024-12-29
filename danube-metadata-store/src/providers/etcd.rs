@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::{debug, error};
 
 use crate::{
     errors::{MetadataError, Result},
@@ -115,14 +116,49 @@ impl EtcdStore {
 
     pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
         let mut client = self.client.lock().await;
-        client.lease_keep_alive(lease_id).await?;
+        let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
+        // Attempt to send a keep-alive request
+        match keeper.keep_alive().await {
+            Ok(_) => debug!(
+                "Broker Register, keep-alive request sent for lease {}",
+                lease_id
+            ),
+            Err(e) => {
+                error!(
+                    "Broker Register, failed to send keep-alive request for lease {}: {}",
+                    lease_id, e
+                );
+            }
+        }
+
+        // Check for responses from etcd to confirm the lease is still alive
+        match stream.message().await {
+            Ok(Some(_response)) => {
+                debug!(
+                    "Broker Register, received keep-alive response for lease {}",
+                    lease_id
+                );
+            }
+            Ok(None) => {
+                error!(
+                    "Broker Register, keep-alive response stream ended unexpectedly for lease {}",
+                    lease_id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "Broker Register, failed to receive keep-alive response for lease {}: {}",
+                    lease_id, e
+                );
+            }
+        }
         Ok(())
     }
 
-    pub async fn put_with_lease(&self, key: &str, value: Vec<u8>, lease_id: i64) -> Result<()> {
-        let mut client = self.client.lock().await;
-        let opts = PutOptions::new().with_lease(lease_id);
-        client.put(key, value, Some(opts)).await?;
+    pub async fn put_with_lease(&self, key: &str, value: Value, lease_id: i64) -> Result<()> {
+        let etcd_opts = PutOptions::new().with_lease(lease_id);
+        let opts = MetaOptions::EtcdPut(etcd_opts);
+        self.put(key, value, opts).await?;
         Ok(())
     }
 }

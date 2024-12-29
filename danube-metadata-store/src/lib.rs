@@ -75,7 +75,7 @@ impl StorageBackend {
         }
     }
 
-    pub async fn put_with_lease(&self, key: &str, value: Vec<u8>, lease_id: i64) -> Result<()> {
+    pub async fn put_with_lease(&self, key: &str, value: Value, lease_id: i64) -> Result<()> {
         match self {
             StorageBackend::Etcd(store) => store.put_with_lease(key, value, lease_id).await,
             _ => Err(MetadataError::UnsupportedOperation.into()),

@@ -1,5 +1,5 @@
-use crate::metadata_store::{MetaOptions, MetadataStorage, MetadataStore};
 use anyhow::{anyhow, Result};
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use etcd_client::PutOptions as EtcdPutOptions;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -20,12 +20,12 @@ pub(crate) enum LeaderElectionState {
 pub(crate) struct LeaderElection {
     path: String,
     broker_id: u64,
-    store: MetadataStorage,
+    store: StorageBackend,
     state: Arc<Mutex<LeaderElectionState>>,
 }
 
 impl LeaderElection {
-    pub fn new(store: MetadataStorage, path: &str, broker_id: u64) -> Self {
+    pub fn new(store: StorageBackend, path: &str, broker_id: u64) -> Self {
         Self {
             path: path.to_owned(),
             broker_id,

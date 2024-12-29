@@ -2,6 +2,7 @@ pub(crate) mod load_report;
 mod rankings;
 
 use anyhow::{anyhow, Result};
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use etcd_client::{Client, EventType, GetOptions};
 use load_report::{LoadReport, ResourceType};
 use rankings::{rankings_composite, rankings_simple};
@@ -12,9 +13,7 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    metadata_store::{
-        etcd_watch_prefixes, ETCDWatchEvent, MetaOptions, MetadataStorage, MetadataStore,
-    },
+    metadata_store::{etcd_watch_prefixes, ETCDWatchEvent},
     resources::{
         BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_NAMESPACES_PATH, BASE_REGISTER_PATH,
         BASE_UNASSIGNED_PATH,
@@ -35,11 +34,11 @@ pub(crate) struct LoadManager {
     rankings: Arc<Mutex<Vec<(u64, usize)>>>,
     // the broker_id to be served to the caller on function get_next_broker
     next_broker: Arc<AtomicU64>,
-    meta_store: MetadataStorage,
+    meta_store: StorageBackend,
 }
 
 impl LoadManager {
-    pub fn new(broker_id: u64, meta_store: MetadataStorage) -> Self {
+    pub fn new(broker_id: u64, meta_store: StorageBackend) -> Self {
         LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),

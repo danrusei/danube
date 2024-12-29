@@ -13,6 +13,7 @@ pub(crate) use syncronizer::Syncronizer;
 
 use anyhow::Result;
 use danube_client::DanubeClient;
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use etcd_client::Client;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -23,7 +24,7 @@ use crate::{
     admin::DanubeAdminImpl,
     broker_server,
     broker_service::BrokerService,
-    metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
+    metadata_store::etcd_watch_prefixes,
     policies::Policies,
     resources::{
         Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, DEFAULT_NAMESPACE, SYSTEM_NAMESPACE,
@@ -72,7 +73,7 @@ pub(crate) struct DanubeService {
     broker_id: u64,
     broker: Arc<Mutex<BrokerService>>,
     service_config: ServiceConfiguration,
-    meta_store: MetadataStorage,
+    meta_store: StorageBackend,
     local_cache: LocalCache,
     resources: Resources,
     leader_election: LeaderElection,
@@ -86,7 +87,7 @@ impl DanubeService {
         broker_id: u64,
         broker: Arc<Mutex<BrokerService>>,
         service_config: ServiceConfiguration,
-        meta_store: MetadataStorage,
+        meta_store: StorageBackend,
         local_cache: LocalCache,
         resources: Resources,
         leader_election: LeaderElection,
