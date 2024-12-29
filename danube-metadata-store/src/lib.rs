@@ -1,5 +1,6 @@
 mod errors;
-pub(crate) use errors::{MetadataError, Result};
+pub use errors::MetadataError;
+pub(crate) use errors::Result;
 
 mod store;
 pub use store::MetaOptions;
