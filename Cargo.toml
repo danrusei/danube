@@ -11,6 +11,9 @@ members = [
     # -- Danube Reliable Dispatch lib 
     "danube-reliable-dispatch",
 
+    # -- Danube Metadata Store lib
+    "danube-metadata-store", 
+
     # -- Danube lib client
     "danube-client",
 
