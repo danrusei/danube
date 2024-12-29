@@ -1,0 +1,16 @@
+[package]
+name = "danube-metadata-store"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+etcd-client = "0.14.0"
+futures = "0.3.31"
+tokio = { workspace = true }
+thiserror = "2.0.9"
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = "0.1.83"
+
+[lints]
+workspace = true
