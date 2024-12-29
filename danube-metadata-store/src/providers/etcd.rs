@@ -4,12 +4,14 @@ use tokio::sync::Mutex;
 
 use crate::{
     errors::{MetadataError, Result},
-    store::MetadataStore,
+    store::{MetaOptions, MetadataStore},
     watch::WatchStream,
 };
 use async_trait::async_trait;
-use etcd_client::{Client, WatchOptions};
+use etcd_client::{Client, GetOptions, LeaseGrantResponse, PutOptions, WatchOptions};
+use serde_json::Value;
 
+#[derive(Clone)]
 pub struct EtcdStore {
     client: Arc<Mutex<Client>>,
 }
@@ -27,20 +29,59 @@ impl EtcdStore {
 
 #[async_trait]
 impl MetadataStore for EtcdStore {
-    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    async fn get(&self, key: &str, get_options: MetaOptions) -> Result<Option<Value>> {
+        // Extract ETCD options if provided
+        let options = if let MetaOptions::EtcdGet(etcd_options) = get_options {
+            Some(etcd_options)
+        } else {
+            None
+        };
+
         let mut client = self.client.lock().await;
-        let response = client.get(key, None).await.map_err(MetadataError::from)?;
+        let response = client
+            .get(key, options)
+            .await
+            .map_err(MetadataError::from)?;
         if let Some(kv) = response.kvs().first() {
-            Ok(Some(kv.value().to_vec()))
+            let value = serde_json::from_slice(kv.value())?;
+            Ok(Some(value))
         } else {
             Ok(None)
         }
     }
 
-    async fn put(&self, key: &str, value: Vec<u8>) -> Result<()> {
+    async fn get_childrens(&self, path: &str) -> Result<Vec<String>> {
+        let client = self.client.lock().await;
+        let mut kv_client = client.kv_client();
+
+        // Retrieve all keys with the specified prefix
+        let range_resp = kv_client
+            .get(path, Some(GetOptions::new().with_keys_only().with_prefix()))
+            .await?;
+
+        let mut child_paths: Vec<String> = Vec::new();
+
+        for kv in range_resp.kvs() {
+            let key = kv.key_str()?.to_owned();
+            child_paths.push(key);
+        }
+
+        Ok(child_paths)
+    }
+
+    async fn put(&self, key: &str, value: Value, put_options: MetaOptions) -> Result<()> {
+        let options = if let MetaOptions::EtcdPut(etcd_options) = put_options {
+            Some(etcd_options)
+        } else {
+            None
+        };
+
+        // Serialize serde_json::Value to a byte array
+        let value_bytes = serde_json::to_vec(&value)?;
+
         let mut client = self.client.lock().await;
         client
-            .put(key, value, None)
+            .put(key, value_bytes, options)
             .await
             .map_err(MetadataError::from)?;
         Ok(())
@@ -62,6 +103,27 @@ impl MetadataStore for EtcdStore {
             .await
             .map_err(MetadataError::from)?;
         Ok(WatchStream::from_etcd(watch_stream))
+    }
+}
+
+impl EtcdStore {
+    pub async fn create_lease(&self, ttl: i64) -> Result<LeaseGrantResponse> {
+        let mut client = self.client.lock().await;
+        let lease = client.lease_grant(ttl, None).await?;
+        Ok(lease)
+    }
+
+    pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
+        let mut client = self.client.lock().await;
+        client.lease_keep_alive(lease_id).await?;
+        Ok(())
+    }
+
+    pub async fn put_with_lease(&self, key: &str, value: Vec<u8>, lease_id: i64) -> Result<()> {
+        let mut client = self.client.lock().await;
+        let opts = PutOptions::new().with_lease(lease_id);
+        client.put(key, value, Some(opts)).await?;
+        Ok(())
     }
 }
 

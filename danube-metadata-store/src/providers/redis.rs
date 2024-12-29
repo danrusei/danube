@@ -1,17 +1,26 @@
-use crate::{errors::Result, store::MetadataStore, watch::WatchStream};
+use crate::{
+    errors::Result,
+    store::{MetaOptions, MetadataStore},
+    watch::WatchStream,
+};
 
 use async_trait::async_trait;
+use serde_json::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RedisStore {}
 
 #[async_trait]
 impl MetadataStore for RedisStore {
-    async fn get(&self, _key: &str) -> Result<Option<Vec<u8>>> {
+    async fn get(&self, _key: &str, _get_options: MetaOptions) -> Result<Option<Value>> {
         unimplemented!()
     }
 
-    async fn put(&self, _key: &str, _value: Vec<u8>) -> Result<()> {
+    async fn get_childrens(&self, _path: &str) -> Result<Vec<String>> {
+        unimplemented!()
+    }
+
+    async fn put(&self, _key: &str, _value: Value, _put_options: MetaOptions) -> Result<()> {
         unimplemented!()
     }
 
