@@ -2,6 +2,7 @@ use etcd_client::{EventType, WatchStream as EtcdWatchStream};
 use futures::stream::Stream;
 use futures::StreamExt;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use crate::errors::{MetadataError, Result};
 
@@ -23,7 +24,20 @@ pub struct WatchStream {
     inner: Pin<Box<dyn Stream<Item = Result<WatchEvent>> + Send>>,
 }
 
+impl Stream for WatchStream {
+    type Item = Result<WatchEvent>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.as_mut().poll_next(cx)
+    }
+}
+
 impl WatchStream {
+    pub fn new(stream: impl Stream<Item = Result<WatchEvent>> + Send + 'static) -> Self {
+        Self {
+            inner: Box::pin(stream),
+        }
+    }
     pub(crate) fn from_etcd(stream: EtcdWatchStream) -> Self {
         let stream = stream.flat_map(|result| {
             futures::stream::iter(
