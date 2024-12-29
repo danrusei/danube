@@ -17,8 +17,8 @@ pub struct EtcdStore {
 }
 
 impl EtcdStore {
-    pub async fn new(endpoints: Vec<String>) -> Result<Self> {
-        let client = Client::connect(endpoints, None)
+    pub async fn new(endpoint: String) -> Result<Self> {
+        let client = Client::connect([endpoint], None)
             .await
             .map_err(MetadataError::from)?;
         Ok(Self {

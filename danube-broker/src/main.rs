@@ -24,13 +24,13 @@ use crate::{
     broker_metrics::init_metrics,
     broker_service::BrokerService,
     danube_service::{DanubeService, LeaderElection, LoadManager, LocalCache, Syncronizer},
-    metadata_store::{EtcdMetadataStore, MetadataStorage, MetadataStoreConfig},
     resources::{Resources, LEADER_ELECTION_PATH},
     service_configuration::{LoadConfiguration, ServiceConfiguration},
 };
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use danube_metadata_store::{EtcdStore, StorageBackend};
 use std::net::SocketAddr;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -122,12 +122,11 @@ async fn main() -> Result<()> {
         init_metrics(None)
     }
 
-    // initialize the storage layer for Danube Metadata
-    let store_config = MetadataStoreConfig::new();
+    // initialize the metadata storage layer for Danube Broker
+    //let store_config = MetadataStoreConfig::new();
     info!("Use ETCD storage as metadata persistent store");
-    let metadata_store: MetadataStorage = MetadataStorage::EtcdStore(
-        EtcdMetadataStore::new(service_config.meta_store_addr.clone(), store_config).await?,
-    );
+    let metadata_store: StorageBackend =
+        StorageBackend::Etcd(EtcdStore::new(service_config.meta_store_addr.clone()).await?);
 
     // caching metadata locally to reduce the number of remote calls to Metadata Store
     let local_cache = LocalCache::new();

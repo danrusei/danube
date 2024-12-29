@@ -2,18 +2,17 @@ mod errors;
 pub(crate) use errors::{MetadataError, Result};
 
 mod store;
+pub use store::MetaOptions;
+pub use store::MetadataStore;
 
 mod watch;
-
-use etcd_client::LeaseGrantResponse;
-pub use store::MetaOptions;
-use store::MetadataStore;
 pub use watch::{WatchEvent, WatchStream};
 
 mod providers;
-pub(crate) use providers::{etcd::EtcdStore, redis::RedisStore};
+pub use providers::{etcd::EtcdStore, redis::RedisStore};
 
 use async_trait::async_trait;
+use etcd_client::LeaseGrantResponse;
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
