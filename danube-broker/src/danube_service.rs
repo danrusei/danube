@@ -311,7 +311,7 @@ impl DanubeService {
                     while let Some(result) = watch_stream.next().await {
                         match result {
                             Ok(event) => {
-                                info!("A new Watch event has been received {:?}", event);
+                                info!("A new Watch event has been received {}", event);
 
                                 match event {
                                     WatchEvent::Put { key, .. } => {
@@ -327,7 +327,7 @@ impl DanubeService {
                                         if parts.len() >= 6 {
                                             // Need at least 6 parts for full path
                                             // Format: namespace/topic
-                                            let topic_name = format!("{}/{}", parts[4], parts[5]);
+                                            let topic_name = format!("/{}/{}", parts[4], parts[5]);
                                             // wait a sec so the LocalCache receive the updates from the persistent metadata
                                             sleep(Duration::from_secs(2)).await;
                                             let mut broker_service = broker_service.lock().await;

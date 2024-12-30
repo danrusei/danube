@@ -80,9 +80,9 @@ impl StorageBackend {
         }
     }
 
-    pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
+    pub async fn keep_lease_alive(&self, lease_id: i64, role: &str) -> Result<()> {
         match self {
-            StorageBackend::Etcd(store) => store.keep_lease_alive(lease_id).await,
+            StorageBackend::Etcd(store) => store.keep_lease_alive(lease_id, role).await,
             _ => Err(MetadataError::UnsupportedOperation.into()),
         }
     }

@@ -96,7 +96,8 @@ impl LeaderElection {
                             let store = self.store.clone();
                             async move {
                                 loop {
-                                    match store.keep_lease_alive(lease_id).await {
+                                    match store.keep_lease_alive(lease_id, "Leader Election").await
+                                    {
                                         Ok(_) => {
                                             sleep(Duration::from_secs(ttl as u64 / 2)).await;
                                         }

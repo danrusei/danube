@@ -1,8 +1,8 @@
 use etcd_client::{EventType, WatchStream as EtcdWatchStream};
 use futures::stream::Stream;
 use futures::StreamExt;
-use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{fmt, pin::Pin};
 
 use crate::errors::{MetadataError, Result};
 
@@ -73,6 +73,44 @@ impl WatchStream {
 
         Self {
             inner: Box::pin(stream),
+        }
+    }
+}
+
+impl fmt::Display for WatchEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WatchEvent::Put {
+                key,
+                value: _,
+                mod_revision,
+                version,
+            } => {
+                let key_str = String::from_utf8_lossy(key);
+                write!(f, "Put(key: {}", key_str)?;
+                if let Some(rev) = mod_revision {
+                    write!(f, ", mod_revision: {}", rev)?;
+                }
+                if let Some(ver) = version {
+                    write!(f, ", version: {}", ver)?;
+                }
+                write!(f, ")")
+            }
+            WatchEvent::Delete {
+                key,
+                mod_revision,
+                version,
+            } => {
+                let key_str = String::from_utf8_lossy(key);
+                write!(f, "Delete(key: {}", key_str)?;
+                if let Some(rev) = mod_revision {
+                    write!(f, ", mod_revision: {}", rev)?;
+                }
+                if let Some(ver) = version {
+                    write!(f, ", version: {}", ver)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }

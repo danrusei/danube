@@ -140,19 +140,16 @@ impl EtcdStore {
         Ok(lease)
     }
 
-    pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
+    pub async fn keep_lease_alive(&self, lease_id: i64, role: &str) -> Result<()> {
         let mut client = self.client.lock().await;
         let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
         // Attempt to send a keep-alive request
         match keeper.keep_alive().await {
-            Ok(_) => debug!(
-                "Broker Register, keep-alive request sent for lease {}",
-                lease_id
-            ),
+            Ok(_) => debug!("{}, keep-alive request sent for lease {} ", role, lease_id),
             Err(e) => {
                 error!(
-                    "Broker Register, failed to send keep-alive request for lease {}: {}",
-                    lease_id, e
+                    "{}, failed to send keep-alive request for lease {}: {}",
+                    role, lease_id, e
                 );
             }
         }
@@ -161,20 +158,20 @@ impl EtcdStore {
         match stream.message().await {
             Ok(Some(_response)) => {
                 debug!(
-                    "Broker Register, received keep-alive response for lease {}",
-                    lease_id
+                    "{}, received keep-alive response for lease {}",
+                    role, lease_id
                 );
             }
             Ok(None) => {
                 error!(
-                    "Broker Register, keep-alive response stream ended unexpectedly for lease {}",
-                    lease_id
+                    "{}, keep-alive response stream ended unexpectedly for lease {}",
+                    role, lease_id
                 );
             }
             Err(e) => {
                 error!(
-                    "Broker Register, failed to receive keep-alive response for lease {}: {}",
-                    lease_id, e
+                    "{}, failed to receive keep-alive response for lease {}: {}",
+                    role, lease_id, e
                 );
             }
         }
