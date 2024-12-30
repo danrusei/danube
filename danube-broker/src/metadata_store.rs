@@ -31,14 +31,14 @@ pub(crate) trait MetadataStore {
 // TODO! this is not optimal if you need GetOptions::new().with_prefix()
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+//#[allow(dead_code)]
 pub(crate) enum MetadataStorage {
     MemoryStore(MemoryMetadataStore),
     EtcdStore(EtcdMetadataStore),
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
+//#[allow(dead_code)]
 pub(crate) enum MetaOptions {
     None,
     EtcdGet(GetOptions),

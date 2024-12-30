@@ -424,6 +424,7 @@ fn extract_broker_id(key: &str) -> Option<u64> {
         .ok()
 }
 
+#[allow(dead_code)]
 fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
     let value_str = std::str::from_utf8(value).ok()?;
     serde_json::from_str(value_str).ok()

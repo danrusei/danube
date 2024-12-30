@@ -123,13 +123,12 @@ async fn main() -> Result<()> {
     }
 
     // initialize the metadata storage layer for Danube Broker
-    //let store_config = MetadataStoreConfig::new();
     info!("Use ETCD storage as metadata persistent store");
     let metadata_store: StorageBackend =
         StorageBackend::Etcd(EtcdStore::new(service_config.meta_store_addr.clone()).await?);
 
     // caching metadata locally to reduce the number of remote calls to Metadata Store
-    let local_cache = LocalCache::new();
+    let local_cache = LocalCache::new(metadata_store.clone());
 
     // convenient functions to handle the metadata and configurations required
     // for managing the cluster, namespaces & topics

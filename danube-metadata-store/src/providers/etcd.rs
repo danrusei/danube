@@ -107,7 +107,33 @@ impl MetadataStore for EtcdStore {
     }
 }
 
+#[derive(Debug)]
+pub struct KeyValueVersion {
+    pub key: String,
+    pub value: Vec<u8>,
+    pub version: i64,
+}
+
 impl EtcdStore {
+    pub async fn get_bulk(&self, prefix: &str) -> Result<Vec<KeyValueVersion>> {
+        let mut client = self.client.lock().await;
+        let response = client
+            .get(prefix, Some(etcd_client::GetOptions::new().with_prefix()))
+            .await
+            .map_err(MetadataError::from)?;
+
+        let mut results = Vec::new();
+        for kv in response.kvs() {
+            results.push(KeyValueVersion {
+                key: String::from_utf8(kv.key().to_vec())
+                    .map_err(|e| MetadataError::Unknown(format!("Invalid UTF-8 in key: {}", e)))?,
+                value: kv.value().to_vec(),
+                version: kv.version(),
+            });
+        }
+
+        Ok(results)
+    }
     pub async fn create_lease(&self, ttl: i64) -> Result<LeaseGrantResponse> {
         let mut client = self.client.lock().await;
         let lease = client.lease_grant(ttl, None).await?;

@@ -10,7 +10,10 @@ mod watch;
 pub use watch::{WatchEvent, WatchStream};
 
 mod providers;
-pub use providers::{etcd::EtcdStore, redis::RedisStore};
+pub use providers::{
+    etcd::{EtcdStore, KeyValueVersion},
+    redis::RedisStore,
+};
 
 use async_trait::async_trait;
 use etcd_client::LeaseGrantResponse;
@@ -79,6 +82,12 @@ impl StorageBackend {
     pub async fn put_with_lease(&self, key: &str, value: Value, lease_id: i64) -> Result<()> {
         match self {
             StorageBackend::Etcd(store) => store.put_with_lease(key, value, lease_id).await,
+            _ => Err(MetadataError::UnsupportedOperation.into()),
+        }
+    }
+    pub async fn get_bulk(&self, prefix: &str) -> Result<Vec<KeyValueVersion>> {
+        match self {
+            StorageBackend::Etcd(store) => store.get_bulk(prefix).await,
             _ => Err(MetadataError::UnsupportedOperation.into()),
         }
     }

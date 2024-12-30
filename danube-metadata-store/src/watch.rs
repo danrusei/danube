@@ -6,6 +6,7 @@ use std::task::{Context, Poll};
 
 use crate::errors::{MetadataError, Result};
 
+#[derive(Debug)]
 pub enum WatchEvent {
     Put {
         key: Vec<u8>,
