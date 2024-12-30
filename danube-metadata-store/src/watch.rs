@@ -1,10 +1,12 @@
 use etcd_client::{EventType, WatchStream as EtcdWatchStream};
 use futures::stream::Stream;
 use futures::StreamExt;
-use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::{fmt, pin::Pin};
 
 use crate::errors::{MetadataError, Result};
 
+#[derive(Debug)]
 pub enum WatchEvent {
     Put {
         key: Vec<u8>,
@@ -23,7 +25,20 @@ pub struct WatchStream {
     inner: Pin<Box<dyn Stream<Item = Result<WatchEvent>> + Send>>,
 }
 
+impl Stream for WatchStream {
+    type Item = Result<WatchEvent>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.as_mut().poll_next(cx)
+    }
+}
+
 impl WatchStream {
+    pub fn new(stream: impl Stream<Item = Result<WatchEvent>> + Send + 'static) -> Self {
+        Self {
+            inner: Box::pin(stream),
+        }
+    }
     pub(crate) fn from_etcd(stream: EtcdWatchStream) -> Self {
         let stream = stream.flat_map(|result| {
             futures::stream::iter(
@@ -58,6 +73,44 @@ impl WatchStream {
 
         Self {
             inner: Box::pin(stream),
+        }
+    }
+}
+
+impl fmt::Display for WatchEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WatchEvent::Put {
+                key,
+                value: _,
+                mod_revision,
+                version,
+            } => {
+                let key_str = String::from_utf8_lossy(key);
+                write!(f, "Put(key: {}", key_str)?;
+                if let Some(rev) = mod_revision {
+                    write!(f, ", mod_revision: {}", rev)?;
+                }
+                if let Some(ver) = version {
+                    write!(f, ", version: {}", ver)?;
+                }
+                write!(f, ")")
+            }
+            WatchEvent::Delete {
+                key,
+                mod_revision,
+                version,
+            } => {
+                let key_str = String::from_utf8_lossy(key);
+                write!(f, "Delete(key: {}", key_str)?;
+                if let Some(rev) = mod_revision {
+                    write!(f, ", mod_revision: {}", rev)?;
+                }
+                if let Some(ver) = version {
+                    write!(f, ", version: {}", ver)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }

@@ -13,7 +13,8 @@ pub(crate) use syncronizer::Syncronizer;
 
 use anyhow::Result;
 use danube_client::DanubeClient;
-use etcd_client::Client;
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend, WatchEvent};
+use futures::StreamExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, sleep, Duration};
@@ -23,7 +24,6 @@ use crate::{
     admin::DanubeAdminImpl,
     broker_server,
     broker_service::BrokerService,
-    metadata_store::{etcd_watch_prefixes, MetaOptions, MetadataStorage, MetadataStore},
     policies::Policies,
     resources::{
         Resources, BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, DEFAULT_NAMESPACE, SYSTEM_NAMESPACE,
@@ -72,7 +72,7 @@ pub(crate) struct DanubeService {
     broker_id: u64,
     broker: Arc<Mutex<BrokerService>>,
     service_config: ServiceConfiguration,
-    meta_store: MetadataStorage,
+    meta_store: StorageBackend,
     local_cache: LocalCache,
     resources: Resources,
     leader_election: LeaderElection,
@@ -86,7 +86,7 @@ impl DanubeService {
         broker_id: u64,
         broker: Arc<Mutex<BrokerService>>,
         service_config: ServiceConfiguration,
-        meta_store: MetadataStorage,
+        meta_store: StorageBackend,
         local_cache: LocalCache,
         resources: Resources,
         leader_election: LeaderElection,
@@ -116,13 +116,11 @@ impl DanubeService {
         //==========================================================================
 
         // Fetch initial data, populate cache & watch for Events to update local cache
-        let store_client = self.meta_store.get_client();
-        if let Some(client) = store_client.clone() {
-            let local_cache_cloned = self.local_cache.clone();
-            let rx_event = self.local_cache.populate_start_local_cache(client).await?;
-            // Process the ETCD Watch events
-            tokio::spawn(async move { local_cache_cloned.process_event(rx_event).await });
-        }
+
+        let local_cache_cloned = self.local_cache.clone();
+        let watch_stream = self.local_cache.populate_start_local_cache().await?;
+        // Process the ETCD Watch events
+        tokio::spawn(async move { local_cache_cloned.process_event(watch_stream).await });
 
         info!("Started the Local Cache service.");
 
@@ -257,10 +255,9 @@ impl DanubeService {
 
         // Watch for events of Broker's interest
         let broker_service_cloned = Arc::clone(&self.broker);
-        if let Some(client) = store_client {
-            self.watch_events_for_broker(client, broker_service_cloned)
-                .await;
-        }
+        let meta_store_cloned = self.meta_store.clone();
+        self.watch_events_for_broker(meta_store_cloned, broker_service_cloned)
+            .await;
 
         // Start the Danube Admin GRPC server
         //==========================================================================
@@ -299,64 +296,74 @@ impl DanubeService {
 
     async fn watch_events_for_broker(
         &self,
-        client: Client,
+        meta_store: StorageBackend,
         broker_service: Arc<Mutex<BrokerService>>,
     ) {
-        let (tx_event, mut rx_event) = tokio::sync::mpsc::channel(32);
+        // Create watch stream for broker-specific events
+        let topic_assignment_path = join_path(&[BASE_BROKER_PATH, &self.broker_id.to_string()]);
         let broker_id = self.broker_id;
 
-        // watch for ETCD events
-        tokio::spawn(async move {
-            let mut prefixes = Vec::new();
-            let topic_assignment_path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string()]);
-            prefixes.extend([topic_assignment_path].into_iter());
-            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
-        });
+        // Watch for broker's assigned topics
+        match meta_store.watch(&topic_assignment_path).await {
+            Ok(mut watch_stream) => {
+                // Process events in background task
+                tokio::spawn(async move {
+                    while let Some(result) = watch_stream.next().await {
+                        match result {
+                            Ok(event) => {
+                                info!("A new Watch event has been received {}", event);
 
-        //process the events
-        tokio::spawn(async move {
-            while let Some(event) = rx_event.recv().await {
-                info!(
-                    "{}",
-                    format!("A new Watch event has been received {:?}", event)
-                );
+                                match event {
+                                    WatchEvent::Put { key, .. } => {
+                                        let key_str = match std::str::from_utf8(&key) {
+                                            Ok(s) => s,
+                                            Err(e) => {
+                                                error!("Invalid UTF-8 in key: {}", e);
+                                                continue;
+                                            }
+                                        };
 
-                let parts: Vec<_> = event.key.split('/').collect();
-                if parts.len() < 3 {
-                    warn!("Invalid key format {}", event.key);
-                    return;
-                }
-
-                let prefix = format!("/{}/{}", parts[1], parts[2]);
-
-                match prefix.as_str() {
-                    path if path == BASE_BROKER_PATH => {
-                        // the key format should be (BASE_BROKER_PATH, broker_id, topic_name)
-                        // like: /cluster/brokers/1685432450824113596/default/my_topic
-                        if parts.len() != 6 {
-                            warn!("Invalid key format: {}", event.key);
-                            return;
-                        }
-
-                        let topic_name = format!("/{}/{}", parts[4], parts[5]);
-                        match event.event_type {
-                            etcd_client::EventType::Put => {
-                                // wait a sec so the LocalCache receive the updates from the persistent metadata
-                                sleep(Duration::from_secs(2)).await;
-                                let mut broker_service = broker_service.lock().await;
-                                match broker_service.create_topic_locally(&topic_name).await {
-                                    Ok(()) => info!(
+                                        let parts: Vec<_> = key_str.split('/').collect();
+                                        if parts.len() >= 6 {
+                                            // Need at least 6 parts for full path
+                                            // Format: namespace/topic
+                                            let topic_name = format!("/{}/{}", parts[4], parts[5]);
+                                            // wait a sec so the LocalCache receive the updates from the persistent metadata
+                                            sleep(Duration::from_secs(2)).await;
+                                            let mut broker_service = broker_service.lock().await;
+                                            match broker_service
+                                                .create_topic_locally(&topic_name)
+                                                .await
+                                            {
+                                                Ok(()) => info!(
                                         "The topic {} , was successfully created on broker {}",
                                         topic_name, broker_id
                                     ),
-                                    Err(err) => {
-                                        error!("Unable to create the topic due to error: {}", err)
+                                                Err(err) => {
+                                                    error!("Unable to create the topic due to error: {}", err)
+                                                }
+                                            }
+                                        } else {
+                                            warn!("Invalid topic path format: {}", key_str);
+                                        }
                                     }
-                                }
-                            }
-                            etcd_client::EventType::Delete => {
-                                let mut broker_service = broker_service.lock().await;
-                                match broker_service.delete_topic(&topic_name).await {
+                                    WatchEvent::Delete { key, .. } => {
+                                        let key_str = match std::str::from_utf8(&key) {
+                                            Ok(s) => s,
+                                            Err(e) => {
+                                                error!("Invalid UTF-8 in key: {}", e);
+                                                continue;
+                                            }
+                                        };
+
+                                        let parts: Vec<_> = key_str.split('/').collect();
+                                        if parts.len() >= 6 {
+                                            // Need at least 6 parts for full path
+                                            // Format: namespace/topic
+                                            let topic_name = format!("{}/{}", parts[4], parts[5]);
+                                            // wait a sec so the LocalCache receive the updates from the persistent metadata
+                                            let mut broker_service = broker_service.lock().await;
+                                            match broker_service.delete_topic(&topic_name).await {
                                     Ok(_) => info!(
                                         "The topic {} , was successfully deleted from the broker {}",
                                         topic_name, broker_id
@@ -365,15 +372,23 @@ impl DanubeService {
                                         error!("Unable to delete the topic due to error: {}", err)
                                     }
                                 }
+                                        } else {
+                                            warn!("Invalid topic path format: {}", key_str);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Error receiving watch event: {}", e);
                             }
                         }
                     }
-                    _ => {
-                        warn!("Shouldn't reach this arm, the prefix is {}", prefix)
-                    }
-                }
+                });
             }
-        });
+            Err(e) => {
+                error!("Failed to create watch stream: {}", e);
+            }
+        }
     }
 
     // Checks whether the broker owns a specific topic
@@ -406,7 +421,7 @@ pub(crate) async fn create_namespace_if_absent(
 
 async fn post_broker_load_report(
     broker_service: Arc<Mutex<BrokerService>>,
-    mut meta_store: MetadataStorage,
+    meta_store: StorageBackend,
 ) {
     let mut topics: Vec<String>;
     let mut broker_id;

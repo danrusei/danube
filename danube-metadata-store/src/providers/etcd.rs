@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::{debug, error};
 
 use crate::{
     errors::{MetadataError, Result},
@@ -17,8 +18,8 @@ pub struct EtcdStore {
 }
 
 impl EtcdStore {
-    pub async fn new(endpoints: Vec<String>) -> Result<Self> {
-        let client = Client::connect(endpoints, None)
+    pub async fn new(endpoint: String) -> Result<Self> {
+        let client = Client::connect([endpoint], None)
             .await
             .map_err(MetadataError::from)?;
         Ok(Self {
@@ -106,23 +107,81 @@ impl MetadataStore for EtcdStore {
     }
 }
 
+#[derive(Debug)]
+pub struct KeyValueVersion {
+    pub key: String,
+    pub value: Vec<u8>,
+    pub version: i64,
+}
+
 impl EtcdStore {
+    pub async fn get_bulk(&self, prefix: &str) -> Result<Vec<KeyValueVersion>> {
+        let mut client = self.client.lock().await;
+        let response = client
+            .get(prefix, Some(etcd_client::GetOptions::new().with_prefix()))
+            .await
+            .map_err(MetadataError::from)?;
+
+        let mut results = Vec::new();
+        for kv in response.kvs() {
+            results.push(KeyValueVersion {
+                key: String::from_utf8(kv.key().to_vec())
+                    .map_err(|e| MetadataError::Unknown(format!("Invalid UTF-8 in key: {}", e)))?,
+                value: kv.value().to_vec(),
+                version: kv.version(),
+            });
+        }
+
+        Ok(results)
+    }
     pub async fn create_lease(&self, ttl: i64) -> Result<LeaseGrantResponse> {
         let mut client = self.client.lock().await;
         let lease = client.lease_grant(ttl, None).await?;
         Ok(lease)
     }
 
-    pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
+    pub async fn keep_lease_alive(&self, lease_id: i64, role: &str) -> Result<()> {
         let mut client = self.client.lock().await;
-        client.lease_keep_alive(lease_id).await?;
+        let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
+        // Attempt to send a keep-alive request
+        match keeper.keep_alive().await {
+            Ok(_) => debug!("{}, keep-alive request sent for lease {} ", role, lease_id),
+            Err(e) => {
+                error!(
+                    "{}, failed to send keep-alive request for lease {}: {}",
+                    role, lease_id, e
+                );
+            }
+        }
+
+        // Check for responses from etcd to confirm the lease is still alive
+        match stream.message().await {
+            Ok(Some(_response)) => {
+                debug!(
+                    "{}, received keep-alive response for lease {}",
+                    role, lease_id
+                );
+            }
+            Ok(None) => {
+                error!(
+                    "{}, keep-alive response stream ended unexpectedly for lease {}",
+                    role, lease_id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "{}, failed to receive keep-alive response for lease {}: {}",
+                    role, lease_id, e
+                );
+            }
+        }
         Ok(())
     }
 
-    pub async fn put_with_lease(&self, key: &str, value: Vec<u8>, lease_id: i64) -> Result<()> {
-        let mut client = self.client.lock().await;
-        let opts = PutOptions::new().with_lease(lease_id);
-        client.put(key, value, Some(opts)).await?;
+    pub async fn put_with_lease(&self, key: &str, value: Value, lease_id: i64) -> Result<()> {
+        let etcd_opts = PutOptions::new().with_lease(lease_id);
+        let opts = MetaOptions::EtcdPut(etcd_opts);
+        self.put(key, value, opts).await?;
         Ok(())
     }
 }

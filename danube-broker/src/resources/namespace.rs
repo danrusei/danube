@@ -1,22 +1,17 @@
 use anyhow::{anyhow, Result};
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use serde_json::Value;
 
-use crate::{
-    metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    policies::Policies,
-    resources::BASE_NAMESPACES_PATH,
-    utils::join_path,
-    LocalCache,
-};
+use crate::{policies::Policies, resources::BASE_NAMESPACES_PATH, utils::join_path, LocalCache};
 
 #[derive(Debug, Clone)]
 pub(crate) struct NamespaceResources {
     local_cache: LocalCache,
-    store: MetadataStorage,
+    store: StorageBackend,
 }
 
 impl NamespaceResources {
-    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+    pub(crate) fn new(local_cache: LocalCache, store: StorageBackend) -> Self {
         NamespaceResources { local_cache, store }
     }
 

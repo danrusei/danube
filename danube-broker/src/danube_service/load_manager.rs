@@ -2,19 +2,19 @@ pub(crate) mod load_report;
 mod rankings;
 
 use anyhow::{anyhow, Result};
-use etcd_client::{Client, EventType, GetOptions};
+use danube_metadata_store::EtcdGetOptions;
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend, WatchEvent, WatchStream};
+use futures::stream::StreamExt;
 use load_report::{LoadReport, ResourceType};
 use rankings::{rankings_composite, rankings_simple};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use tracing::{error, info, trace, warn};
 
 use crate::{
-    metadata_store::{
-        etcd_watch_prefixes, ETCDWatchEvent, MetaOptions, MetadataStorage, MetadataStore,
-    },
     resources::{
         BASE_BROKER_LOAD_PATH, BASE_BROKER_PATH, BASE_NAMESPACES_PATH, BASE_REGISTER_PATH,
         BASE_UNASSIGNED_PATH,
@@ -35,11 +35,11 @@ pub(crate) struct LoadManager {
     rankings: Arc<Mutex<Vec<(u64, usize)>>>,
     // the broker_id to be served to the caller on function get_next_broker
     next_broker: Arc<AtomicU64>,
-    meta_store: MetadataStorage,
+    meta_store: StorageBackend,
 }
 
 impl LoadManager {
-    pub fn new(broker_id: u64, meta_store: MetadataStorage) -> Self {
+    pub fn new(broker_id: u64, meta_store: StorageBackend) -> Self {
         LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
@@ -47,22 +47,12 @@ impl LoadManager {
             meta_store,
         }
     }
-    pub async fn bootstrap(&mut self, _broker_id: u64) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
-        let client = if let Some(client) = self.meta_store.get_client() {
-            client
-        } else {
-            return Err(anyhow!(
-                "The Load Manager was unable to fetch the Metadata Store client"
-            ));
-        };
-
+    pub async fn bootstrap(&mut self, _broker_id: u64) -> Result<WatchStream> {
         // fetch the initial broker Load information
-        let _ = self.fetch_initial_load(client.clone()).await;
+        self.fetch_initial_load().await?;
 
         //calculate rankings after the initial load fetch
         self.calculate_rankings_simple().await;
-
-        let (tx_event, rx_event) = mpsc::channel(32);
 
         // Watch for Metadata Store events (ETCD), interested of :
         //
@@ -73,198 +63,299 @@ impl LoadManager {
         // "/cluster/unassigned" for new created topics that due to be allocated to brokers
         // it using the calculated rankings to decide which broker will host the new topic
         // and inform the broker by posting the topic on it's path "/cluster/brokers/{broker-id}/{namespace}/{topic}"
-        tokio::spawn(async move {
-            let mut prefixes = Vec::new();
-            prefixes.push(BASE_BROKER_LOAD_PATH.to_string());
-            prefixes.push(BASE_UNASSIGNED_PATH.to_string());
-            prefixes.push(BASE_REGISTER_PATH.to_string());
-            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
-        });
+        // Watch for multiple prefixes by creating a combined stream
+        let mut streams = Vec::new();
+        let prefixes = vec![
+            BASE_BROKER_LOAD_PATH.to_string(),
+            BASE_UNASSIGNED_PATH.to_string(),
+            BASE_REGISTER_PATH.to_string(),
+        ];
 
-        Ok(rx_event)
-    }
-
-    pub(crate) async fn fetch_initial_load(&self, mut client: Client) -> Result<()> {
-        // Prepare the etcd request to get all keys under /cluster/brokers/load/
-        let options = GetOptions::new().with_prefix();
-        let response = client
-            .get(BASE_BROKER_LOAD_PATH, Some(options))
-            .await
-            .expect("Failed to fetch keys from etcd");
-
-        let mut brokers_usage = self.brokers_usage.lock().await;
-
-        // Iterate through the key-value pairs in the response
-        for kv in response.kvs() {
-            let key = kv.key_str().expect("Failed to parse key");
-            let value = kv.value();
-
-            // Extract broker-id from key
-            if let Some(broker_id_str) = key.strip_prefix(BASE_BROKER_LOAD_PATH) {
-                if let Ok(broker_id) = broker_id_str.parse::<u64>() {
-                    // Deserialize the value to LoadReport
-                    if let Ok(load_report) = serde_json::from_slice::<LoadReport>(value) {
-                        brokers_usage.insert(broker_id, load_report);
-                    } else {
-                        return Err(anyhow!(
-                            "Failed to deserialize LoadReport for broker_id: {}",
-                            broker_id
-                        ));
-                    }
-                } else {
-                    return Err(anyhow!("Invalid broker_id format in key: {}", key));
-                }
-            } else {
-                return Err(anyhow!("Key does not match expected pattern: {}", key));
-            }
+        for prefix in prefixes {
+            let watch_stream = self.meta_store.watch(&prefix).await?;
+            streams.push(watch_stream);
         }
 
+        // Combine multiple watch streams into one
+        let combined_stream = futures::stream::select_all(streams);
+        Ok(WatchStream::new(combined_stream))
+    }
+
+    pub(crate) async fn fetch_initial_load(&self) -> Result<()> {
+        // Get all keys under /cluster/brokers/load/
+        let response = self
+            .meta_store
+            .get(
+                BASE_BROKER_LOAD_PATH,
+                MetaOptions::EtcdGet(EtcdGetOptions::new().with_prefix()),
+            )
+            .await?;
+
+        if let Some(Value::Object(map)) = response {
+            let mut brokers_usage = self.brokers_usage.lock().await;
+
+            for (key, value) in map {
+                // Extract broker-id from key
+                if let Some(broker_id_str) = key.strip_prefix(BASE_BROKER_LOAD_PATH) {
+                    if let Ok(broker_id) = broker_id_str.parse::<u64>() {
+                        // Deserialize the value to LoadReport
+                        if let Ok(load_report) = serde_json::from_value::<LoadReport>(value) {
+                            brokers_usage.insert(broker_id, load_report);
+                        } else {
+                            return Err(anyhow!(
+                                "Failed to deserialize LoadReport for broker_id: {}",
+                                broker_id
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
     pub(crate) async fn start(
         &mut self,
-        mut rx_event: mpsc::Receiver<ETCDWatchEvent>,
+        mut watch_stream: WatchStream,
         broker_id: u64,
         leader_election: LeaderElection,
     ) {
-        while let Some(event) = rx_event.recv().await {
-            let state = leader_election.get_state().await;
+        while let Some(result) = watch_stream.next().await {
+            match result {
+                Ok(event) => {
+                    let state = leader_election.get_state().await;
 
-            match event.key.as_str() {
-                key if key.starts_with(BASE_UNASSIGNED_PATH) => {
-                    // only the Leader Broker should assign the topic
-                    if state == LeaderElectionState::Following {
-                        continue;
-                    }
-                    info!(
-                        "Attempting to assign the new topic {} to a broker",
-                        &event.key
-                    );
-                    self.assign_topic_to_broker(event).await;
-                }
-                key if key.starts_with(BASE_REGISTER_PATH) => {
-                    // only the Leader Broker should realocate the cluster resources
-                    if state == LeaderElectionState::Following {
-                        continue;
-                    }
-
-                    if event.event_type == EventType::Delete {
-                        let remove_broker = match key.split('/').last().unwrap().parse::<u64>() {
-                            Ok(id) => id,
-                            Err(err) => {
-                                error!("Unable to parse the broker id: {}", err);
-                                continue;
+                    match &event {
+                        WatchEvent::Put { key, value, .. } => {
+                            // Handle different paths
+                            if key.starts_with(BASE_UNASSIGNED_PATH.as_bytes()) {
+                                if let Err(e) =
+                                    self.handle_unassigned_topic(&key, &value, state).await
+                                {
+                                    error!("Error handling unassigned topic: {}", e);
+                                }
+                            } else if key.starts_with(BASE_REGISTER_PATH.as_bytes()) {
+                                if let Err(e) = self.handle_broker_registration(&event, state).await
+                                {
+                                    error!("Error handling broker registration: {}", e);
+                                }
+                            } else if key.starts_with(BASE_BROKER_LOAD_PATH.as_bytes()) {
+                                if let Err(e) = self
+                                    .handle_load_update(&key, &value, state, broker_id)
+                                    .await
+                                {
+                                    error!("Error handling load update: {}", e);
+                                }
                             }
-                        };
-                        info!("Broker {} is no longer alive", remove_broker);
-                        {
-                            let mut brokers_usage_lock = self.brokers_usage.lock().await;
-                            brokers_usage_lock.remove(&remove_broker);
                         }
-
-                        {
-                            let mut rankings_lock = self.rankings.lock().await;
-                            rankings_lock.retain(|&(entry_id, _)| entry_id != remove_broker);
+                        WatchEvent::Delete { key, .. } => {
+                            if key.starts_with(BASE_REGISTER_PATH.as_bytes()) {
+                                if let Err(e) = self.handle_broker_registration(&event, state).await
+                                {
+                                    error!("Error handling broker registration: {}", e);
+                                }
+                            }
                         }
-
-                        // TODO! - reallocate the resources to another broker
-                        // for now I will delete from metadata store all the topics assigned to /cluster/brokers/removed_broker/*
-                        match  self.delete_topic_allocation(remove_broker).await {
-                        Ok(_) => {},
-                        Err(err) => error!("Unable to delete resources of the unregistered broker {}, due to error {}", remove_broker, err)
-                       }
                     }
                 }
-
-                key if key.starts_with(BASE_BROKER_LOAD_PATH) => {
-                    // the event is processed and added localy,
-                    // but only the Leader Broker does the calculations on the loads
-                    trace!("A new load report has been received from: {}", &event.key);
-                    self.process_event(event).await;
-
-                    if state == LeaderElectionState::Following {
-                        continue;
-                    }
-                    self.calculate_rankings_simple().await;
-                    let next_broker = self
-                        .rankings
-                        .lock()
-                        .await
-                        .get(0)
-                        .get_or_insert(&(broker_id, 0))
-                        .0;
-                    let _ = self
-                        .next_broker
-                        .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
-
-                    // need to post it's decision on the Metadata Store
-                }
-                _ => {
-                    // Handle unexpected events if needed
-                    error!("Received an unexpected event: {}", &event.key);
+                Err(e) => {
+                    error!("Error receiving watch event: {}", e);
                 }
             }
         }
     }
 
-    // Post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
-    // to be further read and processed by the selected broker
-    async fn assign_topic_to_broker(&mut self, event: ETCDWatchEvent) {
-        if event.event_type != EventType::Put {
-            return;
+    async fn handle_unassigned_topic(
+        &mut self,
+        key: &[u8],
+        value: &[u8],
+        state: LeaderElectionState,
+    ) -> Result<()> {
+        // Only leader assigns topics
+        if state == LeaderElectionState::Following {
+            return Ok(());
         }
 
-        // recalculate the rankings after the topic was assigned, as the load report events comes on fix intervals
+        let key_str =
+            std::str::from_utf8(key).map_err(|e| anyhow!("Invalid UTF-8 in key: {}", e))?;
+
+        info!("Attempting to assign the new topic {} to a broker", key_str);
+
+        // Create WatchEvent for assign_topic_to_broker
+        self.assign_topic_to_broker(WatchEvent::Put {
+            key: key.to_vec(),
+            value: value.to_vec(),
+            mod_revision: None,
+            version: None,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn handle_broker_registration(
+        &mut self,
+        event: &WatchEvent,
+        state: LeaderElectionState,
+    ) -> Result<()> {
+        // Only leader handles broker registration
+        if state == LeaderElectionState::Following {
+            return Ok(());
+        }
+
+        match event {
+            WatchEvent::Delete { key, .. } => {
+                let key_str = std::str::from_utf8(&key)
+                    .map_err(|e| anyhow!("Invalid UTF-8 in key: {}", e))?;
+
+                let remove_broker = match key_str.split('/').last().unwrap().parse::<u64>() {
+                    Ok(id) => id,
+                    Err(err) => {
+                        error!("Unable to parse the broker id: {}", err);
+                        return Ok(());
+                    }
+                };
+
+                info!("Broker {} is no longer alive", remove_broker);
+
+                // Remove from brokers usage
+                {
+                    let mut brokers_usage_lock = self.brokers_usage.lock().await;
+                    brokers_usage_lock.remove(&remove_broker);
+                }
+
+                // Remove from rankings
+                {
+                    let mut rankings_lock = self.rankings.lock().await;
+                    rankings_lock.retain(|&(entry_id, _)| entry_id != remove_broker);
+                }
+
+                // TODO! - reallocate the resources to another broker
+                // for now I will delete from metadata store all the topics assigned to /cluster/brokers/removed_broker/*
+                if let Err(err) = self.delete_topic_allocation(remove_broker).await {
+                    error!(
+                        "Unable to delete resources of the unregistered broker {}, due to error {}",
+                        remove_broker, err
+                    );
+                }
+            }
+            WatchEvent::Put { .. } => (), // should not get here
+        }
+        Ok(())
+    }
+
+    async fn handle_load_update(
+        &mut self,
+        key: &[u8],
+        value: &[u8],
+        state: LeaderElectionState,
+        broker_id: u64,
+    ) -> Result<()> {
+        let key_str =
+            std::str::from_utf8(key).map_err(|e| anyhow!("Invalid UTF-8 in key: {}", e))?;
+
+        trace!("A new load report has been received from: {}", key_str);
+
+        // Process the event locally
+        self.process_event(WatchEvent::Put {
+            key: key.to_vec(),
+            value: value.to_vec(),
+            mod_revision: None,
+            version: None,
+        })
+        .await?;
+
+        // Only leader proceeds with rankings calculation
+        if state == LeaderElectionState::Following {
+            return Ok(());
+        }
+
+        // Leader calculates new rankings
         self.calculate_rankings_simple().await;
 
-        let parts: Vec<_> = event.key.split(BASE_UNASSIGNED_PATH).collect();
-        let topic_name = parts[1];
-
-        let broker_id = self.get_next_broker().await;
-        let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string(), topic_name]);
-
-        match self
-            .meta_store
-            .put(&path, serde_json::Value::Null, MetaOptions::None)
+        // Update next_broker based on rankings
+        let next_broker = self
+            .rankings
+            .lock()
             .await
-        {
-            Ok(_) => info!(
-                "The topic {} was successfully assign to broker {}",
-                topic_name, broker_id
-            ),
-            Err(err) => warn!(
-                "Unable to assign topic {} to the broker {}, due to error: {}",
-                topic_name, broker_id, err
-            ),
-        }
+            .get(0)
+            .get_or_insert(&(broker_id, 0))
+            .0;
 
-        // once the broker was notified, update internaly as well
-        // in order to use somehow more accurate information until the new load reports are received
-        let mut brokers_usage = self.brokers_usage.lock().await;
-        if let Some(load_report) = brokers_usage.get_mut(&broker_id) {
-            load_report.topics_len += 1;
-            load_report.topic_list.push(topic_name.to_string());
+        let _ = self
+            .next_broker
+            .swap(next_broker, std::sync::atomic::Ordering::SeqCst);
+
+        Ok(())
+    }
+
+    // Post the topic on the broker address /cluster/brokers/{broker-id}/{namespace}/{topic}
+    // to be further read and processed by the selected broker
+    async fn assign_topic_to_broker(&mut self, event: WatchEvent) {
+        match event {
+            WatchEvent::Put { key, .. } => {
+                // recalculate the rankings after the topic was assigned
+                self.calculate_rankings_simple().await;
+
+                // Convert key from bytes to string
+                let key_str = match std::str::from_utf8(&key) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("Invalid UTF-8 in key: {}", e);
+                        return;
+                    }
+                };
+
+                let parts: Vec<_> = key_str.split(BASE_UNASSIGNED_PATH).collect();
+                let topic_name = parts[1];
+
+                let broker_id = self.get_next_broker().await;
+                let path = join_path(&[BASE_BROKER_PATH, &broker_id.to_string(), topic_name]);
+
+                match self
+                    .meta_store
+                    .put(&path, serde_json::Value::Null, MetaOptions::None)
+                    .await
+                {
+                    Ok(_) => info!(
+                        "The topic {} was successfully assign to broker {}",
+                        topic_name, broker_id
+                    ),
+                    Err(err) => warn!(
+                        "Unable to assign topic {} to the broker {}, due to error: {}",
+                        topic_name, broker_id, err
+                    ),
+                }
+
+                // Update internal state
+                let mut brokers_usage = self.brokers_usage.lock().await;
+                if let Some(load_report) = brokers_usage.get_mut(&broker_id) {
+                    load_report.topics_len += 1;
+                    load_report.topic_list.push(topic_name.to_string());
+                }
+            }
+            WatchEvent::Delete { .. } => (), // Ignore delete events
         }
     }
 
-    async fn process_event(&self, event: ETCDWatchEvent) {
-        if event.event_type != EventType::Put {
-            return;
+    async fn process_event(&mut self, event: WatchEvent) -> Result<()> {
+        match event {
+            WatchEvent::Put { key, value, .. } => {
+                let load_report: LoadReport = serde_json::from_slice(&value)
+                    .map_err(|e| anyhow!("Failed to parse LoadReport: {}", e))?;
+
+                let key_str = std::str::from_utf8(&key)
+                    .map_err(|e| anyhow!("Invalid UTF-8 in key: {}", e))?;
+
+                // Extract broker ID from key path
+                if let Some(broker_id) = extract_broker_id(key_str) {
+                    let mut brokers_usage = self.brokers_usage.lock().await;
+                    brokers_usage.insert(broker_id, load_report);
+                }
+            }
+            WatchEvent::Delete { .. } => (), // should not happen
         }
-
-        let broker_id = match extract_broker_id(&event.key) {
-            Some(id) => id,
-            None => return,
-        };
-
-        let load_report = match event.value.as_deref().and_then(parse_load_report) {
-            Some(report) => report,
-            None => return,
-        };
-
-        let mut brokers_usage = self.brokers_usage.lock().await;
-        brokers_usage.insert(broker_id, load_report);
+        Ok(())
     }
 
     pub async fn get_next_broker(&mut self) -> u64 {
@@ -302,7 +393,7 @@ impl LoadManager {
         Ok(())
     }
 
-    #[allow(dead_code)]
+    //#[allow(dead_code)]
     pub(crate) async fn check_ownership(&self, broker_id: u64, topic_name: &str) -> bool {
         let brokers_usage = self.brokers_usage.lock().await;
         if let Some(load_report) = brokers_usage.get(&broker_id) {
@@ -333,6 +424,7 @@ fn extract_broker_id(key: &str) -> Option<u64> {
         .ok()
 }
 
+#[allow(dead_code)]
 fn parse_load_report(value: &[u8]) -> Option<LoadReport> {
     let value_str = std::str::from_utf8(value).ok()?;
     serde_json::from_str(value_str).ok()

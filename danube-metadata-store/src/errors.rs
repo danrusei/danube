@@ -11,8 +11,8 @@ pub enum MetadataError {
     #[error("Storage backend error: {0}")]
     StorageError(#[from] Box<dyn std::error::Error + Send + Sync>),
 
-    #[error("Failed to connect to storage: {0}")]
-    ConnectionError(String),
+    #[error("Transport error: {0}")]
+    TransportError(String),
 
     #[error("Watch operation timed out")]
     WatchTimeout,
@@ -20,8 +20,14 @@ pub enum MetadataError {
     #[error("Watch channel closed")]
     WatchChannelClosed,
 
-    #[error("Invalid watch key: {0}")]
-    InvalidWatchKey(String),
+    #[error("Lease keepalive error: {0}")]
+    LeaseKeepAliveError(String),
+
+    #[error("Invalid arguments: {0}")]
+    InvalidArguments(String),
+
+    #[error("Key already exists: {0}")]
+    KeyExists(String),
 
     #[error("Watch cancelled")]
     WatchCancelled,
@@ -39,6 +45,12 @@ pub enum MetadataError {
 // Convenience impl for etcd errors
 impl From<etcd_client::Error> for MetadataError {
     fn from(err: etcd_client::Error) -> Self {
-        MetadataError::StorageError(Box::new(err))
+        match err {
+            etcd_client::Error::WatchError(msg) => MetadataError::WatchError(msg),
+            etcd_client::Error::LeaseKeepAliveError(msg) => MetadataError::LeaseKeepAliveError(msg),
+            etcd_client::Error::TransportError(e) => MetadataError::TransportError(e.to_string()),
+            etcd_client::Error::InvalidArgs(msg) => MetadataError::InvalidArguments(msg),
+            err => MetadataError::StorageError(Box::new(err)),
+        }
     }
 }

@@ -1,5 +1,4 @@
 use super::{LoadReport, ResourceType};
-//use LoadReport, ResourceType};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -60,7 +59,7 @@ mod tests {
     use crate::danube_service::load_manager::{
         load_report::SystemLoad, LoadManager, LoadReport, ResourceType,
     };
-    use crate::metadata_store::{MemoryMetadataStore, MetadataStorage, MetadataStoreConfig};
+    use danube_metadata_store::{MemoryStore, StorageBackend};
     use std::sync::atomic::AtomicU64;
 
     fn create_load_report(cpu_usage: usize, memory_usage: usize, topics_len: usize) -> LoadReport {
@@ -82,15 +81,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_broker() {
-        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
-            meta_store: MetadataStorage::MemoryStore(
-                MemoryMetadataStore::new(store_config)
-                    .await
-                    .expect("use for testing"),
+            meta_store: StorageBackend::InMemory(
+                MemoryStore::new().await.expect("use for testing"),
             ),
         };
 
@@ -109,15 +105,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_brokers() {
-        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
-            meta_store: MetadataStorage::MemoryStore(
-                MemoryMetadataStore::new(store_config)
-                    .await
-                    .expect("use for testing"),
+            meta_store: StorageBackend::InMemory(
+                MemoryStore::new().await.expect("use for testing"),
             ),
         };
 
@@ -148,15 +141,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_brokers_usage() {
-        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
-            meta_store: MetadataStorage::MemoryStore(
-                MemoryMetadataStore::new(store_config)
-                    .await
-                    .expect("use for testing"),
+            meta_store: StorageBackend::InMemory(
+                MemoryStore::new().await.expect("use for testing"),
             ),
         };
 
@@ -168,15 +158,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_same_load_brokers() {
-        let store_config = MetadataStoreConfig::new();
         let load_manager = LoadManager {
             brokers_usage: Arc::new(Mutex::new(HashMap::new())),
             rankings: Arc::new(Mutex::new(Vec::new())),
             next_broker: Arc::new(AtomicU64::new(0)),
-            meta_store: MetadataStorage::MemoryStore(
-                MemoryMetadataStore::new(store_config)
-                    .await
-                    .expect("use for testing"),
+            meta_store: StorageBackend::InMemory(
+                MemoryStore::new().await.expect("use for testing"),
             ),
         };
 

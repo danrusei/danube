@@ -1,16 +1,15 @@
 mod trie;
-
 pub(crate) use trie::Trie;
 
 use anyhow::Result;
+use danube_metadata_store::{MetadataStore, StorageBackend, WatchEvent, WatchStream};
 use dashmap::DashMap;
-use etcd_client::Client;
+use futures::StreamExt;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
-use tracing::info;
+use tokio::sync::Mutex;
+use tracing::{error, info};
 
-use crate::metadata_store::{etcd_watch_prefixes, ETCDWatchEvent};
 use crate::resources::{
     BASE_CLUSTER_PATH, BASE_NAMESPACES_PATH, BASE_SUBSCRIPTIONS_PATH, BASE_TOPICS_PATH,
 };
@@ -40,16 +39,19 @@ pub(crate) struct LocalCache {
     topics: Arc<DashMap<String, (i64, Value)>>,
     // holds information about the topic subscriptions, including their consumers
     subscriptions: Arc<DashMap<String, (i64, Value)>>,
+    // metadata store
+    metadata_store: StorageBackend,
 }
 
 impl LocalCache {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(metadata_store: StorageBackend) -> Self {
         LocalCache {
             keys: Arc::new(Mutex::new(Trie::new())),
             cluster: Arc::new(DashMap::new()),
             namespaces: Arc::new(DashMap::new()),
             topics: Arc::new(DashMap::new()),
             subscriptions: Arc::new(DashMap::new()),
+            metadata_store,
         }
     }
 
@@ -97,63 +99,68 @@ impl LocalCache {
     }
 
     // Function to populate cache with initial data from etcd
-    pub(crate) async fn populate_start_local_cache(
-        &self,
-        mut client: Client,
-    ) -> Result<mpsc::Receiver<ETCDWatchEvent>> {
-        let prefixes = vec!["/cluster", "/namespaces", "/topics", "/subscriptions"];
+    // It fetches the data from the etcd store and updates the local cache
+    pub(crate) async fn populate_start_local_cache(&self) -> Result<WatchStream> {
+        let prefixes = vec![
+            BASE_CLUSTER_PATH,
+            BASE_NAMESPACES_PATH,
+            BASE_TOPICS_PATH,
+            BASE_SUBSCRIPTIONS_PATH,
+        ];
 
-        for prefix in prefixes {
-            let response = client
-                .get(prefix, Some(etcd_client::GetOptions::new().with_prefix()))
-                .await
-                .unwrap();
-            for kv in response.kvs() {
-                let key = String::from_utf8(kv.key().to_vec()).unwrap();
-                let value = kv.value();
-                let version = kv.version();
-                self.update_cache(&key, version, Some(value)).await;
+        for prefix in &prefixes {
+            let kvs = self.metadata_store.get_bulk(prefix).await?;
+            for kv in kvs {
+                self.update_cache(&kv.key, kv.version, Some(&kv.value))
+                    .await;
             }
         }
         info!("Initial cache populated");
 
-        let (tx_event, rx_event) = mpsc::channel(32);
+        // Create combined watch stream for all prefixes
+        let mut streams = Vec::new();
+        for prefix in prefixes {
+            let watch_stream = self.metadata_store.watch(prefix).await?;
+            streams.push(watch_stream);
+        }
 
-        // watch for ETCD events
-        tokio::spawn(async move {
-            let mut prefixes = Vec::new();
-            prefixes.extend(
-                [
-                    BASE_CLUSTER_PATH.to_string(),
-                    BASE_NAMESPACES_PATH.to_string(),
-                    BASE_TOPICS_PATH.to_string(),
-                    BASE_SUBSCRIPTIONS_PATH.to_string(),
-                ]
-                .into_iter(),
-            );
-            let _ = etcd_watch_prefixes(client, prefixes, tx_event).await;
-        });
-
-        Ok(rx_event)
+        let combined_stream = futures::stream::select_all(streams);
+        Ok(WatchStream::new(combined_stream))
     }
 
-    // updates the LocalCache with the received WAtch events
-    pub(crate) async fn process_event(&self, mut rx_event: mpsc::Receiver<ETCDWatchEvent>) {
-        while let Some(event) = rx_event.recv().await {
-            // trace!(
-            //     "{}",
-            //     format!(
-            //         "A new Watch event {:?} has been received for {:?}",
-            //         event.event_type, event.key
-            //     )
-            // );
-            match event.event_type {
-                etcd_client::EventType::Put => {
-                    self.update_cache(&event.key, event.version, event.value.as_deref())
-                        .await
-                }
-                etcd_client::EventType::Delete => {
-                    self.update_cache(&event.key, event.version, None).await
+    pub(crate) async fn process_event(&self, mut watch_stream: WatchStream) {
+        while let Some(result) = watch_stream.next().await {
+            match result {
+                Ok(event) => match event {
+                    WatchEvent::Put {
+                        key,
+                        value,
+                        version,
+                        ..
+                    } => {
+                        let key_str = match std::str::from_utf8(&key) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                error!("Invalid UTF-8 in key: {}", e);
+                                continue;
+                            }
+                        };
+                        self.update_cache(key_str, version.unwrap_or(0), Some(&value))
+                            .await;
+                    }
+                    WatchEvent::Delete { key, version, .. } => {
+                        let key_str = match std::str::from_utf8(&key) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                error!("Invalid UTF-8 in key: {}", e);
+                                continue;
+                            }
+                        };
+                        self.update_cache(key_str, version.unwrap_or(0), None).await;
+                    }
+                },
+                Err(e) => {
+                    error!("Error receiving watch event: {}", e);
                 }
             }
         }

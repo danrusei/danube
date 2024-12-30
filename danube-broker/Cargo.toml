@@ -7,11 +7,11 @@ edition = "2021"
 
 [dependencies]
 danube-client = {path = "../danube-client"}
+danube-metadata-store = {path = "../danube-metadata-store"}
 danube-reliable-dispatch = {path = "../danube-reliable-dispatch"}
 
 clap = { version = "4.5.4", features = ["derive"] }
 dashmap = "5.5.3"
-etcd-client = "0.12.4"
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

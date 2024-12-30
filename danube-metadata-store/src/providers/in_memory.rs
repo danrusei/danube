@@ -1,25 +1,26 @@
-use anyhow::{anyhow, Result};
-use dashmap::mapref::one::RefMut;
-use dashmap::DashMap;
+use crate::{
+    errors::Result,
+    store::{MetaOptions, MetadataStore},
+    watch::WatchStream,
+    MetadataError,
+};
+
+use async_trait::async_trait;
+use dashmap::{mapref::one::RefMut, DashMap};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-use crate::metadata_store::{MetaOptions, MetadataStore};
-
-use super::MetadataStoreConfig;
-
-/// Should be used for only one Broker instance, not available in Cluster mode
-///
-/// TODO! this is wrong to figure out if I still keep this implementation or wrap into ARC
+/// MemoryStore is a simple in-memory key-value store that implements the MetadataStore trait.
+/// SHOULD BE USED ONLY FOR TESTING PURPOSES
 #[derive(Debug, Clone)]
-pub(crate) struct MemoryMetadataStore {
+pub struct MemoryStore {
     inner: DashMap<String, BTreeMap<String, Value>>,
 }
 
-impl MemoryMetadataStore {
+impl MemoryStore {
     #[allow(dead_code)]
-    pub(crate) async fn new(_store_config: MetadataStoreConfig) -> Result<Self> {
-        Ok(MemoryMetadataStore {
+    pub async fn new() -> Result<Self> {
+        Ok(MemoryStore {
             inner: DashMap::new(),
         })
     }
@@ -34,9 +35,10 @@ impl MemoryMetadataStore {
     }
 }
 
-impl MetadataStore for MemoryMetadataStore {
+#[async_trait]
+impl MetadataStore for MemoryStore {
     // Read the value of one key, identified by the path
-    async fn get(&mut self, path: &str, _get_options: MetaOptions) -> Result<Option<Value>> {
+    async fn get(&self, path: &str, _get_options: MetaOptions) -> Result<Option<Value>> {
         let bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
@@ -49,7 +51,7 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Return all the paths that are children to the specific path.
-    async fn get_childrens(&mut self, path: &str) -> Result<Vec<String>> {
+    async fn get_childrens(&self, path: &str) -> Result<Vec<String>> {
         let bmap = self.get_map(path)?;
         let mut child_paths = Vec::new();
 
@@ -69,14 +71,14 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Put a new value for a given key
-    async fn put(&mut self, path: &str, value: Value, _put_options: MetaOptions) -> Result<()> {
+    async fn put(&self, path: &str, value: Value, _put_options: MetaOptions) -> Result<()> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
         if key.is_empty() {
-            return Err(anyhow!("wrong path"));
+            return Err(MetadataError::Unknown("wrong path".to_string()).into());
         }
 
         bmap.insert(key, value);
@@ -85,21 +87,28 @@ impl MetadataStore for MemoryMetadataStore {
     }
 
     // Delete the key / value from the store
-    async fn delete(&mut self, path: &str) -> Result<Option<Value>> {
+    async fn delete(&self, path: &str) -> Result<()> {
         let mut bmap = self.get_map(path)?;
 
         let parts: Vec<&str> = path.split('/').skip(3).collect();
         let key = parts.join("/");
 
         if key.is_empty() {
-            return Err(anyhow!("wrong path"));
+            return Err(MetadataError::Unknown("wrong path".to_string()).into());
         }
 
-        let value = bmap.remove(&key);
-        Ok(value)
+        let _value = bmap.remove(&key);
+        Ok(())
     }
 
+    async fn watch(&self, _prefix: &str) -> Result<WatchStream> {
+        unimplemented!()
+    }
+}
+
+impl MemoryStore {
     // Delete a key-value pair and all the children nodes
+    #[allow(dead_code)]
     async fn delete_recursive(&mut self, path: &str) -> Result<()> {
         let mut bmap = self.get_map(path)?;
         let mut keys_to_remove = Vec::new();
@@ -117,14 +126,10 @@ impl MetadataStore for MemoryMetadataStore {
         }
 
         for key in keys_to_remove {
-            let _ = bmap.remove(&key).ok_or(anyhow!("unable to remove key"))?;
+            bmap.remove(&key);
         }
 
         Ok(())
-    }
-
-    fn get_client(&mut self) -> Option<etcd_client::Client> {
-        None
     }
 }
 
@@ -134,8 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_get_delete() -> Result<()> {
-        let store_config = MetadataStoreConfig::new();
-        let mut store = MemoryMetadataStore::new(store_config).await?;
+        let store = MemoryStore::new().await?;
 
         let topic_id = "another-topic";
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
@@ -161,8 +165,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_nonexistent_key() -> Result<()> {
-        let store_config = MetadataStoreConfig::new();
-        let mut store = MemoryMetadataStore::new(store_config).await?;
+        let store = MemoryStore::new().await?;
         let topic_id = "unknown-topic";
 
         // Try to get a non-existent key
@@ -192,8 +195,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_invalid_path() -> Result<()> {
-        let store_config = MetadataStoreConfig::new();
-        let mut store = MemoryMetadataStore::new(store_config).await?;
+        let store = MemoryStore::new().await?;
         let value: Value = serde_json::from_str("{\"sampling_rate\": 0.5}").unwrap();
 
         // Try to put with invalid path (missing segment)
@@ -204,10 +206,10 @@ mod tests {
 
         Ok(())
     }
+
     #[tokio::test]
     async fn test_delete_recursive() -> Result<()> {
-        let store_config = MetadataStoreConfig::new();
-        let mut store = MemoryMetadataStore::new(store_config).await?;
+        let mut store = MemoryStore::new().await?;
 
         // Create a sample data structure
         store
@@ -259,8 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_childrens() -> Result<()> {
-        let store_config = MetadataStoreConfig::new();
-        let mut store = MemoryMetadataStore::new(store_config).await?;
+        let store = MemoryStore::new().await?;
 
         // Create a sample data structure
         store

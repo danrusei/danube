@@ -179,7 +179,7 @@ impl BrokerService {
                 1 => {}
                 _ => {
                     let error_string =
-                        "Unable to create a topic with the specified retention strategy";
+                        "Unable to create a topic with the specified dispatch strategy";
                     let status = create_error_status(
                         Code::InvalidArgument,
                         ErrorType::UnknownError,
@@ -190,7 +190,7 @@ impl BrokerService {
                 }
             }
         } else {
-            let error_string = "Delivery strategy is missing";
+            let error_string = "Dispatch strategy is missing";
             let status = create_error_status(
                 Code::InvalidArgument,
                 ErrorType::UnknownError,
@@ -314,9 +314,9 @@ impl BrokerService {
         //get retention strategy from local_cache
         let dispatch_strategy = self.resources.topic.get_dispatch_strategy(topic_name);
         if dispatch_strategy.is_none() {
-            warn!("Unable to create topic without a valid delivery strategy");
+            warn!("Unable to create topic without a valid dispatch strategy");
             return Err(anyhow!(
-                "Unable to create topic without a valid delivery strategy"
+                "Unable to create topic without a valid dispatch strategy"
             ));
         }
 

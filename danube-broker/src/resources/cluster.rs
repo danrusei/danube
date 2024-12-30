@@ -1,8 +1,8 @@
 use anyhow::{Ok, Result};
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use serde_json::Value;
 
 use crate::{
-    metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
     resources::{BASE_BROKER_PATH, BASE_CLUSTER_PATH, BASE_NAMESPACES_PATH, LEADER_ELECTION_PATH},
     utils::join_path,
     LocalCache,
@@ -13,11 +13,11 @@ use super::{BASE_REGISTER_PATH, BASE_UNASSIGNED_PATH};
 #[derive(Debug, Clone)]
 pub(crate) struct ClusterResources {
     local_cache: LocalCache,
-    store: MetadataStorage,
+    store: StorageBackend,
 }
 
 impl ClusterResources {
-    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+    pub(crate) fn new(local_cache: LocalCache, store: StorageBackend) -> Self {
         ClusterResources { local_cache, store }
     }
 

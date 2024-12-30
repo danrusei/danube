@@ -1,6 +1,5 @@
-use crate::metadata_store::{MetaOptions, MetadataStorage, MetadataStore};
-use anyhow::{anyhow, Result};
-use etcd_client::PutOptions as EtcdPutOptions;
+use anyhow::Result;
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration, Interval};
@@ -20,12 +19,12 @@ pub(crate) enum LeaderElectionState {
 pub(crate) struct LeaderElection {
     path: String,
     broker_id: u64,
-    store: MetadataStorage,
+    store: StorageBackend,
     state: Arc<Mutex<LeaderElectionState>>,
 }
 
 impl LeaderElection {
-    pub fn new(store: MetadataStorage, path: &str, broker_id: u64) -> Self {
+    pub fn new(store: StorageBackend, path: &str, broker_id: u64) -> Self {
         Self {
             path: path.to_owned(),
             broker_id,
@@ -71,90 +70,52 @@ impl LeaderElection {
     }
 
     async fn try_to_become_leader(&mut self) -> Result<bool> {
-        let mut client = if let Some(client) = self.store.get_client() {
-            client
-        } else {
-            return Err(anyhow!("unable to get the etcd_client"));
-        };
+        match self.store {
+            StorageBackend::Etcd(_) => {
+                //TODO! make this user configurable, this should be half of the broker register TTL
+                // we want the broker to become the leader first,
+                // before another broker unregister in order for leader broker to alocate/ delete resources
+                let ttl = 14;
 
-        //TODO! make this user configurable, this should be half of the broker register TTL
-        // we want the broker to become the leader first,
-        // before another broker unregister in order for leader broker to alocate/ delete resources
-        let ttl = 14;
+                // Create lease
+                let lease = self.store.create_lease(ttl).await?;
+                let lease_id = lease.id();
 
-        let payload = self.broker_id.clone();
-        let lease_id = client.lease_grant(ttl, None).await?.id();
-        let put_opts = EtcdPutOptions::new().with_lease(lease_id);
+                // Prepare payload
+                let payload = serde_json::Value::Number(serde_json::Number::from(self.broker_id));
 
-        let payload = serde_json::Value::Number(serde_json::Number::from(payload));
-
-        match self
-            .store
-            .put(self.path.as_str(), payload, MetaOptions::EtcdPut(put_opts))
-            .await
-        {
-            Ok(_) => {
-                self.keep_alive_lease(lease_id, ttl).await?;
-                Ok(true)
+                // Try to become leader by putting value with lease
+                match self
+                    .store
+                    .put_with_lease(&self.path, payload, lease_id)
+                    .await
+                {
+                    Ok(_) => {
+                        // Start lease keepalive in background
+                        tokio::spawn({
+                            let store = self.store.clone();
+                            async move {
+                                loop {
+                                    match store.keep_lease_alive(lease_id, "Leader Election").await
+                                    {
+                                        Ok(_) => {
+                                            sleep(Duration::from_secs(ttl as u64 / 2)).await;
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to keep leader lease alive: {}", e);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        Ok(true)
+                    }
+                    Err(e) => Err(e.into()),
+                }
             }
-            Err(e) => Err(e.into()),
+            _ => return Err(anyhow::anyhow!("Unsupported storage backend")),
         }
-    }
-
-    async fn keep_alive_lease(&mut self, lease_id: i64, ttl: i64) -> Result<()> {
-        let mut client = if let Some(client) = self.store.get_client() {
-            client
-        } else {
-            return Err(anyhow!("unable to get the etcd_client"));
-        };
-        let (mut keeper, mut stream) = client.lease_keep_alive(lease_id).await?;
-
-        tokio::spawn(async move {
-            loop {
-                // Attempt to send a keep-alive request
-                match keeper.keep_alive().await {
-                    Ok(_) => debug!(
-                        "Leader Election, keep-alive request sent for lease {}",
-                        lease_id
-                    ),
-                    Err(e) => {
-                        error!(
-                            "Leader Election, failed to send keep-alive request for lease {}: {}",
-                            lease_id, e
-                        );
-                        break;
-                    }
-                }
-
-                // Check for responses from etcd to confirm the lease is still alive
-                match stream.message().await {
-                    Ok(Some(_response)) => {
-                        debug!(
-                            "Leader Election, received keep-alive response for lease {}",
-                            lease_id
-                        );
-                    }
-                    Ok(None) => {
-                        error!(
-                            "Leader Election, keep-alive response stream ended unexpectedly for lease {}",
-                            lease_id
-                        );
-                        break;
-                    }
-                    Err(e) => {
-                        error!(
-                            "Leader Election, failed to receive keep-alive response for lease {}: {}",
-                            lease_id, e
-                        );
-                        break;
-                    }
-                }
-
-                // Sleep for a period shorter than the lease TTL to ensure continuous renewal
-                sleep(Duration::from_secs(ttl as u64 / 2)).await;
-            }
-        });
-        Ok(())
     }
 
     async fn check_leader(&mut self) -> Result<()> {

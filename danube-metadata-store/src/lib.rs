@@ -1,26 +1,32 @@
 mod errors;
-pub(crate) use errors::{MetadataError, Result};
+pub use errors::MetadataError;
+pub(crate) use errors::Result;
 
 mod store;
+pub use store::MetaOptions;
+pub use store::MetadataStore;
 
 mod watch;
-
-use etcd_client::LeaseGrantResponse;
-pub use store::MetaOptions;
-use store::MetadataStore;
 pub use watch::{WatchEvent, WatchStream};
 
 mod providers;
-pub(crate) use providers::{etcd::EtcdStore, redis::RedisStore};
+pub use providers::{
+    etcd::{EtcdStore, KeyValueVersion},
+    in_memory::MemoryStore,
+    redis::RedisStore,
+};
 
 use async_trait::async_trait;
+pub use etcd_client::GetOptions as EtcdGetOptions;
+use etcd_client::LeaseGrantResponse;
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub enum StorageBackend {
     Etcd(EtcdStore),
     Redis(RedisStore),
-    // Future backends: Consul, Zookeeper, PostgreSQL, MongoDB etc.
+    InMemory(MemoryStore), // InMemory is used for testing purposes
+                           // Future backends: Consul, Zookeeper, PostgreSQL, MongoDB etc.
 }
 
 #[async_trait]
@@ -29,6 +35,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.get(key, get_options).await,
             StorageBackend::Redis(store) => store.get(key, get_options).await,
+            StorageBackend::InMemory(store) => store.get(key, get_options).await,
         }
     }
 
@@ -36,6 +43,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.get_childrens(path).await,
             StorageBackend::Redis(store) => store.get_childrens(path).await,
+            StorageBackend::InMemory(store) => store.get_childrens(path).await,
         }
     }
 
@@ -43,6 +51,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.put(key, value, put_options).await,
             StorageBackend::Redis(store) => store.put(key, value, put_options).await,
+            StorageBackend::InMemory(store) => store.put(key, value, put_options).await,
         }
     }
 
@@ -50,6 +59,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.delete(key).await,
             StorageBackend::Redis(store) => store.delete(key).await,
+            StorageBackend::InMemory(store) => store.delete(key).await,
         }
     }
 
@@ -57,6 +67,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.watch(prefix).await,
             StorageBackend::Redis(store) => store.watch(prefix).await,
+            StorageBackend::InMemory(store) => store.watch(prefix).await,
         }
     }
 }
@@ -69,16 +80,22 @@ impl StorageBackend {
         }
     }
 
-    pub async fn keep_lease_alive(&self, lease_id: i64) -> Result<()> {
+    pub async fn keep_lease_alive(&self, lease_id: i64, role: &str) -> Result<()> {
         match self {
-            StorageBackend::Etcd(store) => store.keep_lease_alive(lease_id).await,
+            StorageBackend::Etcd(store) => store.keep_lease_alive(lease_id, role).await,
             _ => Err(MetadataError::UnsupportedOperation.into()),
         }
     }
 
-    pub async fn put_with_lease(&self, key: &str, value: Vec<u8>, lease_id: i64) -> Result<()> {
+    pub async fn put_with_lease(&self, key: &str, value: Value, lease_id: i64) -> Result<()> {
         match self {
             StorageBackend::Etcd(store) => store.put_with_lease(key, value, lease_id).await,
+            _ => Err(MetadataError::UnsupportedOperation.into()),
+        }
+    }
+    pub async fn get_bulk(&self, prefix: &str) -> Result<Vec<KeyValueVersion>> {
+        match self {
+            StorageBackend::Etcd(store) => store.get_bulk(prefix).await,
             _ => Err(MetadataError::UnsupportedOperation.into()),
         }
     }

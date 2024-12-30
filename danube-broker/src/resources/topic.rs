@@ -1,24 +1,20 @@
 use anyhow::Result;
 use danube_client::ConfigDispatchStrategy;
+use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend};
 use serde_json::Value;
 
 use crate::{
-    metadata_store::{MetaOptions, MetadataStorage, MetadataStore},
-    policies::Policies,
-    resources::BASE_TOPICS_PATH,
-    schema::Schema,
-    utils::join_path,
-    LocalCache,
+    policies::Policies, resources::BASE_TOPICS_PATH, schema::Schema, utils::join_path, LocalCache,
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct TopicResources {
     local_cache: LocalCache,
-    store: MetadataStorage,
+    store: StorageBackend,
 }
 
 impl TopicResources {
-    pub(crate) fn new(local_cache: LocalCache, store: MetadataStorage) -> Self {
+    pub(crate) fn new(local_cache: LocalCache, store: StorageBackend) -> Self {
         TopicResources { local_cache, store }
     }
     pub(crate) async fn topic_exists(&mut self, topic_name: &str) -> Result<bool> {
