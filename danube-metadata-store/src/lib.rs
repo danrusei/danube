@@ -12,6 +12,7 @@ pub use watch::{WatchEvent, WatchStream};
 mod providers;
 pub use providers::{
     etcd::{EtcdStore, KeyValueVersion},
+    in_memory::MemoryStore,
     redis::RedisStore,
 };
 
@@ -23,7 +24,8 @@ use serde_json::Value;
 pub enum StorageBackend {
     Etcd(EtcdStore),
     Redis(RedisStore),
-    // Future backends: Consul, Zookeeper, PostgreSQL, MongoDB etc.
+    InMemory(MemoryStore), // InMemory is used for testing purposes
+                           // Future backends: Consul, Zookeeper, PostgreSQL, MongoDB etc.
 }
 
 #[async_trait]
@@ -32,6 +34,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.get(key, get_options).await,
             StorageBackend::Redis(store) => store.get(key, get_options).await,
+            StorageBackend::InMemory(store) => store.get(key, get_options).await,
         }
     }
 
@@ -39,6 +42,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.get_childrens(path).await,
             StorageBackend::Redis(store) => store.get_childrens(path).await,
+            StorageBackend::InMemory(store) => store.get_childrens(path).await,
         }
     }
 
@@ -46,6 +50,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.put(key, value, put_options).await,
             StorageBackend::Redis(store) => store.put(key, value, put_options).await,
+            StorageBackend::InMemory(store) => store.put(key, value, put_options).await,
         }
     }
 
@@ -53,6 +58,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.delete(key).await,
             StorageBackend::Redis(store) => store.delete(key).await,
+            StorageBackend::InMemory(store) => store.delete(key).await,
         }
     }
 
@@ -60,6 +66,7 @@ impl MetadataStore for StorageBackend {
         match self {
             StorageBackend::Etcd(store) => store.watch(prefix).await,
             StorageBackend::Redis(store) => store.watch(prefix).await,
+            StorageBackend::InMemory(store) => store.watch(prefix).await,
         }
     }
 }
