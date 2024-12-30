@@ -19,7 +19,7 @@ pub struct MemoryStore {
 
 impl MemoryStore {
     #[allow(dead_code)]
-    pub(crate) async fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(MemoryStore {
             inner: DashMap::new(),
         })
