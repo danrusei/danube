@@ -2,8 +2,8 @@ pub(crate) mod load_report;
 mod rankings;
 
 use anyhow::{anyhow, Result};
+use danube_metadata_store::EtcdGetOptions;
 use danube_metadata_store::{MetaOptions, MetadataStore, StorageBackend, WatchEvent, WatchStream};
-use etcd_client::GetOptions as EtcdGetOptions;
 use futures::stream::StreamExt;
 use load_report::{LoadReport, ResourceType};
 use rankings::{rankings_composite, rankings_simple};

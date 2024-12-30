@@ -17,6 +17,7 @@ pub use providers::{
 };
 
 use async_trait::async_trait;
+pub use etcd_client::GetOptions as EtcdGetOptions;
 use etcd_client::LeaseGrantResponse;
 use serde_json::Value;
 
