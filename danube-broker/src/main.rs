@@ -8,7 +8,6 @@ mod dispatch_strategy;
 mod dispatcher;
 mod error_message;
 mod message;
-mod metadata_store;
 mod policies;
 mod producer;
 mod resources;
