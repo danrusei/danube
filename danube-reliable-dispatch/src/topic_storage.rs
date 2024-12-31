@@ -132,29 +132,37 @@ impl TopicStore {
         }
     }
 
-    // if the segment is full, it will close the segment and create a new one with next ID
+    // The full segment is added to backend storage
+    // A new segment is created in memory and set as the current segment
     async fn handle_segment_full(
         &self,
         segment_id: usize,
         close_time: u64,
         message: StreamMessage,
     ) -> Result<()> {
+        // First write the current full segment to storage
+        if let Some(cached) = &*self.cached_segment.lock().await {
+            self.storage.put_segment(segment_id, cached.clone()).await?;
+        }
+
+        // Update segment index with close time
         let mut index = self.segments_index.write().await;
         if let Some(entry) = index.iter_mut().find(|(id, _)| *id == segment_id) {
             entry.1 = close_time;
         }
 
+        // Create new segment only in cache
         let new_segment_id = segment_id + 1;
         let new_segment = Arc::new(RwLock::new(Segment::new(new_segment_id, self.segment_size)));
 
-        self.storage
-            .put_segment(new_segment_id, new_segment.clone())
-            .await?;
+        // Update index for new segment
         index.push((new_segment_id, 0));
 
+        // Update cache and current segment id
         *self.cached_segment.lock().await = Some(new_segment.clone());
         *self.current_segment_id.write().await = new_segment_id;
 
+        // Add initial message to new segment
         let mut new_writable_segment = new_segment.write().await;
         new_writable_segment.add_message(message);
 
@@ -162,25 +170,37 @@ impl TopicStore {
     }
 
     // Get the next segment in the list based on the given segment ID
-    // If the current segment is 0, it will return the first segment in the list
+    // If the current_segment is None, it will return the first segment in the list
+    // If the current_segment is the last segment in the list, it will return None
+    // If the next segment is the cached one (writtable segment), it will return the cached segment
     pub(crate) async fn get_next_segment(
         &self,
         current_segment_id: Option<usize>,
     ) -> Result<Option<Arc<RwLock<Segment>>>> {
         let index = self.segments_index.read().await;
+        let cached = self.cached_segment.lock().await;
+        let current_cached_id = *self.current_segment_id.read().await;
 
         match current_segment_id {
             None => {
-                if !index.is_empty() {
-                    let first_segment_id = index[0].0;
-                    return self.storage.get_segment(first_segment_id).await;
+                // If index is empty, topic has no segments
+                if index.is_empty() {
+                    return Ok(None);
                 }
-                Ok(None)
+                // Get first segment - check if it's cached
+                let first_segment_id = index[0].0;
+                if first_segment_id == current_cached_id {
+                    return Ok(cached.clone());
+                }
+                return self.storage.get_segment(first_segment_id).await;
             }
             Some(segment_id) => {
                 if let Some(pos) = index.iter().position(|(id, _)| *id == segment_id) {
                     if pos + 1 < index.len() {
                         let next_segment_id = index[pos + 1].0;
+                        if next_segment_id == current_cached_id {
+                            return Ok(cached.clone());
+                        }
                         return self.storage.get_segment(next_segment_id).await;
                     }
                 }
