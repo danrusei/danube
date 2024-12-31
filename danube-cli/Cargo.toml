@@ -1,17 +1,18 @@
 [package]
-name = "danube-admin"
+name = "danube-cli"
 version = "0.1.5"
 edition = "2021"
 
 [dependencies]
 clap = {version = "4.5.8", features =["derive"]}
-tonic = { workspace = true }
-tonic-types = { workspace = true }
-prost = { workspace = true }
+futures-util = "0.3.30"
+anyhow = "1.0.83"
 tokio = { workspace = true }
-prettytable-rs = "0.10.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
+valico = "3.6"
+
+danube-client = {path = "../danube-client"}
 
 [lints]
 workspace = true
