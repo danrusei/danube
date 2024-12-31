@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
 
     let client_proto_dir = Path::new("../danube-client/src/proto");
-    let admin_proto_dir = Path::new("../danube-admin/src/proto");
+    let admin_proto_dir = Path::new("../danube-admin-cli/src/proto");
 
     // copy the generated api file to danube-client crate
     fs::copy(
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         client_proto_dir.join("danube.rs"),
     )?;
 
-    // copy the generated admin file to danube-admin crate
+    // copy the generated admin file to danube-admin-cli crate
     fs::copy(
         out_dir.join("danube_admin.rs"),
         admin_proto_dir.join("danube_admin.rs"),

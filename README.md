@@ -30,9 +30,11 @@ I'm continuously working on enhancing and adding new features. **Contributions a
 The crates part of the Danube workspace:
 
 * danube-broker - The main crate, danube pubsub platform
-* danube-admin - Admin CLI designed for interacting with and managing the Danube cluster
+  * danube-reliable-dispatch - Part of danube-broker, responsible of reliable dispatching
+  * danube-metadata-store - Part of danube-broker, responsibile of Metadata storage
 * danube-client - An async Rust client library for interacting with Danube Pub/Sub messaging platform
-* danube-pubsub - CLI to handle message publishing and consumption,
+* danube-cli - Client CLI to handle message publishing and consumption
+* danube-admin-cli - Admin CLI designed for interacting with and managing the Danube cluster
 
 [Follow the instructions](https://dev-state.com/danube_docs/development/dev_environment/) on how to setup the development environment.
 

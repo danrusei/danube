@@ -33,8 +33,8 @@ jobs:
           name: danube-binaries-linux
           path: |
             target/x86_64-unknown-linux-gnu/release/danube-broker
-            target/x86_64-unknown-linux-gnu/release/danube-admin
-            target/x86_64-unknown-linux-gnu/release/danube-pubsub
+            target/x86_64-unknown-linux-gnu/release/danube-admin-cli
+            target/x86_64-unknown-linux-gnu/release/danube-cli
 
   docker:
     needs: build
@@ -101,8 +101,8 @@ jobs:
 
             Binaries:
             - **Danube Broker**: [Download danube-broker](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker)
-            - **Danube Admin**: [Download danube-admin](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin)
-            - **Danube Pub/Sub cli**: [Download danube-pubsub](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-pubsub)
+            - **Danube Admin cli**: [Download danube-admin-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin-cli)
+            - **Danube Client cli**: [Download danube-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-cli)
             
             Docker Image:
             - **Docker Image**: ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref_name }}
@@ -117,22 +117,22 @@ jobs:
           asset_name: danube-broker
           asset_content_type: application/octet-stream
           
-      - name: Upload danube-admin
+      - name: Upload danube-admin-cli
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/linux/danube-admin
-          asset_name: danube-admin
+          asset_path: artifacts/linux/danube-admin-cli
+          asset_name: danube-admin-cli
           asset_content_type: application/octet-stream
           
-      - name: Upload danube-pubsub
+      - name: Upload danube-cli
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/linux/danube-pubsub
-          asset_name: danube-pubsub
+          asset_path: artifacts/linux/danube-cli
+          asset_name: danube-cli
           asset_content_type: application/octet-stream

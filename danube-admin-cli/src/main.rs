@@ -14,7 +14,7 @@ pub mod proto {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "danube-admin")]
+#[command(name = "danube-admin-cli")]
 #[command(about = "CLI for managing the Danube pub/sub platform", long_about = None)]
 struct Cli {
     #[command(subcommand)]

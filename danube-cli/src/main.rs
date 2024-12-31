@@ -7,7 +7,7 @@ use consume::Consume;
 use produce::Produce;
 
 #[derive(Debug, Parser)]
-#[command(name = "danube-pubsub")]
+#[command(name = "danube-cli")]
 #[command(about = "A command-line tool to interact with Danube service")]
 struct Cli {
     #[command(subcommand)]
