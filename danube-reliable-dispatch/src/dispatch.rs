@@ -29,6 +29,8 @@ pub struct SubscriptionDispatch {
     pub(crate) pending_ack_message: Option<(u64, MessageID)>,
     // maps MessageID to request_id of segment acknowledged messages
     pub(crate) acked_messages: HashMap<MessageID, u64>,
+    // retry count for the pending ack message
+    retry_count: u8,
 }
 
 impl SubscriptionDispatch {
@@ -40,6 +42,7 @@ impl SubscriptionDispatch {
             current_segment_id: None,
             pending_ack_message: None,
             acked_messages: HashMap::new(),
+            retry_count: 0,
         }
     }
 
@@ -149,24 +152,37 @@ impl SubscriptionDispatch {
     /// Processes the next unacknowledged message in the current segment.
     async fn process_next_message(&mut self) -> Result<StreamMessage> {
         // Only process next message if there's no pending acknowledgment
-        if self.pending_ack_message.is_none() {
-            if let Some(segment) = &self.segment {
-                let next_message = {
-                    let segment_data = segment.read().await;
-                    segment_data
-                        .messages
-                        .iter()
-                        .find(|msg| !self.acked_messages.contains_key(&msg.msg_id))
-                        .cloned()
-                };
-
-                if let Some(msg) = next_message {
-                    self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
-                    return Ok(msg);
+        match self.pending_ack_message {
+            None => return self.send_message().await,
+            Some(_) => {
+                if self.retry_count < 3 {
+                    self.retry_count += 1;
+                    return self.send_message().await;
                 }
             }
         }
 
+        Err(ReliableDispatchError::InvalidState(
+            "Pending ack message".to_string(),
+        ))
+    }
+
+    async fn send_message(&mut self) -> Result<StreamMessage> {
+        if let Some(segment) = &self.segment {
+            let next_message = {
+                let segment_data = segment.read().await;
+                segment_data
+                    .messages
+                    .iter()
+                    .find(|msg| !self.acked_messages.contains_key(&msg.msg_id))
+                    .cloned()
+            };
+
+            if let Some(msg) = next_message {
+                self.pending_ack_message = Some((msg.request_id, msg.msg_id.clone()));
+                return Ok(msg);
+            }
+        }
         Err(ReliableDispatchError::InvalidState(
             "Pending ack message".to_string(),
         ))
@@ -194,6 +210,7 @@ impl SubscriptionDispatch {
                     request_id,
                     msg_id
                 );
+                self.retry_count = 0;
                 return Ok(());
             }
         }

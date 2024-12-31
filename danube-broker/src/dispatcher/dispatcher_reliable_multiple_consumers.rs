@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
 use danube_reliable_dispatch::SubscriptionDispatch;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::{
@@ -31,17 +30,17 @@ impl DispatcherReliableMultipleConsumers {
                     Some(command) = control_rx.recv() => {
                         match command {
                             DispatcherCommand::AddConsumer(consumer) => {
-                            consumers.push(consumer);
-                            trace!("Consumer added. Total consumers: {}", consumers.len());
-                        }
+                                consumers.push(consumer);
+                                trace!("Consumer added. Total consumers: {}", consumers.len());
+                            }
                             DispatcherCommand::RemoveConsumer(consumer_id) => {
-                            consumers.retain(|c| c.consumer_id != consumer_id);
-                            trace!("Consumer removed. Total consumers: {}", consumers.len());
-                        }
-                             DispatcherCommand::DisconnectAllConsumers => {
-                            consumers.clear();
-                            trace!("All consumers disconnected.");
-                        }
+                                consumers.retain(|c| c.consumer_id != consumer_id);
+                                trace!("Consumer removed. Total consumers: {}", consumers.len());
+                            }
+                            DispatcherCommand::DisconnectAllConsumers => {
+                                consumers.clear();
+                                trace!("All consumers disconnected.");
+                            }
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
@@ -55,22 +54,21 @@ impl DispatcherReliableMultipleConsumers {
                     _ = interval.tick() => {
                         // Send ordered messages from the segment to the consumers
                         // Go to the next segment if all messages are acknowledged by consumers
-                        // Go to tne next segment if it passed the TTL since closed
-                        match subscription_dispatch.process_current_segment().await {
-                            Ok(msg) => {
-                                if let Err(e) = Self::dispatch_reliable_message_multiple_consumers(
-                                    &mut consumers,
-                                    &index_consumer,
-                                    msg,
-                                ).await {
-                                    warn!("Failed to dispatch message: {}", e);
+                        // Go to the next segment if it passed the TTL since closed
+
+                        // First check if we have an active consumer
+                        if let Some(active_idx) = Self::get_next_active_consumer(&consumers, &index_consumer).await {
+                            match subscription_dispatch.process_current_segment().await {
+                                Ok(msg) => {
+                                    if let Err(e) = consumers[active_idx].send_message(msg).await {
+                                        warn!("Failed to dispatch message: {}", e);
+                                    }
+                                },
+                                Err(_) => {
+                                    // As this loops, the error is due to waiting for a new message, so we just ignore it
                                 }
-                            },
-                            Err(_) => {
-                            // as this loops, the error is due to waiting for a new message, so we just ignore it
-                            // warn!("Failed to process current segment: {}", e);
-                            }
-                        };
+                            };
+                        }
                     }
                 }
             }
@@ -115,32 +113,25 @@ impl DispatcherReliableMultipleConsumers {
             .map_err(|_| anyhow!("Failed to send disconnect all consumers command"))
     }
 
-    pub(crate) async fn dispatch_reliable_message_multiple_consumers(
-        consumers: &mut [Consumer],
+    async fn get_next_active_consumer(
+        consumers: &[Consumer],
         index_consumer: &AtomicUsize,
-        message: StreamMessage,
-    ) -> Result<()> {
-        let num_consumers = consumers.len();
-        if num_consumers == 0 {
-            return Err(anyhow!("No consumers available to dispatch the message"));
+    ) -> Option<usize> {
+        if consumers.is_empty() {
+            return None;
         }
 
-        for _ in 0..num_consumers {
-            let index = index_consumer.fetch_add(1, Ordering::SeqCst) % num_consumers;
-            let consumer = &mut consumers[index];
+        let num_consumers = consumers.len();
+        let start_index = index_consumer.load(Ordering::SeqCst) % num_consumers;
 
-            if consumer.get_status().await {
-                consumer.send_message(message).await?;
-                trace!(
-                    "Dispatcher sent the message to consumer: {}",
-                    consumer.consumer_id
-                );
-                return Ok(());
+        // Try each consumer starting from current index
+        for i in 0..num_consumers {
+            let check_index = (start_index + i) % num_consumers;
+            if consumers[check_index].get_status().await {
+                index_consumer.store(check_index + 1, Ordering::SeqCst);
+                return Some(check_index);
             }
         }
-
-        Err(anyhow!(
-            "No active consumers available to handle the message"
-        ))
+        None
     }
 }

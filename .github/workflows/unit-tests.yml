@@ -29,3 +29,4 @@ jobs:
         run: |
           cargo test --lib -p danube-reliable-dispatch
           cargo test --lib -p danube-client
+          cargo test --lib -p danube-metadata-store
