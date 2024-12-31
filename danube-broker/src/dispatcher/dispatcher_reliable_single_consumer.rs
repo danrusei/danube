@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use danube_client::StreamMessage;
 use danube_reliable_dispatch::SubscriptionDispatch;
 use tokio::{
     sync::mpsc,
@@ -30,27 +29,24 @@ impl DispatcherReliableSingleConsumer {
                     Some(command) = control_rx.recv() => {
                         match command {
                             DispatcherCommand::AddConsumer(consumer) => {
-                            if let Err(e) = Self::handle_add_consumer(
-                                &mut consumers,
-                                &mut active_consumer,
-                                consumer,
-                            )
-                            .await
-                            {
-                                warn!("Failed to add consumer: {}", e);
+                                if let Err(e) = Self::handle_add_consumer(
+                                    &mut consumers,
+                                    &mut active_consumer,
+                                    consumer,
+                                ).await {
+                                    warn!("Failed to add consumer: {}", e);
+                                }
                             }
-                        }
-                             DispatcherCommand::RemoveConsumer(consumer_id) => {
-                            Self::handle_remove_consumer(
-                                &mut consumers,
-                                &mut active_consumer,
-                                consumer_id,
-                            )
-                            .await;
-                        }
-                             DispatcherCommand::DisconnectAllConsumers => {
-                            Self::handle_disconnect_all(&mut consumers, &mut active_consumer).await;
-                        }
+                            DispatcherCommand::RemoveConsumer(consumer_id) => {
+                                Self::handle_remove_consumer(
+                                    &mut consumers,
+                                    &mut active_consumer,
+                                    consumer_id,
+                                ).await;
+                            }
+                            DispatcherCommand::DisconnectAllConsumers => {
+                                Self::handle_disconnect_all(&mut consumers, &mut active_consumer).await;
+                            }
                             DispatcherCommand::DispatchMessage(_) => {
                                 unreachable!("Reliable Dispatcher should not receive messages, just segments");
                             }
@@ -64,21 +60,21 @@ impl DispatcherReliableSingleConsumer {
                     _ = interval.tick() => {
                         // Send ordered messages from the segment to the consumers
                         // Go to the next segment if all messages are acknowledged by consumers
-                        // Go to tne next segment if it passed the TTL since closed
-                        match subscription_dispatch.process_current_segment().await {
-                            Ok(msg) => {
-                                if let Err(e) = Self::dispatch_reliable_message_single_consumer(
-                                    &mut active_consumer,
-                                    msg,
-                                ).await {
-                                    warn!("Failed to dispatch message: {}", e);
+                        // Go to the next segment if it passed the TTL since closed
+
+                        // Only process segments if we have an active consumer that's healthy
+                        if let Some(consumer) = Self::get_active_consumer(&mut active_consumer).await {
+                            match subscription_dispatch.process_current_segment().await {
+                                Ok(msg) => {
+                                    if let Err(e) = consumer.send_message(msg).await {
+                                        warn!("Failed to dispatch message: {}", e);
+                                    }
+                                },
+                                Err(_) => {
+                                    // As this loops, the error is due to waiting for a new message
                                 }
-                            },
-                            Err(_) => {
-                            // as this loops, the error is due to waiting for a new message, so we just ignore it
-                            //warn!("Failed to process current segment: {}", e);
-                            }
-                        };
+                            };
+                        }
                     }
                 }
             }
@@ -196,22 +192,11 @@ impl DispatcherReliableSingleConsumer {
         trace!("All consumers disconnected from dispatcher");
     }
 
-    /// Dispatch a message to the active consumer
-    pub(crate) async fn dispatch_reliable_message_single_consumer(
-        active_consumer: &mut Option<Consumer>,
-        message: StreamMessage,
-    ) -> Result<()> {
-        if let Some(consumer) = active_consumer {
-            if consumer.get_status().await {
-                consumer.send_message(message).await?;
-                trace!(
-                    "Message dispatched to active consumer {}",
-                    consumer.consumer_id
-                );
-                return Ok(());
-            }
+    /// Get the active consumer
+    async fn get_active_consumer(active_consumer: &mut Option<Consumer>) -> Option<&mut Consumer> {
+        match active_consumer {
+            Some(consumer) if consumer.get_status().await => Some(consumer),
+            _ => None,
         }
-
-        Err(anyhow!("No active consumer available to dispatch message"))
     }
 }

@@ -125,6 +125,7 @@ jobs:
           cargo test --release --package danube-broker --tests
           cargo test --lib -p danube-reliable-dispatch
           cargo test --lib -p danube-client
+          cargo test --lib -p danube-metadata-store
 
       - name: Stop and remove broker1
         run: |
