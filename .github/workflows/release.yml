@@ -55,6 +55,15 @@ jobs:
       - name: Build for Intel
         run: cargo build --release --target x86_64-apple-darwin
 
+      - name: Upload MacOS Intel binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: danube-binaries-macos-intel
+          path: |
+            target/x86_64-apple-darwin/release/danube-broker
+            target/x86_64-apple-darwin/release/danube-admin-cli
+            target/x86_64-apple-darwin/release/danube-cli
+
       - name: Set up Rust for Apple Silicon
         uses: actions-rs/toolchain@v1
         with:
@@ -65,14 +74,11 @@ jobs:
       - name: Build for Apple Silicon
         run: cargo build --release --target aarch64-apple-darwin
 
-      - name: Upload MacOS binaries
+      - name: Upload MacOS Apple Silicon binaries
         uses: actions/upload-artifact@v4
         with:
-          name: danube-binaries-macos
+          name: danube-binaries-macos-silicon
           path: |
-            target/x86_64-apple-darwin/release/danube-broker
-            target/x86_64-apple-darwin/release/danube-admin-cli
-            target/x86_64-apple-darwin/release/danube-cli
             target/aarch64-apple-darwin/release/danube-broker
             target/aarch64-apple-darwin/release/danube-admin-cli
             target/aarch64-apple-darwin/release/danube-cli
@@ -127,11 +133,17 @@ jobs:
           name: danube-binaries-linux
           path: artifacts/linux/
 
-      - name: Download MacOS binary
+      - name: Download MacOS binary (Intel)
         uses: actions/download-artifact@v4
         with:
-          name: danube-binaries-macos
-          path: artifacts/macos/
+          name: danube-binaries-macos-intel
+          path: artifacts/macos/intel/
+
+      - name: Download MacOS binary (Apple Silicon)
+        uses: actions/download-artifact@v4
+        with:
+          name: danube-binaries-macos-silicon
+          path: artifacts/macos/silicon/
 
       - name: Create Release
         id: create_release
@@ -197,7 +209,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-broker
+          asset_path: artifacts/macos/intel/danube-broker
           asset_name: danube-broker-macos-intel
           asset_content_type: application/octet-stream
           
@@ -207,7 +219,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-admin-cli
+          asset_path: artifacts/macos/intel/danube-admin-cli
           asset_name: danube-admin-cli-macos-intel
           asset_content_type: application/octet-stream
           
@@ -217,7 +229,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-cli
+          asset_path: artifacts/macos/intel/danube-cli
           asset_name: danube-cli-macos-intel
           asset_content_type: application/octet-stream
 
@@ -227,7 +239,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-broker
+          asset_path: artifacts/macos/silicon/danube-broker
           asset_name: danube-broker-macos-silicon
           asset_content_type: application/octet-stream
           
@@ -237,7 +249,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-admin-cli
+          asset_path: artifacts/macos/silicon/danube-admin-cli
           asset_name: danube-admin-cli-macos-silicon
           asset_content_type: application/octet-stream
           
@@ -247,6 +259,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/macos/danube-cli
+          asset_path: artifacts/macos/silicon/danube-cli
           asset_name: danube-cli-macos-silicon
           asset_content_type: application/octet-stream
