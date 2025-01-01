@@ -4,8 +4,6 @@ An async Rust client library for interacting with Danube Pub/Sub messaging platf
 
 [Danube](https://github.com/danrusei/danube) is an open-source **distributed** Pub/Sub messaging platform written in Rust. Consult [the documentation](https://dev-state.com/danube_docs/) for supported concepts and the platform architecture.
 
-I'm working on improving it and adding new features. Please feel free to contribute or report any issues you encounter.
-
 ## Example usage
 
 Check out the [example files](https://github.com/danrusei/danube/tree/main/danube-client/examples).
@@ -66,10 +64,12 @@ let client = DanubeClient::builder()
     while let Some(message) = message_stream.recv().await {
         let payload = message.payload;
 
-        let result = String::from_utf8(payload);
+        match String::from_utf8(payload) {
+            Ok(message_str) => {
+                println!("Received message: {:?}", message_str);
 
-        match result {
-            Ok(message) => println!("Received message: {:?}", message),
+                consumer.ack(&message).await?;
+            }
             Err(e) => println!("Failed to convert Payload to String: {}", e),
         }
     }
