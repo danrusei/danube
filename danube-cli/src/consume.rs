@@ -6,6 +6,7 @@ use std::{collections::HashMap, str::from_utf8};
 use valico::json_schema::{self, schema::ScopedSchema};
 
 #[derive(Debug, Parser)]
+#[command(after_help = EXAMPLES_TEXT)]
 pub struct Consume {
     #[arg(
         long,
@@ -18,7 +19,7 @@ pub struct Consume {
         long,
         short = 't',
         default_value = "/default/test_topic",
-        help = "The topic to consume messages from"
+        help = "The topic to consume messages from. Default: /default/test_topic"
     )]
     pub topic: String,
 
@@ -30,7 +31,11 @@ pub struct Consume {
     )]
     pub consumer: String,
 
-    #[arg(long, short = 'm', help = "The subscription name")]
+    #[arg(
+        long,
+        short = 'm',
+        help = "The subscription name. Default: consumer_pubsub"
+    )]
     pub subscription: String,
 
     #[arg(long, value_enum, help = "The subscription type. Default: Shared")]
@@ -43,6 +48,21 @@ pub enum SubTypeArg {
     Shared,
     FailOver,
 }
+
+const EXAMPLES_TEXT: &str = r#"
+EXAMPLES:
+    # Receive messages from a shared subscription (default)
+    danube-cli consume --service-addr http://localhost:6650 --subscription my_shared_subscription
+
+    # Receive messages from an exclusive subscription
+    danube-cli consume -s http://localhost:6650 -m my_exclusive --sub-type exclusive
+
+    # Receive messages for a custom consumer name
+    danube-cli consume -s http://localhost:6650 -n my_consumer -m my_subscription
+
+    # Receive messages from a specific topic
+    danube-cli consume -s http://localhost:6650 -t my_topic -m my_subscription
+"#;
 
 pub async fn handle_consume(consume: Consume) -> Result<()> {
     let sub_type = validate_subscription_type(consume.sub_type)?;
@@ -117,28 +137,33 @@ fn process_message(
             print_to_console(seq, &message.to_string(), attr);
         }
         SchemaType::Json(_) => {
-            if let Some(validator) = schema_validator {
-                process_json_message(payload, validator)?;
+            let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
 
-                // If validation passes, handle the JSON message
-                let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
-                print_to_console(seq, json_str, attr);
-            } else {
-                eprintln!("JSON schema validator is missing.");
+            // First try to parse JSON regardless of validator
+            let _json_value: Value = from_slice(payload).context("Failed to parse JSON message")?;
+
+            // If validator exists, validate the JSON
+            if let Some(validator) = schema_validator {
+                process_json_message(payload, validator)
+                    .context("JSON schema validation failed")?;
             }
+
+            print_to_console(seq, json_str, attr);
         }
     }
     Ok(())
 }
 
 fn process_json_message(payload: &[u8], schema_validator: &ScopedSchema) -> Result<()> {
-    let json_value: Value = from_slice(payload)?;
-    // Validate the JSON message against the schema
-    if !schema_validator.validate(&json_value).is_valid() {
-        eprintln!("JSON message validation failed: {}", json_value);
-        return Ok(()); // Continue processing other messages even if validation fails
-    }
+    let json_value: Value = from_slice(payload).context("Failed to parse JSON in validator")?;
 
+    let validation_result = schema_validator.validate(&json_value);
+    if !validation_result.is_valid() {
+        return Err(anyhow::anyhow!(
+            "JSON validation failed: {:?}",
+            validation_result.errors
+        ));
+    }
     Ok(())
 }
 
