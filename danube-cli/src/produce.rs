@@ -1,11 +1,27 @@
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
-use danube_client::{DanubeClient, SchemaType};
+use clap::{Args, Parser, ValueEnum};
+use danube_client::{
+    ConfigDispatchStrategy, DanubeClient, ReliableOptions, RetentionPolicy, SchemaType, StorageType,
+};
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Parser)]
+#[command(after_help = EXAMPLES_TEXT)]
 pub struct Produce {
+    #[command(flatten)]
+    pub basic_args: BasicArgs,
+
+    #[command(flatten)]
+    pub extended_args: ExtendedArgs,
+
+    #[command(flatten)]
+    pub reliable_args: ReliableArgs,
+}
+
+#[derive(Debug, Args)]
+#[group(required = true)]
+pub struct BasicArgs {
     #[arg(
         long,
         short = 's',
@@ -29,32 +45,43 @@ pub struct Produce {
     )]
     pub topic: String,
 
-    #[arg(long, short = 'p', help = "The number of topic partitions.")]
-    pub partitions: Option<u32>,
-
-    #[arg(
-        long,
-        short = 'y',
-        value_enum,
-        help = "The schema type of the message."
-    )]
-    pub schema: Option<SchemaTypeArg>,
-
     #[arg(
         long,
         short = 'm',
         help = "The message to send. This is a required argument."
     )]
     pub message: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ExtendedArgs {
+    #[arg(
+        long,
+        short = 'y',
+        value_enum,
+        help = "The schema type for the message: bytes, string, int64, or json. Default: string"
+    )]
+    pub schema: Option<SchemaTypeArg>,
 
     #[arg(long, help = "The JSON schema, required if schema type is Json.")]
     pub json_schema: Option<String>,
 
     #[arg(
         long,
+        short = 'a',
+        value_parser = parse_attributes,
+        help = "Attributes in the form 'parameter:value'. Example: 'key1:value1,key2:value2'"
+    )]
+    pub attributes: Option<HashMap<String, String>>,
+
+    #[arg(long, short = 'p', help = "The number of partitions for the topic.")]
+    pub partitions: Option<u32>,
+
+    #[arg(
+        long,
         short = 'c',
         default_value = "1",
-        help = "Number of times to send the message."
+        help = "The number of messages to produce. Default: 1"
     )]
     pub count: u32,
 
@@ -65,14 +92,56 @@ pub struct Produce {
         help = "Interval between messages in milliseconds. Default: 500. Minimum: 100."
     )]
     pub interval: u64,
+}
+
+#[derive(Debug, Args)]
+#[group(required = false, multiple = true)]
+pub struct ReliableArgs {
+    #[arg(long, help = "Enable reliable message delivery with in-memory storage")]
+    pub reliable: bool,
 
     #[arg(
         long,
-        short = 'a',
-        value_parser = parse_attributes,
-        help = "Attributes in the form 'parameter:value'. Example: 'key1:value1,key2:value2'"
+        value_enum,
+        default_value = "memory",
+        help = "Storage type for reliable delivery: memory, disk, or s3"
     )]
-    pub attributes: Option<HashMap<String, String>>,
+    pub storage: Option<StorageTypeArg>,
+
+    #[arg(
+        long,
+        default_value = "20",
+        help = "Segment size in MB for reliable delivery (default: 20)"
+    )]
+    pub segment_size: usize,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value = "expire",
+        help = "Retention policy: ack (retain until acknowledged) or expire (retain until time expires)"
+    )]
+    pub retention: Option<RetentionPolicyArg>,
+
+    #[arg(
+        long,
+        default_value = "3600",
+        help = "Retention period in seconds for reliable delivery (default: 3600)"
+    )]
+    pub retention_period: u64,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+pub enum StorageTypeArg {
+    Memory,
+    Disk,
+    S3,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+pub enum RetentionPolicyArg {
+    Ack,
+    Expire,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
@@ -83,42 +152,104 @@ pub enum SchemaTypeArg {
     Json,
 }
 
+const EXAMPLES_TEXT: &str = r#"
+EXAMPLES:
+    # Basic message production
+    danube-cli produce --service-addr http://localhost:6650 --count 100 --message "Hello Danube"
+
+    # Producing with JSON schema
+    danube-cli produce -s http://localhost:6650 -c 100 -y json --json-schema '{"type":"object"}' -m '{"key":"Hello Danube"}'
+
+    # Reliable message delivery
+    danube-cli produce -s http://localhost:6650 -m "Hello Danube" -c 100 \
+        --reliable \
+        --storage disk \
+        --segment-size 10 \
+        --retention expire \
+        --retention-period 7200
+
+    # Producing with attributes
+    danube-cli produce -s http://localhost:6650 -m "Hello Danube" -a "key1:value1,key2:value2"
+"#;
+
 pub async fn handle_produce(produce: Produce) -> Result<()> {
     // Validate interval
-    if produce.interval < 100 {
+    if produce.extended_args.interval < 100 {
         return Err(anyhow::anyhow!("The interval must be at least 100 milliseconds").into());
     }
 
     let client = DanubeClient::builder()
-        .service_url(&produce.service_addr)
+        .service_url(&produce.basic_args.service_addr)
         .build()?;
 
-    let schema_type = validate_schema(produce.schema, produce.json_schema)?;
+    let schema_type = validate_schema(
+        produce.extended_args.schema,
+        produce.extended_args.json_schema,
+    )?;
 
     let mut producer_builder = client
         .new_producer()
-        .with_topic(produce.topic)
-        .with_name(produce.producer_name)
+        .with_topic(produce.basic_args.topic)
+        .with_name(produce.basic_args.producer_name)
         .with_schema("my_app".into(), schema_type); // Pass the correct schema type
 
-    if let Some(partitions) = produce.partitions {
+    if let Some(partitions) = produce.extended_args.partitions {
         producer_builder = producer_builder.with_partitions(partitions as usize)
+    }
+
+    if produce.reliable_args.reliable {
+        let storage_type = match produce
+            .reliable_args
+            .storage
+            .unwrap_or(StorageTypeArg::Memory)
+        {
+            StorageTypeArg::Memory => StorageType::InMemory,
+            StorageTypeArg::Disk => {
+                let storage_path = std::env::var("DANUBE_STORAGE_PATH")
+                    .unwrap_or_else(|_| "/tmp/danube".to_string());
+                StorageType::Disk(storage_path)
+            }
+            StorageTypeArg::S3 => {
+                let bucket = std::env::var("DANUBE_S3_BUCKET")
+                    .unwrap_or_else(|_| "danube-bucket".to_string());
+                StorageType::S3(bucket)
+            }
+        };
+
+        let retention_policy = match produce
+            .reliable_args
+            .retention
+            .unwrap_or(RetentionPolicyArg::Expire)
+        {
+            RetentionPolicyArg::Ack => RetentionPolicy::RetainUntilAck,
+            RetentionPolicyArg::Expire => RetentionPolicy::RetainUntilExpire,
+        };
+
+        let reliable_options = ReliableOptions::new(
+            produce.reliable_args.segment_size,
+            storage_type,
+            retention_policy,
+            produce.reliable_args.retention_period,
+        );
+
+        producer_builder = producer_builder
+            .with_dispatch_strategy(ConfigDispatchStrategy::Reliable(reliable_options));
     }
 
     let mut producer = producer_builder.build();
 
-    let _ = producer.create().await?;
+    producer.create().await?;
 
-    let encoded_data = produce.message.as_bytes().to_vec();
+    let encoded_data = produce.basic_args.message.as_bytes().to_vec();
 
-    for _ in 0..produce.count {
-        let cloned_attributes = produce.attributes.clone();
-        let message_id = producer
-            .send(encoded_data.clone(), cloned_attributes)
-            .await?;
-        println!("The Message with ID {} was sent", message_id);
-        if produce.count - 1 > 0 {
-            sleep(Duration::from_millis(produce.interval)).await;
+    for _ in 0..produce.extended_args.count {
+        let cloned_attributes = produce.extended_args.attributes.clone();
+        match producer.send(encoded_data.clone(), cloned_attributes).await {
+            Ok(message_id) => println!("Message sent successfully with ID: {}", message_id),
+            Err(e) => eprintln!("Failed to send message: {}", e),
+        }
+        if produce.extended_args.count - 1 > 0 {
+            sleep(Duration::from_millis(produce.extended_args.interval)).await;
         }
     }
 

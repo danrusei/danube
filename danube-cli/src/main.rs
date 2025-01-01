@@ -16,9 +16,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[command(about = "produce messages for the topic")]
+    #[command(about = "Produce messages to the topic")]
     Produce(Produce),
-    #[command(about = "consume messages from the topic")]
+    #[command(about = "Consume messages from the topic")]
     Consume(Consume),
 }
 
