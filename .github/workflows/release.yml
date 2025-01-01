@@ -6,7 +6,7 @@ on:
       - 'v*.*.*'  # Trigger on version tags
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -36,8 +36,49 @@ jobs:
             target/x86_64-unknown-linux-gnu/release/danube-admin-cli
             target/x86_64-unknown-linux-gnu/release/danube-cli
 
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install pkg-config openssl protobuf
+
+      - name: Set up Rust for Intel
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: x86_64-apple-darwin
+
+      - name: Build for Intel
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Set up Rust for Apple Silicon
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: aarch64-apple-darwin
+
+      - name: Build for Apple Silicon
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Upload MacOS binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: danube-binaries-macos
+          path: |
+            target/x86_64-apple-darwin/release/danube-broker
+            target/x86_64-apple-darwin/release/danube-admin-cli
+            target/x86_64-apple-darwin/release/danube-cli
+            target/aarch64-apple-darwin/release/danube-broker
+            target/aarch64-apple-darwin/release/danube-admin-cli
+            target/aarch64-apple-darwin/release/danube-cli
+
   docker:
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,7 +113,7 @@ jobs:
           docker push ghcr.io/${{ github.repository_owner }}/danube-broker:latest
 
   release:
-    needs: [build, docker]
+    needs: [build-linux, build-macos, docker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -85,6 +126,12 @@ jobs:
         with:
           name: danube-binaries-linux
           path: artifacts/linux/
+
+      - name: Download MacOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: danube-binaries-macos
+          path: artifacts/macos/
 
       - name: Create Release
         id: create_release
@@ -100,39 +147,106 @@ jobs:
             ## Release Notes
 
             Binaries:
-            - **Danube Broker**: [Download danube-broker](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker)
-            - **Danube Admin cli**: [Download danube-admin-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin-cli)
-            - **Danube Client cli**: [Download danube-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-cli)
+            - **Danube Broker (Linux)**: [Download danube-broker](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-linux)
+            - **Danube Admin Cli (Linux)**: [Download danube-admin-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin-cli-linux)
+            - **Danube Cli (Linux)**: [Download danube-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-cli-linux)
+            - **Danube Broker (MacOS Intel)**: [Download danube-broker](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-macos-intel)
+            - **Danube Admin Cli (MacOS Intel)**: [Download danube-admin-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin-cli-macos-intel)
+            - **Danube Cli (MacOS Intel)**: [Download danube-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-cli-macos-intel)
+            - **Danube Broker (Apple Silicon)**: [Download danube-broker](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-broker-macos-silicon)
+            - **Danube Admin Cli (Apple Silicon)**: [Download danube-admin-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-admin-cli-macos-silicon)
+            - **Danube Cli (Apple Silicon)**: [Download danube-cli](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/danube-cli-macos-silicon)
             
+ 
             Docker Image:
             - **Docker Image**: ghcr.io/${{ github.repository_owner }}/danube-broker:${{ github.ref_name }}
 
-      - name: Upload danube-broker
+      - name: Upload danube-broker (Linux)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-broker
-          asset_name: danube-broker
+          asset_name: danube-broker-linux
           asset_content_type: application/octet-stream
           
-      - name: Upload danube-admin-cli
+      - name: Upload danube-admin-cli (Linux)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-admin-cli
-          asset_name: danube-admin-cli
+          asset_name: danube-admin-cli-linux
           asset_content_type: application/octet-stream
           
-      - name: Upload danube-cli
+      - name: Upload danube-cli (Linux)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux/danube-cli
-          asset_name: danube-cli
+          asset_name: danube-cli-linux
+          asset_content_type: application/octet-stream
+
+      - name: Upload danube-broker (MacOS Intel)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-broker
+          asset_name: danube-broker-macos-intel
+          asset_content_type: application/octet-stream
+          
+      - name: Upload danube-admin-cli (MacOS Intel)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-admin-cli
+          asset_name: danube-admin-cli-macos-intel
+          asset_content_type: application/octet-stream
+          
+      - name: Upload danube-cli (MacOS Intel)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-cli
+          asset_name: danube-cli-macos-intel
+          asset_content_type: application/octet-stream
+
+      - name: Upload danube-broker (Apple Silicon)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-broker
+          asset_name: danube-broker-macos-silicon
+          asset_content_type: application/octet-stream
+          
+      - name: Upload danube-admin-cli (Apple Silicon)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-admin-cli
+          asset_name: danube-admin-cli-macos-silicon
+          asset_content_type: application/octet-stream
+          
+      - name: Upload danube-cli(Apple Silicon)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/macos/danube-cli
+          asset_name: danube-cli-macos-silicon
           asset_content_type: application/octet-stream
