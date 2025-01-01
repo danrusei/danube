@@ -83,11 +83,16 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
     let schema = client.get_schema(consume.topic).await?;
 
     let mut scope = json_schema::Scope::new();
-
-    let schema_validator = match schema.type_schema {
-        SchemaType::Json(ref schema) => {
-            let schema_value: Value = serde_json::from_str(&schema)?;
-            Some(scope.compile_and_return(schema_value, true)?)
+    let schema_validator = match schema.type_schema.clone() {
+        SchemaType::Json(schema_str) => {
+            if schema_str.is_empty() {
+                println!("Warning: Empty JSON schema received, proceeding without validation");
+                None
+            } else {
+                let schema_value: Value =
+                    serde_json::from_str(&schema_str).context("Failed to parse JSON schema")?;
+                Some(scope.compile_and_return(schema_value, false)?)
+            }
         }
         _ => None,
     };
@@ -96,18 +101,25 @@ pub async fn handle_consume(consume: Consume) -> Result<()> {
     let mut message_stream = consumer.receive().await?;
 
     while let Some(stream_message) = message_stream.recv().await {
-        let payload = stream_message.payload;
+        let payload = stream_message.payload.clone();
         let seq_id = stream_message.msg_id.sequence_id;
-        let attr = stream_message.attributes;
+        let attr = stream_message.attributes.clone();
 
         // Process message based on the schema type
-        process_message(
+        if let Err(e) = process_message(
             &payload,
             seq_id,
             attr,
             &schema.type_schema,
             &schema_validator,
-        )?;
+        ) {
+            eprintln!("Error processing message: {:?}", e);
+            continue;
+        }
+
+        if let Err(e) = consumer.ack(&stream_message).await {
+            eprintln!("Failed to acknowledge message: {:?}", e);
+        }
     }
 
     Ok(())
@@ -137,10 +149,18 @@ fn process_message(
             print_to_console(seq, &message.to_string(), attr);
         }
         SchemaType::Json(_) => {
-            let json_str = from_utf8(payload).context("Invalid UTF-8 sequence")?;
+            // Check if payload is empty
+            if payload.is_empty() {
+                return Err(anyhow::anyhow!("Received empty JSON payload").into());
+            }
 
-            // First try to parse JSON regardless of validator
-            let _json_value: Value = from_slice(payload).context("Failed to parse JSON message")?;
+            // First try to parse as generic JSON with better error context
+            let json_value: Value = from_slice(payload).with_context(|| {
+                format!(
+                    "Failed to parse JSON message: {}",
+                    String::from_utf8_lossy(payload)
+                )
+            })?;
 
             // If validator exists, validate the JSON
             if let Some(validator) = schema_validator {
@@ -148,7 +168,10 @@ fn process_message(
                     .context("JSON schema validation failed")?;
             }
 
-            print_to_console(seq, json_str, attr);
+            // Print the pretty-printed JSON
+            let json_str =
+                serde_json::to_string_pretty(&json_value).context("Failed to format JSON")?;
+            print_to_console(seq, &json_str, attr);
         }
     }
     Ok(())

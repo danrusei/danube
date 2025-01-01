@@ -158,7 +158,7 @@ EXAMPLES:
     danube-cli produce --service-addr http://localhost:6650 --count 100 --message "Hello Danube"
 
     # Producing with JSON schema
-    danube-cli produce -s http://localhost:6650 -c 100 -y json --json-schema '{"type":"object"}' -m '{"key":"Hello Danube"}'
+    danube-cli produce -s http://localhost:6650 -c 100 -y json --json-schema '{"type": "object", "properties": {"field1": {"type": "string"}}}' -m '{"field1":"Hello Danube"}'
 
     # Reliable message delivery
     danube-cli produce -s http://localhost:6650 -m "Hello Danube" -c 100 \
