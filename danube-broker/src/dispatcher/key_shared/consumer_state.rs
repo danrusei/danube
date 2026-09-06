@@ -268,24 +268,20 @@ mod tests {
     #[test]
     fn consistent_hash_stable() {
         use std::sync::Arc;
-        use tokio::sync::{mpsc, Mutex};
+        use tokio::sync::Mutex;
 
         let mut state = KeySharedConsumerState::new();
 
         // Create 3 mock consumers
         for i in 0..3u64 {
-            let (tx, _rx) = mpsc::channel(4);
             let session = Arc::new(Mutex::new(crate::consumer::ConsumerSession::new()));
-            let rx_arc = Arc::new(Mutex::new(_rx));
             let consumer = crate::consumer::Consumer::new(
                 i + 100,
                 &format!("consumer-{}", i),
                 3, // KeyShared
                 "test-topic",
                 "test-sub",
-                tx,
                 session,
-                rx_arc,
             );
             state.add_consumer(consumer, Vec::new());
         }
@@ -305,21 +301,17 @@ mod tests {
     #[test]
     fn consistent_hash_minimal_remapping() {
         use std::sync::Arc;
-        use tokio::sync::{mpsc, Mutex};
+        use tokio::sync::Mutex;
 
         let make_consumer = |id: u64| -> Consumer {
-            let (tx, _rx) = mpsc::channel(4);
             let session = Arc::new(Mutex::new(crate::consumer::ConsumerSession::new()));
-            let rx_arc = Arc::new(Mutex::new(_rx));
             crate::consumer::Consumer::new(
                 id,
                 &format!("consumer-{}", id),
                 3,
                 "test-topic",
                 "test-sub",
-                tx,
                 session,
-                rx_arc,
             )
         };
 

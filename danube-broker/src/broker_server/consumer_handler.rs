@@ -8,7 +8,6 @@ use danube_core::proto::{
 
 use crate::broker_metrics::BROKER_RPC_TOTAL;
 use metrics::counter;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use crate::security::authz::{enforce_authorization, Permission, Resource};
@@ -64,11 +63,9 @@ impl ConsumerService for DanubeServerImpl {
         {
             // Single-attach takeover at subscribe: cancel existing stream and prepare for new session
             if let Some(consumer) = service.find_consumer_by_id(consumer_id).await {
-                // Simplified takeover: cancel existing streaming task and mark active
-                consumer.session.lock().await.cancel_stream();
-                consumer.set_status_active().await;
-                // Reset dispatcher pending state and notify to resume polling (reliable mode)
-                service.trigger_dispatcher_on_reconnect(consumer_id).await;
+                // Simplified takeover: cancel existing streaming task and prepare for new stream
+                consumer.cancel_stream().await;
+                consumer.set_status_inactive().await;
             }
 
             let response = ConsumerResponse {
@@ -176,7 +173,7 @@ impl ConsumerService for DanubeServerImpl {
 
         let service = self.service.as_ref();
 
-        // Fetch Consumer (which contains session with rx_cons)
+        // Fetch Consumer
         let consumer = if let Some(cons) = service.find_consumer_for_streaming(consumer_id).await {
             cons
         } else {
@@ -188,69 +185,33 @@ impl ConsumerService for DanubeServerImpl {
             return Err(status);
         };
 
-        // Note: takeover is handled during subscribe(); here we only attach a new stream
+        // Attach direct gRPC stream to consumer and obtain session cancellation token
+        let (token_for_task, session_id) = consumer.attach_stream(grpc_tx.clone()).await;
 
-        let rx_cons_cloned = Arc::clone(&consumer.rx_cons);
+        // Reset dispatcher pending state and wake dispatcher to begin streaming immediately
+        self.service.trigger_dispatcher_on_reconnect(consumer_id).await;
+
         let service_for_disconnect = self.service.clone();
 
-        // Takeover: cancel old session and get new cancellation token
-        let token_for_task = consumer.session.lock().await.takeover();
-
+        // Spawn lightweight disconnect watcher task (zero CPU on message path)
         tokio::spawn(async move {
-            let mut rx_guard = rx_cons_cloned.lock().await;
-
-            loop {
-                tokio::select! {
-                    // If the gRPC response stream is dropped (client disconnected), mark inactive
-                    _ = grpc_tx.closed() => {
-                        warn!(
-                            consumer_id = %consumer_id,
-                            "Client disconnected, marking consumer inactive"
-                        );
-                        if let Some(consumer) = service_for_disconnect
-                            .find_consumer_by_id(consumer_id)
-                            .await
-                        {
-                            consumer.set_status_inactive().await;
-                            // Reset dispatcher pending state so buffered messages can fail over/redeliver
-                            service_for_disconnect.trigger_dispatcher_on_reconnect(consumer_id).await;
-                        }
-                        break;
-                    }
-                    // Check for cancellation
-                    _ = token_for_task.cancelled() => {
-                        trace!(consumer_id = %consumer_id, "streaming task cancelled");
-                        // Don't modify consumer status on cancellation - new connection might be active
-                        break;
-                    }
-                    // Receive messages
-                    message = rx_guard.recv() => {
-                        match message {
-                            Some(stream_message) => {
-                                if grpc_tx.send(Ok(stream_message.into())).await.is_err() {
-                                    // Error handling for when the client disconnects
-                                    warn!(
-                                        consumer_id = %consumer_id,
-                                        "client disconnected, marking consumer inactive"
-                                    );
-
-                                    // Mark the consumer as inactive on disconnect
-                                    if let Some(consumer) = service_for_disconnect
-                                        .find_consumer_by_id(consumer_id)
-                                        .await
-                                    {
-                                        consumer.set_status_inactive().await;
-                                        // Reset dispatcher pending state so buffered messages can fail over/redeliver
-                                        service_for_disconnect.trigger_dispatcher_on_reconnect(consumer_id).await;
-                                    }
-                                    break;
-                                }
-                            }
-                            None => {
-                                // Channel closed
-                                break;
-                            }
-                        }
+            tokio::select! {
+                biased;
+                _ = token_for_task.cancelled() => {
+                    trace!(consumer_id = %consumer_id, session_id = %session_id, "streaming task cancelled");
+                }
+                _ = grpc_tx.closed() => {
+                    warn!(
+                        consumer_id = %consumer_id,
+                        session_id = %session_id,
+                        "Client disconnected, marking consumer inactive"
+                    );
+                    if let Some(consumer) = service_for_disconnect
+                        .find_consumer_by_id(consumer_id)
+                        .await
+                    {
+                        consumer.detach_stream_if_session(session_id).await;
+                        service_for_disconnect.trigger_dispatcher_on_reconnect(consumer_id).await;
                     }
                 }
             }

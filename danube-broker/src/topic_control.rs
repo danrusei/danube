@@ -582,10 +582,7 @@ impl TopicManager {
 
     /// Returns true if the consumer is healthy according to its subscription state.
     pub(crate) async fn health_consumer(&self, consumer_id: u64) -> bool {
-        if let Some(consumer) = self.find_consumer_by_id(consumer_id).await {
-            return consumer.get_status().await;
-        }
-        false
+        self.find_consumer_by_id(consumer_id).await.is_some()
     }
 
     /// Returns the consumer_id if a consumer with the given name exists on the subscription.

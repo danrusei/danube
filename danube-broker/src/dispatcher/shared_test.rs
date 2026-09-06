@@ -32,10 +32,10 @@ use danube_core::message::{MessageID, StreamMessage};
 use danube_core::storage::PersistentStorage;
 use danube_persistent_storage::wal::{Wal, WalConfig};
 use danube_persistent_storage::{WalStorage, TieredStorage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::time::timeout;
 
-use crate::consumer::{Consumer, ConsumerSession};
+use crate::consumer::Consumer;
 use crate::dispatcher::subscription_engine::SubscriptionEngine;
 use crate::dispatcher::Dispatcher;
 use crate::message::AckMessage;
@@ -103,18 +103,12 @@ async fn reliable_multiple_round_robin_ack_gating() {
     );
 
     // Two consumers capture messages
-    let (tx1, mut rx1) = mpsc::channel::<StreamMessage>(8);
-    let (_rx_cons_tx1, rx_cons_rx1) = mpsc::channel::<StreamMessage>(8);
-    let session1 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc1 = Arc::new(Mutex::new(rx_cons_rx1));
-    let c1 = Consumer::new(42, "c1", 1, topic, "sub", tx1, session1, rx_cons_arc1);
+    let (tx1, mut rx1) = mpsc::channel(8);
+    let c1 = Consumer::new_with_stream(42, "c1", 1, topic, "sub", tx1);
     dispatcher.add_consumer(c1).await.expect("add c1");
 
-    let (tx2, mut rx2) = mpsc::channel::<StreamMessage>(8);
-    let (_rx_cons_tx2, rx_cons_rx2) = mpsc::channel::<StreamMessage>(8);
-    let session2 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc2 = Arc::new(Mutex::new(rx_cons_rx2));
-    let c2 = Consumer::new(43, "c2", 1, topic, "sub", tx2, session2, rx_cons_arc2);
+    let (tx2, mut rx2) = mpsc::channel(8);
+    let c2 = Consumer::new_with_stream(43, "c2", 1, topic, "sub", tx2);
     dispatcher.add_consumer(c2).await.expect("add c2");
 
     // Wait for reliable dispatcher readiness (stream initialized)
@@ -127,8 +121,8 @@ async fn reliable_multiple_round_robin_ack_gating() {
     // Expect first delivery to either c1 or c2
     let first_delivered = timeout(Duration::from_secs(2), async {
         tokio::select! {
-            Some(m) = rx1.recv() => Ok::<(u64, StreamMessage), ()>((1, m)),
-            Some(m) = rx2.recv() => Ok::<(u64, StreamMessage), ()>((2, m)),
+            Some(Ok(m)) = rx1.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((1, m)),
+            Some(Ok(m)) = rx2.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((2, m)),
         }
     })
     .await
@@ -139,7 +133,7 @@ async fn reliable_multiple_round_robin_ack_gating() {
     let (first_consumer_id, first_msg) = first_delivered;
     let ack = AckMessage {
         request_id: first_msg.request_id,
-        msg_id: first_msg.msg_id.clone(),
+        msg_id: first_msg.msg_id.unwrap().into(),
         subscription_name: "test-sub".to_string(),
     };
     dispatcher.ack_message(ack).await.expect("ack first");
@@ -150,8 +144,8 @@ async fn reliable_multiple_round_robin_ack_gating() {
 
     let second_delivered = timeout(Duration::from_secs(2), async {
         tokio::select! {
-            Some(m) = rx1.recv() => Ok::<(u64, StreamMessage), ()>((1, m)),
-            Some(m) = rx2.recv() => Ok::<(u64, StreamMessage), ()>((2, m)),
+            Some(Ok(m)) = rx1.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((1, m)),
+            Some(Ok(m)) = rx2.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((2, m)),
         }
     })
     .await
@@ -194,36 +188,12 @@ async fn non_reliable_multiple_round_robin() {
     let topic = "/default/shared_non_reliable";
 
     // Two consumers capture messages
-    let (tx_c1, mut rx_c1) = mpsc::channel::<StreamMessage>(16);
-    let (_rx_cons_tx_c1, rx_cons_rx_c1) = mpsc::channel::<StreamMessage>(8);
-    let session_c1 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc_c1 = Arc::new(Mutex::new(rx_cons_rx_c1));
-    let c1 = Consumer::new(
-        101,
-        "c1",
-        1,
-        topic,
-        "sub",
-        tx_c1,
-        session_c1,
-        rx_cons_arc_c1,
-    );
+    let (tx_c1, mut rx_c1) = mpsc::channel(16);
+    let c1 = Consumer::new_with_stream(101, "c1", 1, topic, "sub", tx_c1);
     dispatcher.add_consumer(c1).await.expect("add c1");
 
-    let (tx_c2, mut rx_c2) = mpsc::channel::<StreamMessage>(16);
-    let (_rx_cons_tx_c2, rx_cons_rx_c2) = mpsc::channel::<StreamMessage>(8);
-    let session_c2 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc_c2 = Arc::new(Mutex::new(rx_cons_rx_c2));
-    let c2 = Consumer::new(
-        102,
-        "c2",
-        1,
-        topic,
-        "sub",
-        tx_c2,
-        session_c2,
-        rx_cons_arc_c2,
-    );
+    let (tx_c2, mut rx_c2) = mpsc::channel(16);
+    let c2 = Consumer::new_with_stream(102, "c2", 1, topic, "sub", tx_c2);
     dispatcher.add_consumer(c2).await.expect("add c2");
 
     // Dispatch 4 messages -> expect alternating delivery
@@ -239,8 +209,8 @@ async fn non_reliable_multiple_round_robin() {
     for _ in 0..4 {
         let m = timeout(Duration::from_secs(2), async {
             tokio::select! {
-                Some(m) = rx_c1.recv() => Ok::<(u64, StreamMessage), ()>((1, m)),
-                Some(m) = rx_c2.recv() => Ok::<(u64, StreamMessage), ()>((2, m)),
+                Some(Ok(m)) = rx_c1.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((1, m)),
+                Some(Ok(m)) = rx_c2.recv() => Ok::<(u64, danube_core::proto::StreamMessage), ()>((2, m)),
             }
         })
         .await
@@ -262,41 +232,18 @@ async fn non_reliable_shared_skips_full_consumer() {
 
     let topic = "/default/shared_non_reliable_full";
 
-    let (tx_c1, mut rx_c1) = mpsc::channel::<StreamMessage>(1);
+    let (tx_c1, mut rx_c1) = mpsc::channel(1);
     let fill_tx_c1 = tx_c1.clone();
-    let (_rx_cons_tx_c1, rx_cons_rx_c1) = mpsc::channel::<StreamMessage>(8);
-    let session_c1 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc_c1 = Arc::new(Mutex::new(rx_cons_rx_c1));
-    let c1 = Consumer::new(
-        103,
-        "c1-full",
-        1,
-        topic,
-        "sub",
-        tx_c1,
-        session_c1,
-        rx_cons_arc_c1,
-    );
+    let c1 = Consumer::new_with_stream(103, "c1-full", 1, topic, "sub", tx_c1);
     dispatcher.add_consumer(c1).await.expect("add c1");
 
-    let (tx_c2, mut rx_c2) = mpsc::channel::<StreamMessage>(1);
-    let (_rx_cons_tx_c2, rx_cons_rx_c2) = mpsc::channel::<StreamMessage>(8);
-    let session_c2 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc_c2 = Arc::new(Mutex::new(rx_cons_rx_c2));
-    let c2 = Consumer::new(
-        104,
-        "c2-fast",
-        1,
-        topic,
-        "sub",
-        tx_c2,
-        session_c2,
-        rx_cons_arc_c2,
-    );
+    let (tx_c2, mut rx_c2) = mpsc::channel(1);
+    let c2 = Consumer::new_with_stream(104, "c2-fast", 1, topic, "sub", tx_c2);
     dispatcher.add_consumer(c2).await.expect("add c2");
 
+    let proto_msg: danube_core::proto::StreamMessage = make_msg(800, 0, topic).into();
     fill_tx_c1
-        .try_send(make_msg(800, 0, topic))
+        .try_send(Ok(proto_msg))
         .expect("fill first consumer");
 
     dispatcher
@@ -307,13 +254,15 @@ async fn non_reliable_shared_skips_full_consumer() {
     let delivered = timeout(Duration::from_secs(1), rx_c2.recv())
         .await
         .expect("timely recv")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(delivered.request_id, 801);
 
     let first = timeout(Duration::from_secs(1), rx_c1.recv())
         .await
         .expect("timely recv")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(first.request_id, 800);
 
     let second = timeout(Duration::from_millis(50), rx_c1.recv()).await;

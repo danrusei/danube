@@ -349,11 +349,37 @@ impl TopicAdmin for DanubeAdminImpl {
             .failure_policy
             .ok_or_else(|| Status::invalid_argument("failure_policy must be provided"))?;
 
-        let dispatch_strategy = self
-            .resources
-            .topic
-            .get_dispatch_strategy(req.topic.trim_start_matches('/'))
-            .await;
+        let lookup = req.topic.trim_start_matches('/');
+        let mut dispatch_strategy = self.resources.topic.get_dispatch_strategy(lookup).await;
+
+        if dispatch_strategy.is_none() {
+            if let Some(topic) = self
+                .broker_service
+                .topic_registry
+                .get_topic(&req.topic)
+                .or_else(|| self.broker_service.topic_registry.get_topic(lookup))
+            {
+                dispatch_strategy = match topic.dispatch_strategy {
+                    crate::dispatcher::DispatchStrategy::Reliable => {
+                        Some(ConfigDispatchStrategy::Reliable)
+                    }
+                    crate::dispatcher::DispatchStrategy::NonReliable => {
+                        Some(ConfigDispatchStrategy::NonReliable)
+                    }
+                };
+            }
+        }
+
+        if dispatch_strategy.is_none() {
+            // Allow Raft metadata replication to catch up on followers when topic was just created
+            for _ in 0..10 {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                dispatch_strategy = self.resources.topic.get_dispatch_strategy(lookup).await;
+                if dispatch_strategy.is_some() {
+                    break;
+                }
+            }
+        }
 
         if !matches!(dispatch_strategy, Some(ConfigDispatchStrategy::Reliable)) {
             return Err(Status::failed_precondition(

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Ok, Result};
 use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::trace;
 
@@ -153,21 +153,15 @@ impl Subscription {
         topic_name: &str,
         options: SubscriptionOptions,
     ) -> Result<u64> {
-        //for communication with client consumer
-        let (tx_cons, rx_cons) = mpsc::channel(4);
-
         let consumer_id = get_random_id();
         let session = Arc::new(Mutex::new(ConsumerSession::new()));
-        let rx_cons_arc = Arc::new(Mutex::new(rx_cons));
         let consumer = Consumer::new(
             consumer_id,
             &options.consumer_name,
             options.subscription_type,
             topic_name,
             &self.subscription_name,
-            tx_cons,
-            session.clone(),
-            rx_cons_arc.clone(),
+            session,
         );
 
         let dispatcher = self.dispatcher.as_mut().unwrap();
