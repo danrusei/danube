@@ -29,10 +29,10 @@ use danube_core::message::{MessageID, StreamMessage};
 use danube_core::storage::PersistentStorage;
 use danube_persistent_storage::wal::{Wal, WalConfig};
 use danube_persistent_storage::{WalStorage, TieredStorage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::time::timeout;
 
-use crate::consumer::{Consumer, ConsumerSession};
+use crate::consumer::Consumer;
 use crate::dispatcher::subscription_engine::SubscriptionEngine;
 use crate::dispatcher::Dispatcher;
 use crate::message::AckMessage;
@@ -101,11 +101,8 @@ async fn reliable_single_ack_gating() {
     );
 
     // Consumer wiring: use a channel to capture dispatched messages
-    let (tx, mut rx) = mpsc::channel::<StreamMessage>(8);
-    let (_rx_cons_tx, rx_cons_rx) = mpsc::channel::<StreamMessage>(8);
-    let session = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc = Arc::new(Mutex::new(rx_cons_rx));
-    let consumer = Consumer::new(42, "c1", 0, topic, "sub", tx, session, rx_cons_arc);
+    let (tx, mut rx) = mpsc::channel(8);
+    let consumer = Consumer::new_with_stream(42, "c1", 0, topic, "sub", tx);
     dispatcher
         .add_consumer(consumer)
         .await
@@ -122,7 +119,8 @@ async fn reliable_single_ack_gating() {
     let first = timeout(Duration::from_secs(2), rx.recv())
         .await
         .expect("timely first")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(first.request_id, 100);
 
     // No second message until ack is sent
@@ -132,7 +130,7 @@ async fn reliable_single_ack_gating() {
     // Ack the first; then the second should arrive
     let ack = AckMessage {
         request_id: first.request_id,
-        msg_id: first.msg_id.clone(),
+        msg_id: first.msg_id.unwrap().into(),
         subscription_name: "test-sub".to_string(),
     };
     dispatcher.ack_message(ack).await.expect("ack");
@@ -145,7 +143,8 @@ async fn reliable_single_ack_gating() {
     let second = timeout(Duration::from_secs(2), rx.recv())
         .await
         .expect("timely second")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(second.request_id, 101);
 }
 
@@ -171,11 +170,8 @@ async fn non_reliable_single_immediate_dispatch() {
 
     // Consumer wiring
     let topic = "/default/exclusive_non_reliable";
-    let (tx2, mut rx2) = mpsc::channel::<StreamMessage>(8);
-    let (_rx_cons_tx2, rx_cons_rx2) = mpsc::channel::<StreamMessage>(8);
-    let session2 = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc2 = Arc::new(Mutex::new(rx_cons_rx2));
-    let consumer2 = Consumer::new(43, "c2", 0, topic, "sub", tx2, session2, rx_cons_arc2);
+    let (tx2, mut rx2) = mpsc::channel(8);
+    let consumer2 = Consumer::new_with_stream(43, "c2", 0, topic, "sub", tx2);
     dispatcher
         .add_consumer(consumer2)
         .await
@@ -191,7 +187,8 @@ async fn non_reliable_single_immediate_dispatch() {
     let got = timeout(Duration::from_secs(2), rx2.recv())
         .await
         .expect("timely recv")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(got.request_id, 200);
 }
 
@@ -200,16 +197,14 @@ async fn non_reliable_single_full_channel_drops_without_blocking() {
     let dispatcher = Dispatcher::non_reliable_exclusive();
 
     let topic = "/default/exclusive_non_reliable_full";
-    let (tx, mut rx) = mpsc::channel::<StreamMessage>(1);
+    let (tx, mut rx) = mpsc::channel(1);
     let fill_tx = tx.clone();
-    let (_rx_cons_tx, rx_cons_rx) = mpsc::channel::<StreamMessage>(8);
-    let session = Arc::new(Mutex::new(ConsumerSession::new()));
-    let rx_cons_arc = Arc::new(Mutex::new(rx_cons_rx));
-    let consumer = Consumer::new(44, "c3", 0, topic, "sub", tx, session, rx_cons_arc);
+    let consumer = Consumer::new_with_stream(44, "c3", 0, topic, "sub", tx);
     dispatcher.add_consumer(consumer).await.expect("add consumer");
 
+    let proto_msg: danube_core::proto::StreamMessage = make_msg(300, 0, topic).into();
     fill_tx
-        .try_send(make_msg(300, 0, topic))
+        .try_send(Ok(proto_msg))
         .expect("fill consumer channel");
 
     timeout(
@@ -223,7 +218,8 @@ async fn non_reliable_single_full_channel_drops_without_blocking() {
     let first = timeout(Duration::from_secs(1), rx.recv())
         .await
         .expect("timely recv")
-        .expect("some");
+        .expect("some")
+        .expect("ok");
     assert_eq!(first.request_id, 300);
 
     let second = timeout(Duration::from_millis(50), rx.recv()).await;

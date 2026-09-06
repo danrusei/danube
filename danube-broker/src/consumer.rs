@@ -1,105 +1,107 @@
 use anyhow::{anyhow, Result};
 use danube_core::message::StreamMessage;
+use danube_core::proto::StreamMessage as ProtoStreamMessage;
 use metrics::counter;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
+use tonic::Status;
 use tracing::{debug, trace, warn};
 
 use crate::broker_metrics::{CONSUMER_BYTES_OUT_TOTAL, CONSUMER_MESSAGES_OUT_TOTAL};
 use crate::utils::get_random_id;
 
+/// Sender type for direct streaming to gRPC client.
+pub(crate) type StreamSender = mpsc::Sender<Result<ProtoStreamMessage, Status>>;
+
 /// Represents a consumer connected and associated with a Subscription.
 ///
-/// # Architecture Overview
+/// # Architecture Overview (Direct Channel Delivery)
 ///
-/// The Consumer struct manages the complete message pipeline from dispatcher to client:
+/// The Consumer struct delivers messages directly from the dispatcher to Tonic's gRPC stream channel:
 ///
 /// ```text
 /// ┌──────────────────────────────────────────────────────────────────────────────┐
-/// │                           MESSAGE FLOW PIPELINE                               │
+/// │                      DIRECT MESSAGE FLOW PIPELINE                            │
 /// └──────────────────────────────────────────────────────────────────────────────┘
 ///
-///  1. Producer      2. Dispatcher         3. Internal       4. gRPC          5. Client
-///     publishes        routes to             Channel          Stream             App
-///     message          consumer              buffers          sends
-///       │                 │                     │               │                 │
-///       ├─────────────────▶                     │               │                 │
-///       │ send_message()  │                     │               │                 │
-///       │ or              │                     │               │                 │
-///       │ try_send_message()                    │               │                 │
-///       │                 │                     │               │                 │
-///       │                 │ tx_cons.send()      │               │                 │
-///       │                 │ or tx_cons.try_send()               │                 │
-///       │                 ├────────────────────▶│               │                 │
-///       │                 │    (Producer)       │               │                 │
-///       │                 │                     │  rx_cons      │                 │
-///       │                 │                     │  .recv()      │                 │
-///       │                 │                     ├──────────────▶│                 │
-///       │                 │                     │  (Consumer)   │                 │
-///       │                 │                     │               │  grpc_tx.send() │
-///       │                 │                     │               ├────────────────▶│
-///       │                 │                     │               │                 │
-///       ▼                 ▼                     ▼               ▼                 ▼
+///  1. Producer      2. Dispatcher                       3. gRPC Stream        4. Client
+///     publishes        routes to consumer                  sends to client        App
+///       │                 │                                     │                  │
+///       ├─────────────────▶                                     │                  │
+///       │                 │ send_message().await                │                  │
+///       │                 │ or try_send_message()               │                  │
+///       │                 │                                     │                  │
+///       │                 │ msg.into() -> stream_sender.send()  │                  │
+///       │                 ├────────────────────────────────────▶│                  │
+///       │                 │                                     │  HTTP/2 data     │
+///       │                 │                                     ├─────────────────▶│
+///       │                 │                                     │                  │
+///       ▼                 ▼                                     ▼                  ▼
 ///
 /// Components:
-/// - tx_cons: Sender half - used by dispatcher to push messages
-/// - rx_cons: Receiver half - used by gRPC handler to pull messages
+/// - stream_sender: Direct gRPC response sender (no intermediate task or double buffer)
 /// - session: Tracks connection state (active, cancellation, session_id)
-/// - reliable dispatch blocks on a full internal channel; non-reliable dispatch can drop/skip on full
+/// - reliable dispatch blocks on full gRPC stream buffer; non-reliable drops or skips on full
 /// ```
 ///
 /// # Lock Separation Strategy
 ///
-/// To avoid deadlock, we use separate locks for different access patterns:
+/// In Direct Channel Delivery, message dispatch and stream lifecycle are decoupled across three tiers to eliminate lock contention and avoid deadlocks:
 ///
 /// ```text
 /// ┌─────────────────────────────────────────────────────────────────────────┐
-/// │                          LOCK OWNERSHIP                                  │
+/// │                          LOCK SEPARATION TIERS                          │
 /// └─────────────────────────────────────────────────────────────────────────┘
 ///
-///  Dispatcher Thread              │              gRPC Stream Thread
-///                                 │
-///  1. Check if consumer active    │              1. Lock rx_cons (hold forever)
-///     session.lock().await        │                 rx_cons.lock().await
-///     ↓                           │                 ↓
-///  2. Read session.active         │              2. Loop: receive messages
-///     (quick unlock)              │                 loop { rx.recv().await }
-///     ↓                           │                 ↓
-///  3. Send message                │              3. Forward to client
-///     send_message().await        │                 grpc_tx.send().await
-///     or try_send_message()       │
-///                                 │
-///  ✓ No deadlock: different locks │
+///  Tier 1: Atomic Health Check (Hot Path)
+///  - Dispatcher checks `consumer.active` via `AtomicBool::load(Ordering::Acquire)`.
+///  - Cost: ~1ns, completely lock-free, zero contention. Inactive consumers are skipped.
+///
+///  Tier 2: Stream Sender Access (Hot Path)
+///  - Dispatcher reads `consumer.stream_sender` via `RwLock::read()`.
+///  - Clones `StreamSender` (~10ns atomic reference bump) and DROPS the guard immediately.
+///  - `sender.send().await` executes with NO locks held across the async boundary.
+///
+///  Tier 3: Lifecycle Session Management (Cold Path)
+///  - Used only on connect, disconnect, or takeover (`attach_stream`, `detach_stream`).
+///  - Held briefly in `ConsumerSession` mutex while updating session IDs and cancellation tokens.
+///  - Never contested by message dispatching.
 /// ```
 ///
-/// # Takeover Mechanism
+/// # Takeover Mechanism (Single-Attach Semantics)
 ///
-/// When a consumer reconnects with the same name (single-attach):
+/// When a consumer reconnects with the same name, Danube enforces single-attach semantics:
 ///
 /// ```text
 /// ┌─────────────────────────────────────────────────────────────────────────┐
 /// │                          TAKEOVER FLOW                                   │
 /// └─────────────────────────────────────────────────────────────────────────┘
 ///
-///  Old Connection                New Connection (same consumer_name)
-///       │                               │
-///       │  Streaming messages           │  1. subscribe() called
-///       │  via rx_cons                  │     ↓
-///       │                               │  2. session.cancel_stream()
-///       │  ◄─────────────────────────────────┘  cancels old task
-///       │  (cancellation.cancel())      │
-///       │                               │  3. session.takeover()
-///       │  Task exits                   │     - new session_id
-///       │  (cancelled)                  │     - new cancellation token
-///       │                               │     - set active=true
-///       ▼                               │
-///    Closed                             │  4. receive_messages() starts
-///                                       │     new streaming task
-///                                       │     ↓
-///                                       │  Streaming messages
-///                                       ▼  via same rx_cons
+///  Old Connection                 New Connection (same consumer_name)
+///       │                                │
+///       │  Streaming messages            │  1. subscribe() called
+///       │  via direct grpc_tx            │     ↓
+///       │                                │  2. consumer.cancel_stream()
+///       │  ◄────────────────────────────────── cancels old session token
+///       │  (cancellation.cancel())       │
+///       │                                │  3. receive_messages() called
+///       │                                │     ↓
+///       │                                │  4. consumer.attach_stream(new_grpc_tx)
+///       │                                │     - generates new session_id (e.g. S2)
+///       │                                │     - installs new_grpc_tx in stream_sender
+///       │                                │     - sets active = true
+///       │                                │     - wakes dispatcher for redelivery
+///       │  Watcher exits cleanly         │     ↓
+///       │  (detects cancelled token,     │  5. Dispatcher streams directly
+///       │   does NOT mark inactive)      ▼     to new_grpc_tx
+///       ▼
+///    Closed
+///       │
+///       │  If old TCP drops later:
+///       └───▶ detach_stream_if_session(S1)
+///             (Ignored! S1 != S2, new session remains active)
 /// ```
 ///
 #[allow(dead_code)]
@@ -118,6 +120,7 @@ pub(crate) struct Consumer {
     /// - 0: Exclusive (one consumer per subscription)
     /// - 1: Shared (round-robin distribution)
     /// - 2: Failover (active + standby consumers)
+    /// - 3: KeyShared (key-based distribution)
     pub(crate) subscription_type: i32,
 
     /// Full topic name this consumer is subscribed to.
@@ -128,50 +131,18 @@ pub(crate) struct Consumer {
     /// Multiple consumers can share the same subscription (except Exclusive).
     pub(crate) subscription_name: String,
 
-    /// **Message sender (Producer end of the internal channel)**.
-    ///
-    /// Used by: Dispatcher
-    /// - Reliable dispatchers call `consumer.send_message(msg)` which uses this sender
-    /// - Non-reliable dispatchers call `consumer.try_send_message(msg)` which uses this sender
-    /// - Pushes messages into the internal channel (buffer size: 4)
-    /// - Reliable sends block on full channel (backpressure)
-    /// - Non-reliable sends do not wait on full channel; callers can drop or skip the message
-    ///
-    /// Flow: `Dispatcher → tx_cons.send()/try_send() → Channel → rx_cons.recv() → gRPC`
-    pub(crate) tx_cons: mpsc::Sender<StreamMessage>,
-
-    /// **Session state: active status, cancellation token, session ID**.
-    ///
-    /// Used by: Both Dispatcher and gRPC handler
-    /// - Dispatcher: Checks `session.active` to see if consumer is healthy
-    /// - gRPC handler: Updates `session.active` on connect/disconnect
-    /// - Takeover: `session.takeover()` cancels old task and creates new session
-    ///
-    /// Locked separately from `rx_cons` to avoid deadlock:
-    /// - Dispatcher needs quick status checks (brief lock)
-    /// - gRPC handler holds `rx_cons` lock for entire stream duration
+    /// Session state: active status, cancellation token, session ID.
     pub(crate) session: Arc<Mutex<ConsumerSession>>,
 
+    /// Fast atomic flag for active status (checked lock-free by dispatchers).
     pub(crate) active: Arc<AtomicBool>,
 
-    /// **Message receiver (Consumer end of the internal channel)**.
-    ///
-    /// Used by: gRPC streaming task (consumer_handler.rs)
-    /// - Locked once at the start of `receive_messages()`
-    /// - Held for the entire duration of the streaming connection
-    /// - Continuously calls `rx_cons.recv()` to pull messages from channel
-    /// - Forwards received messages to client via `grpc_tx.send()`
-    ///
-    /// Flow: `Channel → rx_cons.recv() → gRPC → Client`
-    ///
-    /// **Why separate lock from `session`?**
-    /// - gRPC task holds this lock forever (while streaming)
-    /// - Dispatcher needs to check `session.active` frequently
-    /// - If both were in same lock → deadlock (gRPC holds, dispatcher waits)
-    pub(crate) rx_cons: Arc<Mutex<mpsc::Receiver<StreamMessage>>>,
+    /// Direct gRPC response stream sender.
+    /// Protected by RwLock for thread-safe stream attachment and detachment.
+    pub(crate) stream_sender: Arc<RwLock<Option<StreamSender>>>,
 }
 
-/// Result of a non-blocking send attempt to the consumer's internal channel.
+/// Result of a non-blocking send attempt to the consumer's channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConsumerSendStatus {
     Sent,
@@ -186,9 +157,7 @@ impl Consumer {
         subscription_type: i32,
         topic_name: &str,
         subscription_name: &str,
-        tx_cons: mpsc::Sender<StreamMessage>,
         session: Arc<Mutex<ConsumerSession>>,
-        rx_cons: Arc<Mutex<mpsc::Receiver<StreamMessage>>>,
     ) -> Self {
         let active = session
             .try_lock()
@@ -197,28 +166,115 @@ impl Consumer {
             .clone();
 
         Consumer {
-            consumer_id: consumer_id.into(),
+            consumer_id,
             consumer_name: consumer_name.into(),
             subscription_type,
             topic_name: topic_name.into(),
             subscription_name: subscription_name.into(),
-            tx_cons,
             session,
             active,
-            rx_cons,
+            stream_sender: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Convenience constructor with an already-attached gRPC stream (useful in tests).
+    #[cfg(test)]
+    pub(crate) fn new_with_stream(
+        consumer_id: u64,
+        consumer_name: &str,
+        subscription_type: i32,
+        topic_name: &str,
+        subscription_name: &str,
+        sender: StreamSender,
+    ) -> Self {
+        let session = Arc::new(Mutex::new(ConsumerSession::new()));
+        let consumer = Self::new(
+            consumer_id,
+            consumer_name,
+            subscription_type,
+            topic_name,
+            subscription_name,
+            session,
+        );
+        consumer.active.store(true, Ordering::Release);
+        *consumer.stream_sender.write().unwrap() = Some(sender);
+        consumer
+    }
+
+    /// Attach a new gRPC response streaming channel to this consumer.
+    ///
+    /// Cancels any previous session, assigns a new session ID and cancellation token,
+    /// installs the sender, and marks the consumer active.
+    pub(crate) async fn attach_stream(&self, sender: StreamSender) -> (CancellationToken, u64) {
+        let (token, session_id) = {
+            let mut session = self.session.lock().await;
+            let token = session.takeover();
+            (token, session.session_id)
+        };
+
+        {
+            let mut guard = self.stream_sender.write().unwrap();
+            *guard = Some(sender);
+        }
+
+        self.set_status_active().await;
+
+        debug!(
+            consumer_id = %self.consumer_id,
+            session_id = %session_id,
+            "consumer stream attached directly"
+        );
+
+        (token, session_id)
+    }
+
+    /// Detach the gRPC response streaming channel if the disconnecting session matches.
+    ///
+    /// This guard ensures an old disconnected session does not clobber a newly attached session.
+    pub(crate) async fn detach_stream_if_session(&self, session_id: u64) {
+        let session = self.session.lock().await;
+        if session.session_id == session_id {
+            self.active.store(false, Ordering::Release);
+            let mut guard = self.stream_sender.write().unwrap();
+            *guard = None;
+            debug!(
+                consumer_id = %self.consumer_id,
+                session_id = %session_id,
+                "consumer stream detached"
+            );
+        }
+    }
+
+    /// Cancel the current streaming session without waiting.
+    pub(crate) async fn cancel_stream(&self) {
+        let session = self.session.lock().await;
+        session.cancel_stream();
     }
 
     /// Blocking send path used by reliable dispatchers.
     ///
-    /// This method awaits channel capacity and returns an error if the consumer
-    /// channel has been closed.
+    /// Directly streams message into the gRPC response channel.
+    /// Awaits channel capacity and returns an error if the consumer channel is closed.
     pub(crate) async fn send_message(&mut self, message: StreamMessage) -> Result<()> {
-        // Since u8 is exactly 1 byte, the size in bytes will be equal to the number of elements in the vector.
         let payload_size = message.payload.len();
-        // Send the message to the other channel
-        if let Err(err) = self.tx_cons.send(message).await {
-            // Log the error and handle the channel closure scenario
+
+        let sender = {
+            let guard = self.stream_sender.read().unwrap();
+            guard.clone()
+        };
+
+        let sender = match sender {
+            Some(s) => s,
+            None => {
+                self.set_status_inactive().await;
+                return Err(anyhow!("failed to send message to consumer: stream not attached"));
+            }
+        };
+
+        let proto_message: ProtoStreamMessage = message.into();
+
+        if let Err(err) = sender.send(Ok(proto_message)).await {
+            self.set_status_inactive().await;
             warn!(
                 consumer_id = %self.consumer_id,
                 subscription = %self.subscription_name,
@@ -228,27 +284,41 @@ impl Consumer {
             );
             return Err(anyhow!("failed to send message to consumer: {}", err));
         } else {
-            trace!(consumer_id = %self.consumer_id, "sending the message over channel to consumer");
+            trace!(consumer_id = %self.consumer_id, "sending message directly to gRPC stream");
             counter!(CONSUMER_MESSAGES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(1);
             counter!(CONSUMER_BYTES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(payload_size as u64);
         }
 
-        // info!("Consumer task ended for consumer_id: {}", self.consumer_id);
         Ok(())
     }
 
     /// Non-blocking send path used by non-reliable dispatchers.
     ///
-    /// This method never awaits channel capacity:
+    /// Directly attempts to enqueue into the gRPC response channel:
     /// - `Sent`: message was enqueued
     /// - `Full`: channel is saturated; caller can drop or try another consumer
-    /// - `Closed`: receiver is gone; caller should treat the consumer as unavailable
+    /// - `Closed`: receiver is gone; marks consumer inactive
     pub(crate) fn try_send_message(&mut self, message: StreamMessage) -> ConsumerSendStatus {
         let payload_size = message.payload.len();
 
-        match self.tx_cons.try_send(message) {
+        let sender = {
+            let guard = self.stream_sender.read().unwrap();
+            guard.clone()
+        };
+
+        let sender = match sender {
+            Some(s) => s,
+            None => {
+                self.active.store(false, Ordering::Release);
+                return ConsumerSendStatus::Closed;
+            }
+        };
+
+        let proto_message: ProtoStreamMessage = message.into();
+
+        match sender.try_send(Ok(proto_message)) {
             Ok(()) => {
-                trace!(consumer_id = %self.consumer_id, "sending the message over channel to consumer");
+                trace!(consumer_id = %self.consumer_id, "sending message directly to gRPC stream");
                 counter!(CONSUMER_MESSAGES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(1);
                 counter!(CONSUMER_BYTES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(payload_size as u64);
                 ConsumerSendStatus::Sent
@@ -263,11 +333,12 @@ impl Consumer {
                 ConsumerSendStatus::Full
             }
             Err(mpsc::error::TrySendError::Closed(_)) => {
+                self.active.store(false, Ordering::Release);
                 warn!(
                     consumer_id = %self.consumer_id,
                     subscription = %self.subscription_name,
                     topic = %self.topic_name,
-                    "failed to send message to consumer"
+                    "failed to send message to consumer: channel closed"
                 );
                 ConsumerSendStatus::Closed
             }
@@ -284,9 +355,11 @@ impl Consumer {
         self.active.store(true, Ordering::Release);
     }
 
-    /// Set the consumer status to inactive
+    /// Set the consumer status to inactive and detach sender
     pub(crate) async fn set_status_inactive(&self) {
         self.active.store(false, Ordering::Release);
+        let mut guard = self.stream_sender.write().unwrap();
+        *guard = None;
     }
 }
 
@@ -296,66 +369,34 @@ impl Consumer {
 ///
 /// Tracks the lifecycle of a single consumer connection session. When a consumer
 /// reconnects (takeover), a new session is created with a new `session_id` and
-/// `cancellation` token, but the same `Consumer` struct is reused.
+/// `cancellation` token, but the same `Consumer` struct identity is retained.
 ///
-/// # Why Separate from Consumer?
+/// # Disconnect Race Protection
 ///
-/// Session state changes frequently (on connect/disconnect/takeover) while the
-/// consumer identity (consumer_id, topic_name, etc.) remains constant.
-///
-/// # Lock Contention Strategy
-///
-/// This struct is kept separate from `rx_cons` to avoid deadlock:
-/// - **Dispatcher**: Needs quick, frequent access to `active` status
-/// - **gRPC handler**: Holds `rx_cons` lock for entire streaming duration
-///
-/// If both were in the same lock, the dispatcher would block forever waiting
-/// for the gRPC task to release the lock (which it never does while streaming).
+/// Each connection holds a unique `session_id`. When an idle client disconnects or a channel
+/// closes, `detach_stream_if_session(session_id)` checks if the disconnecting session matches
+/// the current active session. If a takeover has already occurred and installed a newer session,
+/// the late disconnect signal from the old session is safely ignored.
 ///
 /// # Fields
-///
 #[derive(Debug)]
 pub(crate) struct ConsumerSession {
     /// Unique ID for this session (changes on reconnect/takeover).
-    ///
-    /// Each time a consumer reconnects, `takeover()` generates a new session_id.
-    /// This helps track and debug connection lifecycle in logs.
     pub(crate) session_id: u64,
 
     /// Whether this consumer is currently active and able to receive messages.
-    ///
-    /// **State transitions**:
-    /// - `true`: Consumer is connected and streaming messages
-    /// - `false`: Consumer disconnected or inactive
-    ///
-    /// **Updated by**:
-    /// - `new()`: Sets to `true` (new consumer starts active)
-    /// - `takeover()`: Sets to `true` (reconnection activates consumer)
-    /// - `set_status_inactive()`: Sets to `false` (on disconnect)
-    ///
-    /// **Read by**:
-    /// - Dispatcher: Checks before sending messages (skip inactive consumers)
     pub(crate) active: Arc<AtomicBool>,
 
-    /// Cancellation token for the gRPC streaming task.
-    ///
-    /// **Purpose**: Signals the streaming task to stop when:
-    /// - Consumer disconnects (normal shutdown)
-    /// - New connection arrives (takeover - cancel old task)
-    ///
-    /// **Lifecycle**:
-    /// - Created fresh on each `new()` or `takeover()`
-    /// - Cancelled via `cancel_stream()` or `takeover()`
-    /// - Streaming task monitors via `token.cancelled().await`
+    /// Cancellation token for the gRPC streaming connection.
     pub(crate) cancellation: CancellationToken,
 }
 
 impl ConsumerSession {
-    /// Create a new session
+    /// Create a new session (starts inactive until stream attached)
     pub(crate) fn new() -> Self {
         Self {
             session_id: get_random_id(),
-            active: Arc::new(AtomicBool::new(true)),
+            active: Arc::new(AtomicBool::new(false)),
             cancellation: CancellationToken::new(),
         }
     }
@@ -363,10 +404,8 @@ impl ConsumerSession {
     /// Takeover: cancel the current session and start a new one.
     /// Returns the new cancellation token for the streaming task.
     pub(crate) fn takeover(&mut self) -> CancellationToken {
-        // Cancel the existing streaming task
         self.cancellation.cancel();
 
-        // Create new session
         self.session_id = get_random_id();
         self.active.store(true, Ordering::Release);
         self.cancellation = CancellationToken::new();
@@ -393,3 +432,234 @@ impl ConsumerSession {
         self.cancellation.cancel();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use danube_core::message::MessageID;
+
+    fn make_test_msg(request_id: u64) -> StreamMessage {
+        StreamMessage {
+            request_id,
+            msg_id: MessageID {
+                producer_id: 1,
+                topic_name: "/default/test".to_string(),
+                broker_addr: "127.0.0.1:6650".to_string(),
+                topic_offset: request_id,
+            },
+            payload: "hello".as_bytes().to_vec().into(),
+            publish_time: 0,
+            producer_name: "prod".to_string(),
+            subscription_name: Some("sub".to_string()),
+            attributes: Default::default(),
+            schema_id: None,
+            schema_version: None,
+            routing_key: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_direct_delivery_lifecycle() {
+        let (tx, mut rx) = mpsc::channel(4);
+        let mut consumer = Consumer::new_with_stream(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            tx,
+        );
+
+        assert!(consumer.get_status().await);
+
+        let msg = make_test_msg(100);
+        consumer.send_message(msg).await.expect("send succeeds");
+
+        let proto_msg = rx.recv().await.expect("recv").expect("ok");
+        assert_eq!(proto_msg.request_id, 100);
+    }
+
+    #[tokio::test]
+    async fn test_direct_delivery_when_unattached() {
+        let session = Arc::new(Mutex::new(ConsumerSession::new()));
+        let mut consumer = Consumer::new(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            session,
+        );
+
+        assert!(!consumer.get_status().await);
+
+        let msg = make_test_msg(101);
+        let err = consumer.send_message(msg).await;
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_attach_and_detach_session() {
+        let session = Arc::new(Mutex::new(ConsumerSession::new()));
+        let consumer = Consumer::new(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            session,
+        );
+
+        let (tx, _rx) = mpsc::channel(4);
+        let (_token, session_id) = consumer.attach_stream(tx).await;
+        assert!(consumer.get_status().await);
+
+        // Detach with wrong session ID should NOT detach
+        consumer.detach_stream_if_session(session_id + 999).await;
+        assert!(consumer.get_status().await);
+
+        // Detach with correct session ID should detach
+        consumer.detach_stream_if_session(session_id).await;
+        assert!(!consumer.get_status().await);
+    }
+
+    #[tokio::test]
+    async fn test_try_send_message_status_transitions() {
+        let (tx, mut rx) = mpsc::channel(2);
+        let mut consumer = Consumer::new_with_stream(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            tx,
+        );
+
+        assert_eq!(
+            consumer.try_send_message(make_test_msg(1)),
+            ConsumerSendStatus::Sent
+        );
+        assert_eq!(
+            consumer.try_send_message(make_test_msg(2)),
+            ConsumerSendStatus::Sent
+        );
+
+        // Channel capacity is 2; next try_send must report Full
+        assert_eq!(
+            consumer.try_send_message(make_test_msg(3)),
+            ConsumerSendStatus::Full
+        );
+        assert!(consumer.get_status().await);
+
+        // Drain messages
+        let _ = rx.recv().await;
+        let _ = rx.recv().await;
+
+        // Drop receiver -> channel is closed
+        drop(rx);
+
+        assert_eq!(
+            consumer.try_send_message(make_test_msg(4)),
+            ConsumerSendStatus::Closed
+        );
+        assert!(!consumer.get_status().await);
+    }
+
+    #[tokio::test]
+    async fn test_send_message_closed_marks_inactive() {
+        let (tx, rx) = mpsc::channel(2);
+        let mut consumer = Consumer::new_with_stream(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            tx,
+        );
+
+        drop(rx); // Closed immediately
+
+        let err = consumer.send_message(make_test_msg(1)).await;
+        assert!(err.is_err());
+        assert!(!consumer.get_status().await);
+    }
+
+    #[tokio::test]
+    async fn test_takeover_supersedes_old_session() {
+        let session = Arc::new(Mutex::new(ConsumerSession::new()));
+        let consumer = Consumer::new(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            session,
+        );
+
+        let (tx1, _rx1) = mpsc::channel(4);
+        let (token1, session_id1) = consumer.attach_stream(tx1).await;
+        assert!(consumer.get_status().await);
+        assert!(!token1.is_cancelled());
+
+        // Second attach (takeover)
+        let (tx2, mut rx2) = mpsc::channel(4);
+        let (token2, session_id2) = consumer.attach_stream(tx2).await;
+        assert!(token1.is_cancelled(), "old session must be cancelled");
+        assert!(!token2.is_cancelled(), "new session must not be cancelled");
+        assert_ne!(session_id1, session_id2);
+
+        // Old session disconnect signal must be ignored
+        consumer.detach_stream_if_session(session_id1).await;
+        assert!(consumer.get_status().await, "new session must remain active");
+
+        // Dispatched message must go to the new stream
+        let mut cons_clone = consumer.clone();
+        cons_clone.send_message(make_test_msg(200)).await.unwrap();
+        let delivered = rx2.recv().await.unwrap().unwrap();
+        assert_eq!(delivered.request_id, 200);
+
+        // Current session disconnect detaches
+        consumer.detach_stream_if_session(session_id2).await;
+        assert!(!consumer.get_status().await);
+    }
+
+    #[tokio::test]
+    async fn test_idle_disconnect_watcher() {
+        let session = Arc::new(Mutex::new(ConsumerSession::new()));
+        let consumer = Consumer::new(
+            1,
+            "cons-1",
+            0,
+            "/default/test",
+            "sub",
+            session,
+        );
+
+        let (tx, rx) = mpsc::channel(4);
+        let (token, session_id) = consumer.attach_stream(tx.clone()).await;
+        assert!(consumer.get_status().await);
+
+        let cons_for_watcher = consumer.clone();
+        let watcher = tokio::spawn(async move {
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => {}
+                _ = tx.closed() => {
+                    cons_for_watcher.detach_stream_if_session(session_id).await;
+                }
+            }
+        });
+
+        // Drop the receiver (simulates client disconnect on idle topic)
+        drop(rx);
+
+        // Watcher must detect closure and detach
+        tokio::time::timeout(std::time::Duration::from_millis(500), watcher)
+            .await
+            .expect("watcher finishes promptly")
+            .unwrap();
+
+        assert!(!consumer.get_status().await);
+    }
+}
+

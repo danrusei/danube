@@ -469,10 +469,15 @@ async fn non_reliable_topic_publish_does_not_stall_on_full_subscription() -> Any
         (slow, fast)
     };
 
+    let (slow_tx, mut slow_rx) = tokio::sync::mpsc::channel(4);
+    let (fast_tx, mut fast_rx) = tokio::sync::mpsc::channel(4);
+    slow_consumer.attach_stream(slow_tx.clone()).await;
+    fast_consumer.attach_stream(fast_tx).await;
+
     for i in 0..4u64 {
-        slow_consumer
-            .tx_cons
-            .try_send(make_msg(9000 + i, topic_name))
+        let proto_msg: danube_core::proto::StreamMessage = make_msg(9000 + i, topic_name).into();
+        slow_tx
+            .try_send(Ok(proto_msg))
             .expect("fill slow consumer channel");
     }
 
@@ -484,25 +489,26 @@ async fn non_reliable_topic_publish_does_not_stall_on_full_subscription() -> Any
     .expect("publish should not block")?;
 
     let fast_msg = {
-        let mut rx = fast_consumer.rx_cons.lock().await;
-        timeout(Duration::from_secs(1), rx.recv())
+        let res = timeout(Duration::from_secs(1), fast_rx.recv())
             .await
             .expect("timely fast recv")
             .expect("fast consumer message")
+            .expect("ok");
+        res
     };
     assert_eq!(fast_msg.request_id, 9001);
 
     {
-        let mut rx = slow_consumer.rx_cons.lock().await;
         for i in 0..4u64 {
-            let msg = timeout(Duration::from_secs(1), rx.recv())
+            let msg = timeout(Duration::from_secs(1), slow_rx.recv())
                 .await
                 .expect("timely slow recv")
-                .expect("slow filler message");
+                .expect("slow filler message")
+                .expect("ok");
             assert_eq!(msg.request_id, 9000 + i);
         }
 
-        let second = timeout(Duration::from_millis(50), rx.recv()).await;
+        let second = timeout(Duration::from_millis(50), slow_rx.recv()).await;
         assert!(second.is_err(), "slow consumer should not receive published message");
     }
 
