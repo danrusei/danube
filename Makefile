@@ -63,7 +63,7 @@ brokers:
 		mkdir -p "$$data_dir"; \
 		echo "Starting broker $$i: client=$$broker_port admin=$$admin_port raft=$$raft_port prom=$$prom_port"; \
 		RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 \
-		./target/release/danube-broker \
+		nohup ./target/release/danube-broker \
 		    --config-file $(CONFIG_FILE) \
 		    --broker-addr "0.0.0.0:$$broker_port" \
 		    --admin-addr "0.0.0.0:$$admin_port" \
@@ -125,7 +125,7 @@ broker-start:
 	mkdir -p "$$data_dir"; \
 	echo "Starting broker $(ID): client=$$broker_port admin=$$admin_port raft=$$raft_port prom=$$prom_port"; \
 	RUST_LOG=$(LOG_LEVEL) RUST_BACKTRACE=1 \
-	./target/release/danube-broker \
+	nohup ./target/release/danube-broker \
 	    --config-file $(CONFIG_FILE) \
 	    --broker-addr "0.0.0.0:$$broker_port" \
 	    --admin-addr "0.0.0.0:$$admin_port" \
