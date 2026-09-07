@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::Mutex;
 
 /// Simple token-bucket rate limiter for messages/sec
@@ -31,11 +31,10 @@ impl RateLimiter {
         let mut guard = self.inner.lock().await;
         let now = Instant::now();
         let elapsed = now.duration_since(guard.last_refill);
-        if elapsed >= Duration::from_secs(1) {
-            // Refill proportionally to elapsed seconds, capped at bucket size
-            let secs = elapsed.as_secs_f64();
+        let secs = elapsed.as_secs_f64();
+        if secs > 0.0 {
             guard.tokens = (guard.tokens + (self.max_per_sec as f64) * secs)
-                .clamp(0.0, self.max_per_sec as f64);
+                .min(self.max_per_sec as f64);
             guard.last_refill = now;
         }
         if guard.tokens >= n as f64 {
@@ -58,6 +57,23 @@ mod tests {
         for _ in 0..5 {
             assert!(rl.try_acquire(1).await);
         }
+        assert!(!rl.try_acquire(1).await);
+    }
+
+    #[tokio::test]
+    async fn refills_fractionally() {
+        // 10 tokens per sec => 1 token every 100ms
+        let rl = RateLimiter::new(10);
+        for _ in 0..10 {
+            assert!(rl.try_acquire(1).await);
+        }
+        assert!(!rl.try_acquire(1).await);
+        // Wait ~350ms -> should replenish ~3.5 tokens, allowing acquire of 3 tokens
+        sleep(Duration::from_millis(350)).await;
+        assert!(rl.try_acquire(1).await);
+        assert!(rl.try_acquire(1).await);
+        assert!(rl.try_acquire(1).await);
+        // 4th acquire should fail
         assert!(!rl.try_acquire(1).await);
     }
 

@@ -61,6 +61,29 @@ impl SchemaRegistry {
         }
     }
 
+    async fn wait_for_local_metadata_compatibility_mode(
+        &self,
+        subject: &str,
+        expected_mode: CompatibilityMode,
+    ) -> Result<SchemaMetadata> {
+        let deadline = Instant::now() + Self::LOCAL_METADATA_SYNC_TIMEOUT;
+        loop {
+            if let Ok(metadata) = self.storage.get_metadata(subject).await {
+                if metadata.compatibility_mode == expected_mode {
+                    return Ok(metadata);
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "Timed out waiting for local schema metadata for subject '{}' to reach compatibility mode {:?}",
+                    subject,
+                    expected_mode
+                ));
+            }
+            sleep(Self::LOCAL_METADATA_SYNC_POLL_INTERVAL).await;
+        }
+    }
+
     /// Register a new schema or return existing schema ID if identical schema exists
     pub async fn register_schema(
         &self,
@@ -214,6 +237,7 @@ impl SchemaRegistry {
         let mut metadata = self.storage.get_metadata(subject).await?;
         metadata.set_compatibility_mode(mode);
         self.storage.update_metadata(&metadata).await?;
+        self.wait_for_local_metadata_compatibility_mode(subject, mode).await?;
         Ok(())
     }
 

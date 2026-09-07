@@ -140,6 +140,10 @@ pub(crate) struct Consumer {
     /// Direct gRPC response stream sender.
     /// Protected by RwLock for thread-safe stream attachment and detachment.
     pub(crate) stream_sender: Arc<RwLock<Option<StreamSender>>>,
+
+    /// Pre-registered egress counters for zero-allocation hot path
+    messages_out_counter: metrics::Counter,
+    bytes_out_counter: metrics::Counter,
 }
 
 /// Result of a non-blocking send attempt to the consumer's channel.
@@ -165,6 +169,17 @@ impl Consumer {
             .active
             .clone();
 
+        let messages_out_counter = counter!(
+            CONSUMER_MESSAGES_OUT_TOTAL.name,
+            "topic" => topic_name.to_string(),
+            "subscription" => subscription_name.to_string()
+        );
+        let bytes_out_counter = counter!(
+            CONSUMER_BYTES_OUT_TOTAL.name,
+            "topic" => topic_name.to_string(),
+            "subscription" => subscription_name.to_string()
+        );
+
         Consumer {
             consumer_id,
             consumer_name: consumer_name.into(),
@@ -174,6 +189,8 @@ impl Consumer {
             session,
             active,
             stream_sender: Arc::new(RwLock::new(None)),
+            messages_out_counter,
+            bytes_out_counter,
         }
     }
 
@@ -285,8 +302,8 @@ impl Consumer {
             return Err(anyhow!("failed to send message to consumer: {}", err));
         } else {
             trace!(consumer_id = %self.consumer_id, "sending message directly to gRPC stream");
-            counter!(CONSUMER_MESSAGES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(1);
-            counter!(CONSUMER_BYTES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(payload_size as u64);
+            self.messages_out_counter.increment(1);
+            self.bytes_out_counter.increment(payload_size as u64);
         }
 
         Ok(())
@@ -319,8 +336,8 @@ impl Consumer {
         match sender.try_send(Ok(proto_message)) {
             Ok(()) => {
                 trace!(consumer_id = %self.consumer_id, "sending message directly to gRPC stream");
-                counter!(CONSUMER_MESSAGES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(1);
-                counter!(CONSUMER_BYTES_OUT_TOTAL.name, "topic"=> self.topic_name.clone() , "subscription" => self.subscription_name.clone()).increment(payload_size as u64);
+                self.messages_out_counter.increment(1);
+                self.bytes_out_counter.increment(payload_size as u64);
                 ConsumerSendStatus::Sent
             }
             Err(mpsc::error::TrySendError::Full(_)) => {
