@@ -91,7 +91,7 @@ impl From<ProtoStreamMessage> for StreamMessage {
                 || panic!("Message ID cannot be None"),
                 |msg_id| msg_id.into(),
             ),
-            payload: proto_stream_msg.payload.into(),
+            payload: proto_stream_msg.payload,
             publish_time: proto_stream_msg.publish_time,
             producer_name: proto_stream_msg.producer_name,
             subscription_name: Some(proto_stream_msg.subscription_name),
@@ -119,7 +119,7 @@ impl From<StreamMessage> for ProtoStreamMessage {
         ProtoStreamMessage {
             request_id: stream_msg.request_id,
             msg_id: Some(stream_msg.msg_id.into()), // Convert MessageID into MsgId
-            payload: stream_msg.payload.to_vec(),
+            payload: stream_msg.payload,
             publish_time: stream_msg.publish_time,
             producer_name: stream_msg.producer_name,
             subscription_name: stream_msg.subscription_name.unwrap_or_default(),

@@ -82,6 +82,9 @@ pub(crate) struct Topic {
     metrics_collector: Arc<MetricsCollector>,
     // cluster-wide default for max_unacked_messages (from dispatch config)
     default_max_unacked_messages: usize,
+    // Pre-registered ingress counters for zero-allocation hot path
+    messages_in_counter: metrics::Counter,
+    bytes_in_counter: metrics::Counter,
 }
 
 impl Topic {
@@ -101,6 +104,15 @@ impl Topic {
             ConfigDispatchStrategy::Reliable => DispatchStrategy::Reliable,
         };
 
+        let messages_in_counter = counter!(
+            TOPIC_MESSAGES_IN_TOTAL.name,
+            "topic" => topic_name.to_string()
+        );
+        let bytes_in_counter = counter!(
+            TOPIC_BYTES_IN_TOTAL.name,
+            "topic" => topic_name.to_string()
+        );
+
         Topic {
             topic_name: topic_name.into(),
             schema_context: TopicSchemaContext::new(resources_schema),
@@ -117,6 +129,8 @@ impl Topic {
             publish_rate_limiter: None,
             metrics_collector,
             default_max_unacked_messages,
+            messages_in_counter,
+            bytes_in_counter,
         }
     }
 
@@ -269,17 +283,9 @@ impl Topic {
             ));
         }
 
-        // Update ingress counters (topic only)
-        counter!(
-            TOPIC_MESSAGES_IN_TOTAL.name,
-            "topic"=> self.topic_name.clone()
-        )
-        .increment(1);
-        counter!(
-            TOPIC_BYTES_IN_TOTAL.name,
-            "topic"=> self.topic_name.clone()
-        )
-        .increment(stream_message.payload.len() as u64);
+        // Update ingress counters (topic only) - zero allocation fast path
+        self.messages_in_counter.increment(1);
+        self.bytes_in_counter.increment(stream_message.payload.len() as u64);
 
         // Update internal atomic counters for LoadReport (lock-free)
         self.messages_in.fetch_add(1, Ordering::Relaxed);

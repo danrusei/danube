@@ -150,8 +150,8 @@ pub struct StreamMessage {
     #[prost(message, optional, tag = "2")]
     pub msg_id: ::core::option::Option<MsgId>,
     /// The actual payload of the message
-    #[prost(bytes = "vec", tag = "3")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "bytes", tag = "3")]
+    pub payload: ::prost::bytes::Bytes,
     /// Timestamp for when the message was published
     #[prost(uint64, tag = "4")]
     pub publish_time: u64,
