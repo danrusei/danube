@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - 'danube-broker/**'
+      - 'danube-raft/**'
       - '.github/workflows/broker-failover-e2e.yml'
+  workflow_dispatch:
 
 jobs:
   build_and_test:
