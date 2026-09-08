@@ -85,9 +85,7 @@ impl Cache {
     /// Evict the oldest entries until the cache holds at most `capacity` items.
     pub(crate) fn evict_to(&mut self, capacity: usize) {
         while self.map.len() > capacity {
-            if let Some(oldest) = self.map.keys().next().cloned() {
-                self.map.remove(&oldest);
-            } else {
+            if self.map.pop_first().is_none() {
                 break;
             }
         }
@@ -99,7 +97,7 @@ impl Cache {
     }
 
     pub(crate) fn first_offset(&self) -> Option<u64> {
-        self.map.keys().next().cloned()
+        self.map.keys().next().copied()
     }
 
     /// Test helper: get item by exact offset.
