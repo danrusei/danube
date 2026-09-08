@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use bytes::BytesMut;
 use danube_core::message::StreamMessage;
 use danube_core::storage::{PersistentStorageError, TopicStream};
 use tokio::io::AsyncReadExt;
@@ -53,7 +54,7 @@ pub(crate) async fn stream_from_wal_files(
 
     // Spawn a background task to perform the I/O and parsing.
     tokio::spawn(async move {
-        let mut carry: Vec<u8> = Vec::new();
+        let mut carry = BytesMut::with_capacity(chunk_size * 2);
         let mut buf: Vec<u8> = vec![0u8; chunk_size];
 
         'outer: for (seq, path) in files.into_iter() {
@@ -119,9 +120,9 @@ pub(crate) async fn stream_from_wal_files(
                     idx += frame.frame_len;
                 }
 
-                // Drain the parsed bytes from the carry buffer to keep memory bounded.
+                // Advance the carry buffer by safe_len bytes (O(1) buffer slide without memory moves).
                 if safe_len > 0 {
-                    carry.drain(0..safe_len);
+                    let _ = carry.split_to(safe_len);
                 }
             }
         }

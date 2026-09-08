@@ -341,18 +341,18 @@ impl Wal {
 
         permit.send(LogCommand::Write { offset, bytes });
 
-        // Update in-memory cache with single lock and evict oldest if over capacity
+        // Notify tailing readers only if active subscribers exist
+        if self.inner.tx.receiver_count() > 0 {
+            let _ = self.inner.tx.send((offset, stamped.clone()));
+        }
+
+        // Update in-memory cache with single lock, moving stamped directly without cloning
         {
             let mut cache = self.inner.cache.lock().await;
-            cache.insert(offset, stamped.clone());
+            cache.insert(offset, stamped);
             cache.evict_to(self.inner.cache_capacity);
         }
 
-        // Notify tailing readers (if any are subscribed)
-        // Note: It's normal for this to fail when no consumers are active
-        // The broadcast is just an optimization - it's for live consumers, but not required for correctness
-        // as we can always replay reliable from the WAL
-        let _ = self.inner.tx.send((offset, stamped.clone()));
         Ok(offset)
     }
 
@@ -418,12 +418,12 @@ impl Wal {
             }
             cache.evict_to(self.inner.cache_capacity);
 
-            // 5. Broadcast to live tailing readers — replicated topics on the cloud
-            //    side have consumers subscribed via the broadcast channel, so we must
-            //    notify them just like single-message append() does.
-            for offset in first_offset..=last_offset {
-                if let Some((off, msg)) = cache.get(offset) {
-                    let _ = self.inner.tx.send((off, msg));
+            // 5. Broadcast to live tailing readers only if active subscribers exist
+            if self.inner.tx.receiver_count() > 0 {
+                for offset in first_offset..=last_offset {
+                    if let Some((off, msg)) = cache.get(offset) {
+                        let _ = self.inner.tx.send((off, msg));
+                    }
                 }
             }
         }
@@ -482,7 +482,7 @@ impl Wal {
         let mut items = Vec::new();
         let mut watermark = after_offset;
         for (off, msg) in cache.range_from(after_offset) {
-            items.push((off, msg.clone()));
+            items.push((off, msg));
             if off > watermark {
                 watermark = off;
             }
