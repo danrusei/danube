@@ -100,15 +100,17 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
                     created_at_ms: now,
                 },
             );
-            notify_watchers(
-                &d.watchers,
-                WatchEvent::Put {
-                    key: key.into_bytes(),
-                    value: serde_json::to_vec(&value).unwrap_or_default(),
-                    mod_revision: Some(d.global_revision),
-                    version: Some(ver),
-                },
-            );
+            if !d.watchers.is_empty() {
+                notify_watchers(
+                    &d.watchers,
+                    WatchEvent::Put {
+                        key: key.into_bytes(),
+                        value: serde_json::to_vec(&value).unwrap_or_default(),
+                        mod_revision: Some(d.global_revision),
+                        version: Some(ver),
+                    },
+                );
+            }
             RaftResponse::Ok
         }
 
@@ -138,41 +140,24 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
                 .entry(expires_at)
                 .or_default()
                 .push(key.clone());
-            notify_watchers(
-                &d.watchers,
-                WatchEvent::Put {
-                    key: key.into_bytes(),
-                    value: serde_json::to_vec(&value).unwrap_or_default(),
-                    mod_revision: Some(d.global_revision),
-                    version: Some(ver),
-                },
-            );
+            if !d.watchers.is_empty() {
+                notify_watchers(
+                    &d.watchers,
+                    WatchEvent::Put {
+                        key: key.into_bytes(),
+                        value: serde_json::to_vec(&value).unwrap_or_default(),
+                        mod_revision: Some(d.global_revision),
+                        version: Some(ver),
+                    },
+                );
+            }
             RaftResponse::Ok
         }
 
         RaftCommand::Delete { key } => {
             d.global_revision += 1;
             d.kv.remove(&key);
-            notify_watchers(
-                &d.watchers,
-                WatchEvent::Delete {
-                    key: key.into_bytes(),
-                    mod_revision: Some(d.global_revision),
-                    version: None,
-                },
-            );
-            RaftResponse::Ok
-        }
-
-        RaftCommand::DeletePrefix { prefix } => {
-            d.global_revision += 1;
-            let keys_to_delete: Vec<String> =
-                d.kv.range(prefix.clone()..)
-                    .take_while(|(k, _)| k.starts_with(&prefix))
-                    .map(|(k, _)| k.clone())
-                    .collect();
-            for key in keys_to_delete {
-                d.kv.remove(&key);
+            if !d.watchers.is_empty() {
                 notify_watchers(
                     &d.watchers,
                     WatchEvent::Delete {
@@ -185,6 +170,30 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
             RaftResponse::Ok
         }
 
+        RaftCommand::DeletePrefix { prefix } => {
+            d.global_revision += 1;
+            let keys_to_delete: Vec<String> =
+                d.kv.range(prefix.clone()..)
+                    .take_while(|(k, _)| k.starts_with(&prefix))
+                    .map(|(k, _)| k.clone())
+                    .collect();
+            let has_watchers = !d.watchers.is_empty();
+            for key in keys_to_delete {
+                d.kv.remove(&key);
+                if has_watchers {
+                    notify_watchers(
+                        &d.watchers,
+                        WatchEvent::Delete {
+                            key: key.into_bytes(),
+                            mod_revision: Some(d.global_revision),
+                            version: None,
+                        },
+                    );
+                }
+            }
+            RaftResponse::Ok
+        }
+
         RaftCommand::ExpireTTLKeys { keys } => {
             d.global_revision += 1;
             let now = now_ms();
@@ -193,8 +202,9 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
             for ts in expired_timestamps {
                 d.ttl_entries.remove(&ts);
             }
+            let has_watchers = !d.watchers.is_empty();
             for key in keys {
-                if d.kv.remove(&key).is_some() {
+                if d.kv.remove(&key).is_some() && has_watchers {
                     notify_watchers(
                         &d.watchers,
                         WatchEvent::Delete {
@@ -242,15 +252,17 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
                         .or_default()
                         .push(key.clone());
                 }
-                notify_watchers(
-                    &d.watchers,
-                    WatchEvent::Put {
-                        key: key.into_bytes(),
-                        value: serde_json::to_vec(&new_value).unwrap_or_default(),
-                        mod_revision: Some(d.global_revision),
-                        version: Some(ver),
-                    },
-                );
+                if !d.watchers.is_empty() {
+                    notify_watchers(
+                        &d.watchers,
+                        WatchEvent::Put {
+                            key: key.into_bytes(),
+                            value: serde_json::to_vec(&new_value).unwrap_or_default(),
+                            mod_revision: Some(d.global_revision),
+                            version: Some(ver),
+                        },
+                    );
+                }
                 RaftResponse::Ok
             } else {
                 RaftResponse::CasFailed { current }
@@ -266,11 +278,13 @@ fn apply_command(d: &mut StateMachineData, cmd: RaftCommand) -> RaftResponse {
 }
 
 fn notify_watchers(watchers: &DashMap<String, broadcast::Sender<WatchEvent>>, event: WatchEvent) {
-    let key_str = match &event {
-        WatchEvent::Put { key, .. } | WatchEvent::Delete { key, .. } => {
-            String::from_utf8_lossy(key).to_string()
-        }
+    if watchers.is_empty() {
+        return;
+    }
+    let key_bytes = match &event {
+        WatchEvent::Put { key, .. } | WatchEvent::Delete { key, .. } => key.as_slice(),
     };
+    let key_str = String::from_utf8_lossy(key_bytes);
     for entry in watchers.iter() {
         if key_str.starts_with(entry.key()) {
             let _ = entry.value().send(event.clone());

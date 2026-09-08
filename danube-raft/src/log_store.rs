@@ -150,8 +150,9 @@ impl RaftLogReader<TypeConfig> for RedbLogStore {
             .map_err(|e| to_storage_err(e, "range query"))?;
         for item in iter {
             let (_key, val) = item.map_err(|e| to_storage_err(e, "iterate log"))?;
-            let entry: Entry<TypeConfig> = serde_json::from_slice(val.value())
-                .map_err(|e| to_storage_err(e, "deserialize entry"))?;
+            let (entry, _): (Entry<TypeConfig>, _) =
+                bincode::serde::decode_from_slice(val.value(), bincode::config::standard())
+                    .map_err(|e| to_storage_err(e, "deserialize entry"))?;
             entries.push(entry);
         }
         Ok(entries)
@@ -174,8 +175,9 @@ impl RaftLogStorage<TypeConfig> for RedbLogStore {
 
         let last_log_id = match table.last() {
             Ok(Some((_key, val))) => {
-                let entry: Entry<TypeConfig> = serde_json::from_slice(val.value())
-                    .map_err(|e| to_storage_err(e, "deserialize last entry"))?;
+                let (entry, _): (Entry<TypeConfig>, _) =
+                    bincode::serde::decode_from_slice(val.value(), bincode::config::standard())
+                        .map_err(|e| to_storage_err(e, "deserialize last entry"))?;
                 Some(entry.log_id)
             }
             _ => last_purged,
@@ -223,8 +225,8 @@ impl RaftLogStorage<TypeConfig> for RedbLogStore {
                 .open_table(LOG_TABLE)
                 .map_err(|e| to_storage_err(e, "open log table"))?;
             for entry in entries {
-                let bytes =
-                    serde_json::to_vec(&entry).map_err(|e| to_storage_err(e, "serialize entry"))?;
+                let bytes = bincode::serde::encode_to_vec(&entry, bincode::config::standard())
+                    .map_err(|e| to_storage_err(e, "serialize entry"))?;
                 table
                     .insert(entry.log_id.index, bytes.as_slice())
                     .map_err(|e| to_storage_err(e, "insert entry"))?;

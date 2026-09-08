@@ -254,6 +254,16 @@ impl RaftNode {
         Ok(())
     }
 
+    /// Gracefully shut down the Raft node, stopping the gRPC transport and background workers.
+    pub async fn shutdown(&self) -> anyhow::Result<()> {
+        self._grpc_handle.abort();
+        self._ttl_handle.abort();
+        self._metrics_handle.abort();
+        let _ = self.raft.shutdown().await;
+        Ok(())
+    }
+
+
     /// Bootstrap the Raft cluster based on seed node configuration.
     ///
     /// - **Empty `seed_nodes`**: single-node auto-init (development mode).
@@ -487,6 +497,9 @@ impl RaftNode {
         LeadershipHandle::new(self.raft.clone(), self.node_id)
     }
 }
+
+
+
 
 /// Watches Raft metrics for leader and membership changes, logging one line
 /// per state transition instead of per-request. This gives clean lifecycle

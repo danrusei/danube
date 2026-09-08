@@ -268,3 +268,41 @@ async fn get_bulk_empty_prefix() {
     let bulk = store.get_bulk("/nothing/here/").await.unwrap();
     assert!(bulk.is_empty());
 }
+
+// ─── Atomic Monotonic Counters ─────────────────────────────────────────────
+
+/// **What**: Verify `allocate_monotonic_id` increments atomically and independently
+/// per counter key through Raft consensus.
+///
+/// **Why**: The schema registry uses `allocate_monotonic_id` to generate sequential
+/// schema IDs. Different schemas and resources rely on unique, monotonic sequences.
+///
+/// **Checks**:
+/// - First allocation on a key returns 1
+/// - Subsequent allocations increment monotonically (2, 3, 4)
+/// - A different counter key has its own independent sequence starting at 1
+#[tokio::test]
+async fn allocate_monotonic_id_increments_independently() {
+    let (node, _tmp) = common::start_cluster().await;
+    let store = &node.store;
+
+    let id1 = store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id1, 1);
+
+    let id2 = store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id2, 2);
+
+    let id3 = store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id3, 3);
+
+    // Independent counter key starts at 1
+    let other1 = store.allocate_monotonic_id("topics").await.unwrap();
+    assert_eq!(other1, 1);
+
+    let id4 = store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id4, 4);
+
+    let other2 = store.allocate_monotonic_id("topics").await.unwrap();
+    assert_eq!(other2, 2);
+}
+

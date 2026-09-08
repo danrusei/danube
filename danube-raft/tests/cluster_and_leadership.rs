@@ -73,3 +73,158 @@ async fn leader_publishes_id_to_metadata_store() {
         .expect("leader key should exist");
     assert_eq!(val.as_u64(), Some(broker_id));
 }
+
+/// **What**: Verify that data persisted to the Redb log store survives a complete node
+/// restart, and that the restarted node recovers state machine data and re-establishes leadership.
+///
+/// **Why**: In production, brokers and Raft nodes restart for upgrades, maintenance,
+/// or crashes. Raft correctness depends on persisting log entries and metadata to redb,
+/// and replaying committed entries into the state machine on startup.
+///
+/// **Checks**:
+/// - Writes (`put`, `allocate_monotonic_id`) succeed on the initial node
+/// - The node is cleanly shut down
+/// - A new `RaftNode` started on the SAME data directory retains its stable `node_id`
+/// - `bootstrap_cluster` recognizes the persisted state (`BootstrapResult::Restart`)
+/// - The restarted node recovers previously written keys, values, and counters
+/// - New writes succeed on the restarted node
+#[tokio::test]
+async fn node_restart_recovers_state_from_redb_log() {
+    let tmp = tempfile::TempDir::new().expect("create temp dir");
+    let data_dir = tmp.path().to_path_buf();
+    let port1 = common::next_port();
+    let addr1: std::net::SocketAddr = format!("127.0.0.1:{}", port1).parse().unwrap();
+
+    // 1. Boot first node and initialize cluster
+    let node1 = danube_raft::node::RaftNode::start(danube_raft::node::RaftNodeConfig {
+        data_dir: data_dir.clone(),
+        raft_addr: addr1,
+        advertised_addr: None,
+        ttl_check_interval: std::time::Duration::from_millis(200),
+        tls: None,
+    })
+    .await
+    .expect("start first node");
+
+    let initial_node_id = node1.node_id;
+    node1
+        .init_cluster(&addr1.to_string())
+        .await
+        .expect("init cluster");
+
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // 2. Perform writes on the initial node
+    node1
+        .store
+        .put(
+            "/topics/orders",
+            serde_json::json!({"partitions": 4}),
+            MetaOptions::None,
+        )
+        .await
+        .unwrap();
+    node1
+        .store
+        .put(
+            "/topics/payments",
+            serde_json::json!({"partitions": 2}),
+            MetaOptions::None,
+        )
+        .await
+        .unwrap();
+
+    let id1 = node1.store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id1, 1);
+    let id2 = node1.store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id2, 2);
+
+    // 3. Shut down node1 cleanly
+    node1.shutdown().await.expect("shutdown node1");
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // 4. Start node2 on the SAME data_dir (simulating broker restart)
+    let port2 = common::next_port();
+    let addr2: std::net::SocketAddr = format!("127.0.0.1:{}", port2).parse().unwrap();
+
+    let node2 = danube_raft::node::RaftNode::start(danube_raft::node::RaftNodeConfig {
+        data_dir: data_dir.clone(),
+        raft_addr: addr2,
+        advertised_addr: None,
+        ttl_check_interval: std::time::Duration::from_millis(200),
+        tls: None,
+    })
+    .await
+    .expect("start restarted node");
+
+    // Must preserve identical stable node_id from {data_dir}/node_id
+    assert_eq!(
+        node2.node_id, initial_node_id,
+        "restarted node must preserve stable node_id"
+    );
+
+    // Bootstrap cluster should detect restart mode
+    let res = node2
+        .bootstrap_cluster(&addr2.to_string(), &[])
+        .await
+        .expect("bootstrap restarted node");
+    assert!(
+        matches!(res, danube_raft::BootstrapResult::Restart),
+        "should detect restart, got {:?}",
+        res
+    );
+
+    // Give state machine a moment to replay committed log entries
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // 5. Verify persisted data was restored
+    let val_orders = node2
+        .store
+        .get("/topics/orders", MetaOptions::None)
+        .await
+        .unwrap();
+    assert_eq!(
+        val_orders,
+        Some(serde_json::json!({"partitions": 4})),
+        "persisted orders topic should be restored"
+    );
+
+    let val_payments = node2
+        .store
+        .get("/topics/payments", MetaOptions::None)
+        .await
+        .unwrap();
+    assert_eq!(
+        val_payments,
+        Some(serde_json::json!({"partitions": 2})),
+        "persisted payments topic should be restored"
+    );
+
+    // Verify counter state continues from previously allocated IDs
+    let id3 = node2.store.allocate_monotonic_id("schemas").await.unwrap();
+    assert_eq!(id3, 3, "monotonic id counter should resume from 3");
+
+    // 6. Verify new writes succeed on restarted node
+    node2
+        .store
+        .put(
+            "/topics/shipments",
+            serde_json::json!({"partitions": 1}),
+            MetaOptions::None,
+        )
+        .await
+        .unwrap();
+
+    let val_shipments = node2
+        .store
+        .get("/topics/shipments", MetaOptions::None)
+        .await
+        .unwrap();
+    assert_eq!(
+        val_shipments,
+        Some(serde_json::json!({"partitions": 1}))
+    );
+
+    node2.shutdown().await.expect("shutdown node2");
+}
+
