@@ -14,7 +14,7 @@ use tempfile::TempDir;
 /// Global port counter so parallel tests don't collide.
 static PORT: AtomicU16 = AtomicU16::new(17650);
 
-fn next_port() -> u16 {
+pub fn next_port() -> u16 {
     PORT.fetch_add(1, Ordering::Relaxed)
 }
 

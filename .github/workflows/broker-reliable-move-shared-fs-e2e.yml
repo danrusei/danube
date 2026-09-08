@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'danube-broker/**'
+      - 'danube-persistent-storage/**'
       - 'config/for_tests/danube_broker_shared_fs.yml'
       - '.github/workflows/broker-reliable-move-shared-fs-e2e.yml'
   workflow_dispatch:

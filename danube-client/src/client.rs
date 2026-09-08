@@ -225,6 +225,9 @@ impl DanubeClientBuilder {
     /// # Examples
     ///
     /// ```rust,no_run
+    /// use danube_client::DanubeClient;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // Read token from a file on each request
     /// let client = DanubeClient::builder()
     ///     .service_url("https://broker:6650")
@@ -236,6 +239,8 @@ impl DanubeClientBuilder {
     ///     })
     ///     .build()
     ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn with_token_supplier(mut self, supplier: impl Fn() -> String + Send + Sync + 'static) -> Self {
         self.connection_options.token_supplier = Some(Arc::new(supplier));

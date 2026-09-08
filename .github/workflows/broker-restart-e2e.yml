@@ -5,6 +5,7 @@ on:
     paths:
       - 'danube-broker/**'
       - 'danube-raft/**'
+      - 'danube-persistent-storage/**'
       - '.github/workflows/broker-restart-e2e.yml'
   workflow_dispatch:
 

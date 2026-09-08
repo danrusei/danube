@@ -235,6 +235,7 @@ impl SchemaRegistryClient {
 /// use danube_client::{DanubeClient, SchemaType};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # let avro_schema_bytes = b"{}";
 /// let client = DanubeClient::builder()
 ///     .service_url("http://localhost:6650")
 ///     .build()
